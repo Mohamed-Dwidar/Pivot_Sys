@@ -1,150 +1,43 @@
 @extends('layoutmodule::login')
 
 @section('content')
-    <div class="auth-main v1">
-        <div class="auth-wrapper">
-            <div class="auth-form">
-                <div class="card my-5">
-                    <div class="card-body">
+    <div class="mt-10">
+        <div class="text-2xl font-medium">Sign In</div>
+        <div class="mt-2.5 text-slate-600">Admin Panel Login</div>
 
-                        <form method="POST" action='{{ route('admin.loginpost') }}' id="form-login">
-                            @csrf
+        @if ($errors->any())
+            <div role="alert" class="alert relative border rounded-md px-5 py-4 bg-danger border-danger bg-opacity-20 border-opacity-5 text-danger dark:border-danger dark:border-opacity-20 mt-7 flex items-center">
+                <i data-tw-merge="" data-lucide="alert-octagon" class="stroke-[1] w-6 h-6 mr-2"></i>
+                {{ $errors->first() }}
+            </div>
+        @endif
 
-                            
-                            <div class="text-center">
-                                <img src="{{ asset('assets/images/logo.png') }}" alt="logo" class="img-fluid mb-3"
-                                    style="width: 150px;">
-                                {{-- <h4 class="f-w-500 mb-1">Login with your email</h4> --}}
-                                <p class="mb-3">Admin Panel Login</p>
-                            </div>
-                            @if ($errors->any())
-                                <div class="alert alert-warning mb-2" role="alert">
-                                    <strong>Error!</strong>
-                                    {{ $errors->first() }}
-                                </div>
-                            @endif
-                            <div class="mb-3">
-                                <input type="email" class="form-control" name="email" id="email"
-                                    value="{{ old('email') }}" placeholder="Email Address">
-                            </div>
-                            @if ($errors->has('email'))
-                                <span class="invalid-feedback" role="alert">
-                                    <strong>{{ $errors->first('email') }}</strong>
-                                </span>
-                            @endif
-                            <div class="mb-3">
-                                <input type="password" class="form-control" id="password" name="password"
-                                    placeholder="Password">
-                            </div>
-                            <div class="d-flex mt-1 justify-content-between align-items-center">
-                                <div class="form-check">
-                                    <input class="form-check-input input-primary" type="checkbox" id="customCheckc1"
-                                        checked="">
-                                    <label class="form-check-label text-muted" for="customCheckc1">Remember me?</label>
-                                </div>
-                                {{--   <a
-                                href="../pages/forgot-password-v1.html">
-                                <h6 class="f-w-400 mb-0">Forgot Password?</h6>
-                            </a> --}}
-                            </div>
-                            <div class="d-grid mt-4"><button type="submit" class="btn btn-primary">Login</button></div>
-                            {{-- <div class="saprator my-3"><span>Or continue with</span></div> --}}
-                            <div class="text-center mb-5">
-                                &nbsp;
-                                {{-- <ul class="list-inline mx-auto mt-3 mb-0">
-                                <li class="list-inline-item"><a href="https://www.facebook.com/"
-                                        class="avtar avtar-s rounded-circle bg-facebook" target="_blank"><i
-                                            class="fab fa-facebook-f text-white"></i></a></li>
-                                <li class="list-inline-item"><a href="https://twitter.com/"
-                                        class="avtar avtar-s rounded-circle bg-twitter" target="_blank"><i
-                                            class="fab fa-twitter text-white"></i></a></li>
-                                <li class="list-inline-item"><a href="https://myaccount.google.com/"
-                                        class="avtar avtar-s rounded-circle bg-googleplus" target="_blank"><i
-                                            class="fab fa-google text-white"></i></a></li>
-                            </ul> --}}
-                            </div>
-                        </form>
-                    </div>
+        <form method="POST" action="{{ route('admin.loginpost') }}" id="form-login" class="mt-6">
+            @csrf
+            <label data-tw-merge="" for="email" class="inline-block mb-2">
+                Email*
+            </label>
+            <input data-tw-merge="" type="email" name="email" id="email" value="{{ old('email') }}" placeholder="Email Address" required autofocus class="disabled:bg-slate-100 disabled:cursor-not-allowed dark:disabled:bg-darkmode-800/50 dark:disabled:border-transparent [&[readonly]]:bg-slate-100 [&[readonly]]:cursor-not-allowed [&[readonly]]:dark:bg-darkmode-800/50 [&[readonly]]:dark:border-transparent transition duration-200 ease-in-out w-full text-sm shadow-sm placeholder:text-slate-400/90 focus:ring-4 focus:ring-primary focus:ring-opacity-20 focus:border-primary focus:border-opacity-40 dark:bg-darkmode-800 dark:border-transparent dark:focus:ring-slate-700 dark:focus:ring-opacity-50 dark:placeholder:text-slate-500/80 block rounded-[0.6rem] border-slate-300/80 px-4 py-3.5">
+
+            <label data-tw-merge="" for="password" class="inline-block mb-2 mt-4">
+                Password*
+            </label>
+            <input data-tw-merge="" type="password" name="password" id="password" placeholder="************" required class="disabled:bg-slate-100 disabled:cursor-not-allowed dark:disabled:bg-darkmode-800/50 dark:disabled:border-transparent [&[readonly]]:bg-slate-100 [&[readonly]]:cursor-not-allowed [&[readonly]]:dark:bg-darkmode-800/50 [&[readonly]]:dark:border-transparent transition duration-200 ease-in-out w-full text-sm shadow-sm placeholder:text-slate-400/90 focus:ring-4 focus:ring-primary focus:ring-opacity-20 focus:border-primary focus:border-opacity-40 dark:bg-darkmode-800 dark:border-transparent dark:focus:ring-slate-700 dark:focus:ring-opacity-50 dark:placeholder:text-slate-500/80 block rounded-[0.6rem] border-slate-300/80 px-4 py-3.5">
+
+            <div class="flex mt-4 text-xs text-slate-500 sm:text-sm">
+                <div class="flex items-center mr-auto">
+                    <input data-tw-merge="" type="checkbox" name="rememberme" id="remember-me" class="transition-all duration-100 ease-in-out shadow-sm border-slate-200 cursor-pointer rounded focus:ring-4 focus:ring-offset-0 focus:ring-primary focus:ring-opacity-20 dark:bg-darkmode-800 dark:border-transparent dark:focus:ring-slate-700 dark:focus:ring-opacity-50 [&[type='checkbox']]:checked:bg-primary [&[type='checkbox']]:checked:border-primary [&[type='checkbox']]:checked:border-opacity-10 mr-2.5 border">
+                    <label class="cursor-pointer select-none" for="remember-me">
+                        Remember me
+                    </label>
                 </div>
             </div>
-            {{-- <div class="auth-sidefooter"><img src="{{ asset('assets/images/logo-dark.svg') }}"
-                    class="img-brand img-fluid" alt="images">
-                <hr class="mb-3 mt-4">
-                <div class="row">
-                    <div class="col my-1">
-                        <p class="m-0">Made with ♥ by Team <a href="https://themeforest.net/user/phoenixcoded"
-                                target="_blank">Phoenixcoded</a></p>
-                    </div>
-                    <div class="col-auto my-1">
-                        <ul class="list-inline footer-link mb-0">
-                            <li class="list-inline-item"><a href="../index.html">Home</a></li>
-                            <li class="list-inline-item"><a href="https://pcoded.gitbook.io/light-able/"
-                                    target="_blank">Documentation</a></li>
-                            <li class="list-inline-item"><a href="https://phoenixcoded.support-hub.io/"
-                                    target="_blank">Support</a></li>
-                        </ul>
-                    </div>
-                </div>
-            </div> --}}
-        </div>
-    </div>
 
-    <?php /*
-    <div class="auth-main v2">
-      <div class="bg-overlay"></div>
-      <div class="auth-wrapper">
-  
-          <div class="auth-form">
-              <div class="card my-5 mx-3">
-                  <div class="card-body">
-                      <!-- Logo -->
-                      <div class="text-center mb-4">
-                          <img src="{{ asset('/assets/images/logo.png') }}" alt="Logo" class="img-fluid" style="max-width: 120px;">
-                      </div>
-  
-                      <!-- Header -->
-                      <h4 class="f-w-500 mb-4 text-center">
-                          <i class="fas fa-user-lock me-2 text-primary"></i> Admin Login
-                      </h4>
-  
-                      <!-- Username Input with Icon -->
-                      <div class="input-group mb-3 mt-4">
-                          <span class="input-group-text"><i class="fas fa-user"></i></span>
-                          <input type="text" class="form-control" id="floatingInput" placeholder="إسم المستخدم">
-                      </div>
-  
-                      <!-- Password Input with Icon -->
-                      <div class="input-group mb-3">
-                          <span class="input-group-text"><i class="fas fa-lock"></i></span>
-                          <input type="password" class="form-control" id="floatingInput1" placeholder="كلمة المرور">
-                      </div>
-  
-                      <!-- Remember Me & Forgot Password -->
-                      {{-- <div class="d-flex mt-1 justify-content-between align-items-center">
-                          <div class="form-check">
-                              <input class="form-check-input input-primary" type="checkbox" id="customCheckc1" checked="">
-                              <label class="form-check-label text-muted" for="customCheckc1">
-                                  تذكرني؟
-                              </label>
-                          </div>
-                          <a href="../pages/forgot-password-v2.html">
-                              <h6 class="text-secondary f-w-400 mb-0">
-                                  <i class="fas fa-key me-1"></i> هل نسيت كلمة المرور؟
-                              </h6>
-                          </a>
-                      </div> --}}
-  
-                      <!-- Login Button -->
-                      <div class="d-grid mt-4">
-                          <button type="button" class="btn btn-primary">
-                              <i class="fas fa-sign-in-alt me-2"></i> Login
-                          </button>
-                      </div>
-                  </div>
-              </div>
-          </div>
-  
-      </div>
-  </div> */
-    ?>
+            <div class="mt-5 text-center xl:mt-8 xl:text-left">
+                <button data-tw-merge="" type="submit" class="transition duration-200 border shadow-sm inline-flex items-center justify-center px-3 font-medium cursor-pointer focus:ring-4 focus:ring-primary focus:ring-opacity-20 focus-visible:outline-none dark:focus:ring-slate-700 dark:focus:ring-opacity-50 [&:hover:not(:disabled)]:bg-opacity-90 [&:hover:not(:disabled)]:border-opacity-90 disabled:opacity-70 disabled:cursor-not-allowed bg-primary border-primary text-white dark:border-primary rounded-full w-full bg-gradient-to-r from-theme-1/70 to-theme-2/70 py-3.5 xl:mr-3">
+                    Sign In
+                </button>
+            </div>
+        </form>
+    </div>
 @endsection

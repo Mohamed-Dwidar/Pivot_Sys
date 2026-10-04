@@ -1,280 +1,60 @@
-    <header class="pc-header">
-        <div class="header-wrapper">
-            <!-- [Mobile Media Block] start -->
-            {{-- <div class="me-auto pc-mob-drp">
-                <ul class="list-unstyled">
-                    <!-- ======= Menu collapse Icon ===== -->
-                    <li class="pc-h-item pc-sidebar-collapse">
-                        <a href="#" class="pc-head-link ms-0" id="sidebar-hide">
-                            <i class="ti ti-menu-2"></i>
-                        </a>
-                    </li>
-                    <li class="pc-h-item pc-sidebar-popup">
-                        <a href="#" class="pc-head-link ms-0" id="mobile-collapse">
-                            <i class="ti ti-menu-2"></i>
-                        </a>
-                    </li>
-                    <li class="dropdown pc-h-item d-inline-flex d-md-none">
-                        <a class="pc-head-link dropdown-toggle arrow-none m-0" data-bs-toggle="dropdown" href="#"
-                            role="button" aria-haspopup="false" aria-expanded="false">
-                            <i class="ph-duotone ph-magnifying-glass"></i>
-                        </a>
-                        <div class="dropdown-menu pc-h-dropdown drp-search">
-                            <form class="px-3">
-                                <div class="mb-0 d-flex align-items-center">
-                                    <input type="search" class="form-control border-0 shadow-none"
-                                        placeholder="Search...">
-                                    <button class="btn btn-light-secondary btn-search">Search</button>
-                                </div>
-                            </form>
-                        </div>
-                    </li>
-                    <li class="pc-h-item d-none d-md-inline-flex">
-                        <form class="form-search">
-                            <i class="ph-duotone ph-magnifying-glass icon-search"></i>
-                            <input type="search" class="form-control" placeholder="Search...">
-                            <button class="btn btn-search" style="padding: 0"><kbd>ctrl+k</kbd></button>
-                        </form>
-                    </li>
-                </ul>
-            </div> --}}
-            <!-- [Mobile Media Block end] -->
-            <div class="ms-auto">
-                <ul class="list-unstyled">
-                    <li class="dropdown pc-h-item d-md-inline-flex">
-                         <b>
-                            {{ __('messages.welcome') }}  :
-                            {{ Auth::guard('admin')->user()->name }}
-                        </b>
-                    </li>
-                    <li class="dropdown pc-h-item header-user-profile">
-                        <a class="pc-head-link dropdown-toggle arrow-none me-0" data-bs-toggle="dropdown" href="#"
-                            role="button" aria-haspopup="false" data-bs-auto-close="outside" aria-expanded="false">
-                            <img src="{{ asset('assets/images/user/avatar-2.jpg') }}" alt="user-image"
-                                class="user-avtar">
-                        </a>
-                        <div class="dropdown-menu dropdown-user-profile dropdown-menu-end pc-h-dropdown">
-                            <div class="dropdown-header d-flex align-items-center justify-content-between">
-                                <h5 class="m-0">Profile</h5>
-                            </div>
-                            <div class="dropdown-body">
-                                <div class="profile-notification-scroll position-relative"
-                                    style="max-height: calc(100vh - 225px)">
-                                    <ul class="list-group list-group-flush w-100">
-                                        <li class="list-group-item">
-                                            <div class="d-flex align-items-center">
-                                                <div class="flex-shrink-0">
-                                                    <img src="{{ asset('assets/images/user/avatar-2.jpg') }}"
-                                                        alt="user-image" class="wid-50 rounded-circle">
-                                                </div>
-                                                <div class="flex-grow-1 mx-3">
-                                                    <h5 class="mb-0">
-                                                        {{ Auth::guard('admin')->user()->name }}
-                                                    </h5>
-                                                    <a class="link-primary" href="#">
-                                                        {{ Auth::guard('admin')->user()->email }}
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        </li>
-
-                                        <li class="list-group-item">
-                                            <div class="dropdown-item">
-                                                <span class="d-flex align-items-center">
-                                                    <i class="ph-duotone ph-globe-hemisphere-west"></i>
-                                                    <span>Languages</span>
-                                                </span>
-                                                <span class="flex-shrink-0">
-                                                    <select
-                                                        class="form-select bg-transparent form-select-sm border-0 shadow-none">
-                                                        <option value="1">English</option>
-                                                        <option value="2">Spain</option>
-                                                        <option value="3">Arbic</option>
-                                                    </select>
-                                                </span>
-                                            </div>
-                                            {{-- </li>
-
-                                        <li class="list-group-item"> --}}
-
-                                            {{-- <a href="#" class="dropdown-item">
-                                                <span class="d-flex align-items-center">
-                                                    <i class="ph-duotone ph-user-circle"></i>
-                                                    <span>Edit profile</span>
-                                                </span>
-                                            </a> --}}
-
-                                            <a href="#" class="dropdown-item">
-                                                <span class="d-flex align-items-center">
-                                                    <i class="ph-duotone ph-key"></i>
-                                                    <span>Change password</span>
-                                                </span>
-                                            </a>
-                                        </li>
-
-
-                                        {{-- <li class="list-group-item">
-                                            <a href="#" class="dropdown-item">
-                                                <span class="d-flex align-items-center">
-                                                    <i class="ph-duotone ph-gear-six"></i>
-                                                    <span>Settings</span>
-                                                </span>
-                                            </a>
-                                        </li> --}}
-                                        <li class="list-group-item">
-                                            <a href="{{ route('admin.logout') }}" class="dropdown-item"><span
-                                                    class="d-flex align-items-center"><i
-                                                        class="ph-duotone ph-power"></i>
-                                                    <span>Logout</span>
-                                                </span>
-                                            </a>
-                                        </li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </header>
-
-    <?php /* <header class="pc-header">
-    <div class="header-wrapper">
-        <!-- [Mobile Media Block] start -->
-        <div class="me-auto pc-mob-drp">
-            <ul class="list-unstyled">
-                <!-- ======= أيقونة طي القائمة ===== -->
-                <li class="pc-h-item pc-sidebar-collapse">
-                    <a href="#" class="pc-head-link ms-0" id="sidebar-hide">
-                        <i class="ti ti-menu-2"></i>
-                    </a>
-                </li>
-                <!-- ======= أيقونة القائمة المنبثقة للهواتف ===== -->
-                <li class="pc-h-item pc-sidebar-popup">
-                    <a href="#" class="pc-head-link ms-0" id="mobile-collapse">
-                        <i class="ti ti-menu-2"></i>
-                    </a>
-                </li>
-                <!-- ======= أيقونة البحث للهواتف ===== -->
-                <li class="dropdown pc-h-item d-inline-flex d-md-none">
-                    <a class="pc-head-link dropdown-toggle arrow-none m-0" data-bs-toggle="dropdown" href="#"
-                        role="button" aria-haspopup="false" aria-expanded="false">
-                        <i class="ph-duotone ph-magnifying-glass"></i>
-                    </a>
-                </li>
-            </ul>
-        </div>
-        <!-- [Mobile Media Block end] -->
-
-        <div class="ms-auto">
-            <ul class="list-unstyled">
-                <!-- ======= تبديل الوضع (فاتح/داكن) ===== -->
-                <li class="dropdown pc-h-item d-flex align-items-center">
-                    <span class="greeting me-3" style="font-size: 1rem; color: #2c3e50; font-weight: 500; display: flex; align-items: center;">
-                        <span style="margin-left: 0.5rem; color: #1abc9c;">مرحبا</span>
-                        <span class="username" style="font-weight: 600; color: #3498db; margin-left: 0.5rem;">{{ auth()->user()->userable->name }}</span>
-                        <span class="role" style="font-weight: 400; color: #95a5a6;">
-                            | 
-                            @if(optional(auth()->user()->roles->first())->name == 'Admin')
-                                مدير
-                            @elseif(optional(auth()->user()->roles->first())->name == 'ClubAdmin')
-                                إداري نادي
-                            @elseif(optional(auth()->user()->roles->first())->name == 'FederationAdmin')
-                            موظف الاتحاد
-                            @else
-                                {{ optional(auth()->user()->roles->first())->name }}
-                            @endif
-                        </span>
-                    </span>
-                    
-                    {{-- <a class="pc-head-link dropdown-toggle arrow-none me-0" data-bs-toggle="dropdown" href="#"
-                        role="button" aria-haspopup="false" aria-expanded="false">
-                        <i class="ph-duotone ph-sun-dim"></i>
-                    </a> --}}
-                    <div class="dropdown-menu dropdown-menu-end pc-h-dropdown">
-                        <a href="#!" class="dropdown-item" onclick="layout_change('dark')">
-                            <i class="ph-duotone ph-moon"></i>
-                            <span>الوضع الداكن</span>
-                        </a>
-                        <a href="#!" class="dropdown-item" onclick="layout_change('light')">
-                            <i class="ph-duotone ph-sun-dim"></i>
-                            <span>الوضع الفاتح</span>
-                        </a>
-                        <a href="#!" class="dropdown-item" onclick="layout_change_default()">
-                            <i class="ph-duotone ph-cpu"></i>
-                            <span>الوضع الافتراضي</span>
-                        </a>
-                    </div>
-                </li>
-
-                <li class="dropdown pc-h-item header-user-profile">
-                    <a class="pc-head-link dropdown-toggle arrow-none me-0" data-bs-toggle="dropdown" href="#"
-                        role="button" aria-haspopup="true" aria-expanded="false">
-                        <img src="{{ asset('assets/images/user/user_avatar.png') }}" alt="صورة المستخدم"
-                            class="user-avtar" />
-                    </a>
-                    <div class="dropdown-menu dropdown-user-profile dropdown-menu-end pc-h-dropdown">
-                        <div class="dropdown-header d-flex align-items-center justify-content-between">
-                            <h5 class="m-0">الملف الشخصي</h5>
-                        </div>
-                        <div class="dropdown-body">
-                            <div class="profile-notification-scroll position-relative"
-                                style="max-height: calc(100vh - 225px)">
-                                <ul class="list-group list-group-flush w-100">
-                                    <!-- User Info -->
-                                    <li class="list-group-item">
-                                        <div class="d-flex align-items-center">
-                                            <div class="flex-shrink-0">
-                                                <img src="{{ asset('assets/images/user/user_avatar.png') }} "
-                                                    alt="صورة المستخدم" class="wid-50 rounded-circle" />
-                                            </div>
-                                            <div class="flex-grow-1 mx-3">
-                                                <h5 class="mb-0"> {{ auth()->user()->username }}</h5>
-                                                <p class="mb-0">@if(optional(auth()->user()->roles->first())->name == 'Admin')
-                                                    مدير
-                                                @elseif(optional(auth()->user()->roles->first())->name == 'ClubAdmin')
-                                                    إداري نادي
-                                                @elseif(optional(auth()->user()->roles->first())->name == 'FederationAdmin')
-                                                    موظف الاتحاد
-                                                @else
-                                                    {{ optional(auth()->user()->roles->first())->name }}
-                                                @endif</p>
-                                                <a class="link-primary"
-                                                    href="mailto:{{ auth()->user()->email }}">{{ auth()->user()->email }}</a>
-                                            </div>
-
-                                        </div>
-                                    </li>
-                                    <!-- Change Password -->
-                                    <li class="list-group-item">
-                                        <a href="{{ route('changePassword') }}" class="dropdown-item">
-                                            <span class="d-flex align-items-center">
-                                                <i class="ph-duotone ph-key"></i>
-                                                <span>تغيير كلمة المرور</span>
-                                            </span>
-                                        </a>
-                                    </li>
-                                    <!-- Logout -->
-                                    <li class="list-group-item">
-                                        <a href="{{ route('logout') }}">
-                                            <button type="submit" class="dropdown-item text-danger">
-                                                <span class="d-flex align-items-center">
-                                                    <i class="ph-duotone ph-sign-out"></i>
-                                                    <span>تسجيل الخروج</span>
-                                                </span>
-                                            </button>
-                                        </a>
-                                    </li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                </li>
-
-            </ul>
+@php($admin = Auth::guard('admin')->user())
+<div class="box fixed inset-x-0 top-0 z-10 flex h-[65px] rounded-none border-x-0 border-t-0">
+    <div class="side-menu__content brand-bar bg-white flex-none flex items-center z-10 px-5 h-full xl:w-[275px] overflow-hidden relative duration-300 group-[.side-menu--collapsed]:xl:w-[91px] group-[.side-menu--collapsed.side-menu--on-hover]:xl:w-[275px] group-[.side-menu--collapsed.side-menu--on-hover]:xl:shadow-[6px_0_12px_-4px_#0000001f] before:content-[''] before:hidden before:xl:block before:absolute before:right-0 before:border-r before:border-dashed before:border-slate-300/70 before:h-4/6 before:group-[.side-menu--collapsed.side-menu--on-hover]:xl:border-solid before:group-[.side-menu--collapsed.side-menu--on-hover]:xl:h-full">
+        <a class="flex items-center" href="{{ route('dashboard.index') }}">
+            <img src="{{ asset('assets/images/logo.png') }}" alt="{{ config('app.name') }}" class="brand-logo">
+            <img src="{{ asset('assets/images/favicon.jpg') }}" alt="{{ config('app.name') }}" class="brand-icon">
+        </a>
+        <a class="toggle-compact-menu ml-auto hidden h-[20px] w-[20px] items-center justify-center rounded-full border border-slate-600/40 transition-[opacity,transform] hover:bg-slate-600/5 group-[.side-menu--collapsed]:xl:rotate-180 xl:flex" href="javascript:;">
+            <i data-tw-merge="" data-lucide="arrow-left" class="h-3.5 w-3.5 stroke-[1.3]"></i>
+        </a>
+        <div class="ml-auto flex items-center gap-1 xl:hidden">
+            <a class="p-2 rounded-full open-mobile-menu hover:bg-slate-100" href="">
+                <i data-tw-merge="" data-lucide="align-justify" class="stroke-[1] h-[18px] w-[18px]"></i>
+            </a>
         </div>
     </div>
-</header>
-*/
-    ?>
+    <div class="absolute inset-x-0 h-full transition-[padding] duration-100 xl:pl-[275px] group-[.side-menu--collapsed]:xl:pl-[91px]">
+        <div class="flex items-center w-full h-full px-5">
+            <!-- BEGIN: Breadcrumb -->
+            <nav aria-label="breadcrumb" class="flex flex-1 hidden xl:block">
+                <ol class="flex items-center text-theme-1 dark:text-slate-300">
+                    <li class="">
+                        <a href="{{ route('dashboard.index') }}">{{ config('app.name') }}</a>
+                    </li>
+                    <li class="relative ml-5 pl-0.5 before:content-[''] before:w-[14px] before:h-[14px] before:bg-chevron-black before:transform before:rotate-[-90deg] before:bg-[length:100%] before:-ml-[1.125rem] before:absolute before:my-auto before:inset-y-0 dark:before:bg-chevron-white text-slate-600 cursor-text dark:text-slate-400">
+                        @yield('title')
+                    </li>
+                </ol>
+            </nav>
+            <!-- END: Breadcrumb -->
+            <!-- BEGIN: User Menu -->
+            <div class="flex items-center flex-1">
+                <div class="flex items-center gap-1 ml-auto">
+                    <a class="p-2 rounded-full request-full-screen hover:bg-slate-100" href="javascript:;">
+                        <i data-tw-merge="" data-lucide="expand" class="stroke-[1] h-[18px] w-[18px]"></i>
+                    </a>
+                </div>
+                <div data-tw-merge="" data-tw-placement="bottom-end" class="dropdown relative ml-5">
+                    <button data-tw-toggle="dropdown" aria-expanded="false" class="cursor-pointer flex h-[36px] w-[36px] items-center justify-center overflow-hidden rounded-full border-[3px] border-slate-200/70 bg-gradient-to-r from-theme-1 to-theme-2 font-medium text-white">
+                        {{ mb_strtoupper(mb_substr($admin->name, 0, 1)) }}
+                    </button>
+                    <div data-transition="" data-selector=".show" data-enter="transition-all ease-linear duration-150" data-enter-from="absolute !mt-5 invisible opacity-0 translate-y-1" data-enter-to="!mt-1 visible opacity-100 translate-y-0" data-leave="transition-all ease-linear duration-150" data-leave-from="!mt-1 visible opacity-100 translate-y-0" data-leave-to="absolute !mt-5 invisible opacity-0 translate-y-1" class="dropdown-menu absolute z-[9999] hidden">
+                        <div data-tw-merge="" class="dropdown-content rounded-md border-transparent bg-white p-2 shadow-[0px_3px_10px_#00000017] dark:border-transparent dark:bg-darkmode-600 w-56 mt-1">
+                            <div class="p-2">
+                                <div class="font-medium">{{ $admin->name }}</div>
+                                <div class="mt-0.5 text-xs text-slate-500">{{ $admin->email }}</div>
+                            </div>
+                            <div class="h-px my-2 -mx-2 bg-slate-200/60 dark:bg-darkmode-400"></div>
+                            <a href="{{ route('admin.logout') }}" class="cursor-pointer flex items-center p-2 transition duration-300 ease-in-out rounded-md hover:bg-slate-200/60 dark:bg-darkmode-600 dark:hover:bg-darkmode-400 dropdown-item">
+                                <i data-tw-merge="" data-lucide="power" class="stroke-[1] w-4 h-4 mr-2"></i>
+                                Logout
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- END: User Menu -->
+        </div>
+    </div>
+</div>

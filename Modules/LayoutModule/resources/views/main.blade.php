@@ -1,126 +1,64 @@
-<!doctype html>
-<html lang="en"><!-- [Head] start -->
+<!DOCTYPE html>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 
 <head>
-    <title>{{ env('APP_NAME') }} - @yield('title')</title>
-    <!-- [Meta] -->
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=0,minimal-ui">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="description" content="" />
-    <meta name="author" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <link rel="icon" href="{{ asset('assets/images/favicon.jpg') }}" type="image/x-icon" />
+    <title>{{ config('app.name') }} - @yield('title')</title>
 
-    <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap"
-        rel="stylesheet"><!-- [phosphor Icons] https://phosphoricons.com/ -->
-    <link rel="stylesheet" href="{{ asset('assets/fonts/phosphor/duotone/style.css') }}">
-    <!-- [Tabler Icons] https://tablericons.com -->
-    <link rel="stylesheet" href="{{ asset('assets/fonts/tabler-icons.min.css') }}">
-    <!-- [Feather Icons] https://feathericons.com -->
-    <link rel="stylesheet" href="{{ asset('assets/fonts/feather.css') }}">
-    <!-- [Font Awesome Icons] https://fontawesome.com/icons -->
-    <link rel="stylesheet" href="{{ asset('assets/fonts/fontawesome.css') }}">
-    <!-- [Material Icons] https://fonts.google.com/icons -->
-    <link rel="stylesheet" href="{{ asset('assets/fonts/material.css') }}"><!-- [Template CSS Files] -->
-    <link rel="stylesheet" href="{{ asset('assets/css/style.css') }}" id="main-style-link">
-    <link rel="stylesheet" href="{{ asset('assets/css/style-preset.css') }}">
+    <link rel="icon" href="{{ asset('assets/images/favicon.jpg') }}" type="image/png">
+    <link rel="stylesheet" href="{{ asset('assets/css/vendors/simplebar.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/css/themes/dagger.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/css/app.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/custom.css') }}">
-@yield('head')
-
-
+    @yield('head')
 </head>
-<!-- [Head] end -->
-<!-- [Body] Start -->
 
-<body data-pc-preset="preset-1" data-pc-sidebar-theme="light" data-pc-sidebar-caption="true" data-pc-direction="ltr"
-    data-pc-theme="light"><!-- [ Pre-loader ] start -->
-    <div class="loader-bg">
-        <div class="loader-track">
-            <div class="loader-fill"></div>
-        </div>
-    </div><!-- [ Pre-loader ] End --><!-- [ Sidebar Menu ] start -->
+<body>
+    <div class="dagger before:content-[''] before:bg-gradient-to-b before:from-slate-100 before:to-slate-50 before:fixed before:inset-0">
+        <div class="h-screen relative loading-page loading-page--before-hide [&.loading-page--before-hide]:before:block [&.loading-page--hide]:before:opacity-0 before:content-[''] before:transition-opacity before:duration-300 before:hidden before:inset-0 before:h-screen before:w-screen before:fixed before:bg-gradient-to-b before:from-theme-1 before:to-theme-2 before:z-[60] [&.loading-page--before-hide]:after:block [&.loading-page--hide]:after:opacity-0 after:content-[''] after:transition-opacity after:duration-300 after:hidden after:h-16 after:w-16 after:animate-pulse after:fixed after:opacity-50 after:inset-0 after:m-auto after:bg-loading-puff after:bg-cover after:z-[61]">
+            <div class="fixed top-0 left-0 z-50 h-screen side-menu group">
+                @include('layoutmodule::header')
+                @include('layoutmodule::sidebar')
+            </div>
 
-    <!-- [ Sidebar Menu ] start -->
-    @include('layoutmodule::sidebar')
-    <!-- [ Sidebar Menu ] end -->
-
-    <!-- [ Header Topbar ] start -->
-    @include('layoutmodule::header')
-    <!-- [ Header ] end -->
-
-    <!-- [ Main Content ] start -->
-
-    <section class="pc-container">
-        <div class="pc-content"><!-- [ breadcrumb ] start -->
-            @if (url()->current() !== url('admin/dashboard'))
-                <div class="page-header">
-                    <div class="page-block">
-                        <div class="row align-items-center">
-                            {{-- <div class="col-md-12">
-                                <ul class="breadcrumb">
-                                    <li class="breadcrumb-item"><a href="../dashboard/index.html">Home</a></li>
-                                    <li class="breadcrumb-item"><a href="javascript: void(0)">Table</a></li>
-                                    <li class="breadcrumb-item" aria-current="page">Bootstrap Table</li>
-                                </ul>
-                            </div> --}}
-                            <div class="col-md-12">
-                                <div class="page-header-title">
-                                    <h2 class="mb-0">@yield('title')</h2>
+            <div class="content transition-[margin,width] duration-100 px-5 mt-[65px] pt-[31px] pb-16 relative z-10 xl:ml-[275px] [&.content--compact]:xl:ml-[91px]">
+                <div class="grid grid-cols-12 gap-x-6 gap-y-10">
+                    <div class="col-span-12">
+                        @unless (request()->routeIs('dashboard.index'))
+                            <div class="flex flex-col gap-y-3 md:h-10 md:flex-row md:items-center">
+                                <div class="text-base font-medium">
+                                    @yield('title')
                                 </div>
                             </div>
+
+                            @include('layoutmodule::flash')
+                        @endunless
+
+                        <div class="box box--stacked mt-3.5 flex flex-col p-5">
+                            @yield('content')
                         </div>
+
+                        @include('layoutmodule::footer')
                     </div>
                 </div>
-                <!-- [ breadcrumb ] end -->
-                <!-- [ Main Content ] start -->
-
-                @include('layoutmodule::flash')
-            @endif
-
-            <div class="row">
-                <!-- [ basic-table ] start -->
-                <div class="col-md-12">
-                    <div class="card">
-                        @yield('content')
-                    </div>
-                </div>
-                <!-- [ basic-table ] end -->
             </div>
-            <!-- [ Main Content ] end -->
         </div>
-    </section>
+    </div>
 
-
-
-    <!-- [ Main Content ] end -->
-
-    @include('layoutmodule::footer')
-
-
-
-
-
-    <!-- Required Js -->
-    <script src="{{ asset('assets/js/plugins/popper.min.js') }}"></script>
-    <script src="{{ asset('assets/js/plugins/simplebar.min.js') }}"></script>
-    <script src="{{ asset('assets/js/plugins/bootstrap.min.js') }}"></script>
-    <script src="{{ asset('assets/js/plugins/i18next.min.js') }}"></script>
-    <script src="{{ asset('assets/js/plugins/i18nextHttpBackend.min.js') }}"></script>
-    <script src="{{ asset('assets/js/icon/custom-font.js') }}"></script>
-    <script src="{{ asset('assets/js/script.js') }}"></script>
-    <script src="{{ asset('assets/js/theme.js') }}"></script>
-    <script src="{{ asset('assets/js/multi-lang.js') }}"></script>
-    <script src="{{ asset('assets/js/plugins/feather.min.js') }}"></script>
-
-
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <!-- Include SweetAlert2 -->
+    <script src="{{ asset('assets/js/vendors/dom.js') }}"></script>
+    <script src="{{ asset('assets/js/vendors/tailwind-merge.js') }}"></script>
+    <script src="{{ asset('assets/js/vendors/lucide.js') }}"></script>
+    <script src="{{ asset('assets/js/vendors/popper.js') }}"></script>
+    <script src="{{ asset('assets/js/vendors/dropdown.js') }}"></script>
+    <script src="{{ asset('assets/js/vendors/transition.js') }}"></script>
+    <script src="{{ asset('assets/js/vendors/simplebar.js') }}"></script>
+    <script src="{{ asset('assets/js/components/base/lucide.js') }}"></script>
+    <script src="{{ asset('assets/js/custom.js') }}"></script>
+    <script src="{{ asset('assets/js/themes/dagger.js') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-
-
     @stack('scripts')
-</body><!-- [Body] end -->
+</body>
 
 </html>

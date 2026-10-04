@@ -1,0 +1,35 @@
+/* ===== Brand (sidebar header) ===== */
+.brand-logo {
+    height: 34px;
+    width: auto;
+}
+
+.brand-icon {
+    display: none;
+    height: 32px;
+    width: 32px;
+}
+
+@media (min-width: 1280px) {
+    /* Collapsed sidebar: swap the full logo for the icon and tighten padding
+       so the icon and the toggle fit in the 91px rail. */
+    .side-menu--collapsed .brand-logo {
+        display: none;
+    }
+
+    .side-menu--collapsed .brand-icon {
+        display: block;
+    }
+
+    .side-menu--collapsed .brand-bar {
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+}
+
+/* ===== Login ===== */
+.login-logo {
+    align-self: flex-start;
+    height: 60px;
+    width: auto;
+}
