@@ -1,0 +1,11 @@
+{
+    "name": "LayoutModule",
+    "alias": "layoutmodule",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\LayoutModule\\Providers\\LayoutModuleServiceProvider"
+    ],
+    "files": []
+}
