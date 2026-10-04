@@ -6,70 +6,64 @@ use Illuminate\Http\Request;
 
 trait GeneralHelper
 {
-
-    public function listMainSeasonCategories()
+    public function listMonths()
     {
         return [
-            ['name' => 'جولد', 'is_gold' => 1],
-            ['name' => 'سيلفر', 'is_gold' => 0]
-        ];
-    }
-    public function listMainTournamentRounds()
-    {
-        return [
-            '256' => 'دور 256',
-            '128' => 'دور 128',
-            '64' => 'دور 64',
-            '32Q' => 'دور 32 رئيسي',
-            '32' => 'دور 32 تمهيدي',
-            '16' => 'دور 16',
-            '8' => 'دور 8',
-            '4' => 'المركز الرابع',
-            '3' => 'المركز الثالث',
-            '2' => 'المركز الثاني',
-            '1' => 'المركز الأول'
+            ['name' => __('messages.january'), 'number' => 1],
+            ['name' => __('messages.february'), 'number' => 2],
+            ['name' => __('messages.march'), 'number' => 3],
+            ['name' => __('messages.april'), 'number' => 4],
+            ['name' => __('messages.may'), 'number' => 5],
+            ['name' => __('messages.june'), 'number' => 6],
+            ['name' => __('messages.july'), 'number' => 7],
+            ['name' => __('messages.august'), 'number' => 8],
+            ['name' => __('messages.september'), 'number' => 9],
+            ['name' => __('messages.october'), 'number' => 10],
+            ['name' => __('messages.november'), 'number' => 11],
+            ['name' => __('messages.december'), 'number' => 12]
         ];
     }
 
-    public function listMainSeasonAgeStages()
+    public function paymentMethods()
     {
         return [
-            ['name' => 'BU11', 'gender' => 'male', 'age_from' => 8, 'age_to' => 10],
-            ['name' => 'BU13', 'gender' => 'male', 'age_from' => 11, 'age_to' => 12],
-            ['name' => 'BU15', 'gender' => 'male', 'age_from' => 13, 'age_to' => 14],
-            ['name' => 'BU17', 'gender' => 'male', 'age_from' => 15, 'age_to' => 16],
-            ['name' => 'BU19', 'gender' => 'male', 'age_from' => 17, 'age_to' => 18],
-            ['name' => 'BU23', 'gender' => 'male', 'age_from' => 19, 'age_to' => 22],
-            ['name' => 'Men', 'gender' => 'male', 'age_from' => 0, 'age_to' => 0],
-
-            ['name' => 'GU11', 'gender' => 'female', 'age_from' => 8, 'age_to' => 10],
-            ['name' => 'GU13', 'gender' => 'female', 'age_from' => 11, 'age_to' => 12],
-            ['name' => 'GU15', 'gender' => 'female', 'age_from' => 13, 'age_to' => 14],
-            ['name' => 'GU17', 'gender' => 'female', 'age_from' => 15, 'age_to' => 16],
-            ['name' => 'GU19', 'gender' => 'female', 'age_from' => 17, 'age_to' => 18],
-            ['name' => 'GU23', 'gender' => 'female', 'age_from' => 19, 'age_to' => 22],
-            ['name' => 'Women', 'gender' => 'female', 'age_from' => 0, 'age_to' => 0],
-
-            ['name' => 'رواد 35', 'gender' => 'general', 'age_from' => 0, 'age_to' => 0],
-            ['name' => 'رواد 45', 'gender' => 'general', 'age_from' => 0, 'age_to' => 0],
-            ['name' => 'رواد 55', 'gender' => 'general', 'age_from' => 0, 'age_to' => 0]
+            'cash' => __('messages.cash'),
+            // 'credit_card' => __('messages.credit_card'),
+            'bank_transfer' => __('messages.bank_transfer'),
+            'check' => __('messages.check'),
+            'mobile_payment' => __('messages.mobile_payment'),
+            //'other' => __('messages.other')
         ];
     }
 
-    public function listMonths(){
+    public function contractStatuses()
+    {
         return [
-            ['name' => 'يناير', 'number' => 1],
-            ['name' => 'فبراير', 'number' => 2],
-            ['name' => 'مارس', 'number' => 3],
-            ['name' => 'أبريل', 'number' => 4],
-            ['name' => 'مايو', 'number' => 5],
-            ['name' => 'يونيو', 'number' => 6],
-            ['name' => 'يوليو', 'number' => 7],
-            ['name' => 'أغسطس', 'number' => 8],
-            ['name' => 'سبتمبر', 'number' => 9],
-            ['name' => 'أكتوبر', 'number' => 10],
-            ['name' => 'نوفمبر', 'number' => 11],
-            ['name' => 'ديسمبر', 'number' => 12]
+            'draft' => __('messages.draft'),
+            'signed' => __('messages.signed'),
+            'renewed' => __('messages.renewed'),
+            'ended' => __('messages.ended'),
+            'terminated' => __('messages.terminated'),
+            'expired' => __('messages.expired'),
+        ];
+    }
+
+    public function contractMainInformation()
+    {
+        return [
+            'lessor_name' => __('messages.main_info.lessor_name'),
+            'lessor_tax_reg_nu' => __('messages.main_info.lessor_tax_reg_nu'),
+            'lessor_commercial_reg_nu' => __('messages.main_info.lessor_commercial_reg_nu'),
+            'lessor_representative' => __('messages.main_info.lessor_representative'),
+            'lessor_position' => __('messages.main_info.lessor_position'),
+            'lessor_national_id' => __('messages.main_info.lessor_national_id'),
+            'lessor_signature_name' => __('messages.main_info.lessor_signature'),
+            'contract_duration' => __('messages.main_info.contract_duration'),
+            "annual_amount" => __('messages.main_info.annual_amount'),
+
+            'unit_address' => __('messages.main_info.unit_address'),
+            'virtual_contract_terms' => file_get_contents(storage_path('app/private/virtual_contract_terms.html')),
+            'virtual_contract_renewal_template' => file_get_contents(storage_path('app/private/virtual_contract_renewal_template.html')),
         ];
     }
 }

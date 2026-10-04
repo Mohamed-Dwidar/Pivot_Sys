@@ -20,7 +20,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        View::share('page_head', []);
-        View::share('breadcrumb', []);
+
     }
 }
