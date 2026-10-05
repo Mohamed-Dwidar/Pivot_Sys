@@ -29,7 +29,7 @@
                 <input type="hidden" name="status" value="{{ $filters['status'] }}">
             @endif
             <input type="search" name="search" value="{{ $filters['search'] ?? '' }}" class="{{ config('layoutmodule.form.input') }}" placeholder="Name, phone or email">
-            <button type="submit" class="btn btn-secondary"><i data-lucide="search"></i> Search</button>
+            <button type="submit" class="btn btn-dark"><i data-lucide="search"></i> Search</button>
         </form>
     </div>
 

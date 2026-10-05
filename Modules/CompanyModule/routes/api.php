@@ -1,0 +1,3 @@
+<?php
+
+// CompanyModule API routes

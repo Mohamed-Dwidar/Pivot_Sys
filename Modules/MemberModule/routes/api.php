@@ -1,0 +1,3 @@
+<?php
+
+// MemberModule API routes

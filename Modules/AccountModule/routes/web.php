@@ -1,24 +1,25 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Modules\AccountModule\app\Http\Controllers\AccountModuleController;
+use Modules\AccountModule\app\Http\Controllers\Account\AccountAccountModuleController;
 use Modules\AccountModule\app\Http\Controllers\Admin\AccountAdminModuleController;
+use Modules\AccountModule\app\Http\Controllers\Guest\AccountGuestModuleController;
 use Modules\AccountModule\app\Models\Account;
 
 /**
  *  Guest registration
  */
 Route::prefix('account')->name('account.')->middleware('guest')->group(function () {
-    Route::get('register', [AccountModuleController::class, 'register'])->name('register');
-    Route::post('register', [AccountModuleController::class, 'registerPost'])->name('registerPost');
+    Route::get('register', [AccountGuestModuleController::class, 'register'])->name('register');
+    Route::post('register', [AccountGuestModuleController::class, 'registerPost'])->name('registerPost');
 });
 
 /**
  *  Logged in account
  */
 Route::prefix('account')->name('account.')->middleware(['auth', 'user.active:' . Account::class])->group(function () {
-    Route::get('profile', [AccountModuleController::class, 'editProfile'])->name('profile.edit');
-    Route::put('profile', [AccountModuleController::class, 'updateProfile'])->name('profile.update');
+    Route::get('profile', [AccountAccountModuleController::class, 'editProfile'])->name('profile.edit');
+    Route::put('profile', [AccountAccountModuleController::class, 'updateProfile'])->name('profile.update');
 });
 
 /**

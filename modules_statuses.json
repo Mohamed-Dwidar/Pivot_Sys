@@ -2,5 +2,8 @@
     "AdminModule": true,
     "UserModule": true,
     "LayoutModule": true,
-    "AccountModule": true
+    "AccountModule": true,
+    "MemberModule": true,
+    "CompanyModule": true,
+    "JobModule": true
 }

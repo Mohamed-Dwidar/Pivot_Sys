@@ -1,0 +1,11 @@
+{
+    "name": "JobModule",
+    "alias": "jobmodule",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\JobModule\\Providers\\JobModuleServiceProvider"
+    ],
+    "files": []
+}

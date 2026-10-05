@@ -2,23 +2,38 @@
     $items = [
         ['divider' => 'Main'],
         [
-            'title' => 'Dashboard', 'icon' => 'gauge-circle',
-            'url' => route('account.dashboard'), 'active' => request()->routeIs('account.dashboard'),
+            'title' => 'Dashboard',
+            'icon' => 'gauge-circle',
+            'url' => route('account.dashboard'),
+            'active' => request()->routeIs('account.dashboard'),
         ],
 
-        ['divider' => 'Settings'],
+        ['divider' => 'Management'],
         [
-            'title' => 'My Account', 'icon' => 'building-2',
+            'title' => 'Members', 'icon' => 'users',
             'children' => [
                 [
-                    'title' => 'My Profile', 'icon' => 'contact',
-                    'url' => route('account.profile.edit'), 'active' => request()->routeIs('account.profile.*'),
+                    'title' => 'All Members', 'icon' => 'list',
+                    'url' => route('account.members.index'),
+                    'active' => request()->routeIs('account.members.*') && !request()->routeIs('account.members.create'),
                 ],
                 [
-                    'title' => 'Login Details', 'icon' => 'key-round',
-                    'url' => route('user.account.edit'), 'active' => request()->routeIs('user.account.*'),
+                    'title' => 'Add Member', 'icon' => 'user-plus',
+                    'url' => route('account.members.create'), 'active' => request()->routeIs('account.members.create'),
                 ],
             ],
+        ],
+        [
+            'title' => 'Companies',
+            'icon' => 'briefcase',
+            'url' => route('account.companies.index'),
+            'active' => request()->routeIs('account.companies.*') && !request()->routeIs('account.companies.create'),
+        ],
+        [
+            'title' => 'Jobs',
+            'icon' => 'clipboard-list',
+            'url' => route('account.jobs.index'),
+            'active' => request()->routeIs('account.jobs.*') && !request()->routeIs('account.jobs.create'),
         ],
     ];
 @endphp

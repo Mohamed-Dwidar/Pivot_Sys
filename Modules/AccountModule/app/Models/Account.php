@@ -3,8 +3,12 @@
 namespace Modules\AccountModule\app\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Modules\CompanyModule\app\Models\Company;
+use Modules\JobModule\app\Models\Job;
+use Modules\MemberModule\app\Models\Member;
 use Modules\UserModule\app\Contracts\Userable;
 use Modules\UserModule\app\Models\User;
 
@@ -45,6 +49,21 @@ class Account extends Model implements Userable
     public function user(): MorphOne
     {
         return $this->morphOne(User::class, 'userable');
+    }
+
+    public function companies(): HasMany
+    {
+        return $this->hasMany(Company::class);
+    }
+
+    public function jobs(): HasMany
+    {
+        return $this->hasMany(Job::class);
+    }
+
+    public function members(): HasMany
+    {
+        return $this->hasMany(Member::class);
     }
 
     public function scopeFilter($query, array $filters = [])
