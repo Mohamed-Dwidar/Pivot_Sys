@@ -2,22 +2,17 @@
 
 namespace Modules\UserModule\app\Models;
 
-use Laravel\Passport\HasApiTokens;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class User extends Authenticatable
 {
-    use HasFactory, HasApiTokens, SoftDeletes;
+    protected $fillable = ['email', 'password'];
 
-    protected $guarded = [];
+    protected $hidden = ['password', 'remember_token'];
 
-    public function userable()
+    public function userable(): MorphTo
     {
         return $this->morphTo();
     }
-
-      
 }

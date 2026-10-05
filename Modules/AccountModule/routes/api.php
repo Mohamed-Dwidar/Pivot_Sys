@@ -1,0 +1,3 @@
+<?php
+
+// AccountModule API routes

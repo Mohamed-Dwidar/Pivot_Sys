@@ -1,24 +1,20 @@
 <?php
 
-/*
-|--------------------------------------------------------------------------
-| Web Routes
-|--------------------------------------------------------------------------
-|
-| Here is where you can register web routes for your application. These
-| routes are loaded by the RouteServiceProvider within a group which
-| contains the "web" middleware group. Now create something great!
-|
-*/
+use Illuminate\Support\Facades\Route;
+use Modules\UserModule\app\Http\Controllers\UserModuleController;
 
-// Route::get('/' , 'UserModuleController@loginForm')->name('login');
+Route::redirect('/', '/login');
 
+Route::middleware('guest')->group(function () {
+    Route::get('login', [UserModuleController::class, 'loginForm'])->name('login');
+    Route::post('login', [UserModuleController::class, 'login'])->name('loginUser');
+});
 
-// Route::group([ 'perfix' => 'users'] , function(){
-//     Route::post('/login' , 'UserModuleController@loginUser')->name('loginUser');
-// });
-// Route::group([ 'perfix' => 'users' ,'middleWare' => 'auth'] , function(){
-//     Route::get('/logout' , 'UserModuleController@logout')->name('logout');
-//      Route::get('changePassword', 'UserModuleController@changePassword')->name('changePassword'); // change password view
-//     Route::post('updatePassword', 'UserModuleController@updatePassword')->name('updatePassword'); // change password action
-// });
+Route::middleware('auth')->group(function () {
+    Route::post('logout', [UserModuleController::class, 'logout'])->name('logout');
+
+    Route::middleware('user.active')->group(function () {
+        Route::get('my-account', [UserModuleController::class, 'editAccount'])->name('user.account.edit');
+        Route::put('my-account', [UserModuleController::class, 'updateAccount'])->name('user.account.update');
+    });
+});

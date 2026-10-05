@@ -1,46 +1,35 @@
 <?php
 
-
 namespace Modules\AdminModule\app\Http\Controllers\Auth;
 
-// use Illuminate\Container\Attributes\Auth;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
-use Illuminate\Support\Facades\Hash;
-use Auth;
+use Illuminate\Support\Facades\Auth;
+use Modules\AdminModule\app\Http\Requests\LoginAdminRequest;
 
 class AdminAuthController extends Controller
 {
-    function index()
+    public function index()
     {
-        if (Auth::guard('admin')->check()) {
-            return redirect('/admin/dashboard');
-        } else {
-            return view('adminmodule::login');
-        }
+        return view('adminmodule::login');
     }
 
-    function login(Request $request)
+    public function login(LoginAdminRequest $request)
     {
-        $rememberme = request()->has('rememberme') ? 1 : 0;
-
-        if (auth('admin')->attempt(
-            [
-                'email' => $request->email,
-                'password' => $request->password
-            ],
-            $rememberme
-        )) {
-            return redirect()->intended('admin');
+        if (Auth::guard('admin')->attempt($request->only('email', 'password'), $request->boolean('rememberme'))) {
+            $request->session()->regenerate();
+            return redirect()->intended(route('admin.dashboard'));
         }
-        return redirect()->back()->withErrors(['error' => 'The email or password is incorrect']);
+
+        return back()->withErrors(['email' => 'The email or password is incorrect.'])->onlyInput('email');
     }
 
-    function logout(Request $request)
+    public function logout(Request $request)
     {
+        // Only the admin guard is logged out, so an account session in the same browser survives.
         Auth::guard('admin')->logout();
-        $request->session()->flush();
         $request->session()->regenerate();
-        return redirect()->to('admin');
+        $request->session()->regenerateToken();
+        return redirect()->route('admin.login');
     }
 }

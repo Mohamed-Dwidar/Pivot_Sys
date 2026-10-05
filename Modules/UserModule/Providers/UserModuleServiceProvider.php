@@ -4,6 +4,7 @@ namespace Modules\UserModule\Providers;
 
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;
+use Modules\UserModule\app\Http\Middleware\EnsureUserIsActive;
 use Nwidart\Modules\Traits\PathNamespace;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -26,7 +27,8 @@ class UserModuleServiceProvider extends ServiceProvider
         $this->registerTranslations();
         $this->registerConfig();
         $this->registerViews();
-        $this->loadMigrationsFrom(module_path($this->name, 'database/migrations'));
+        $this->loadMigrationsFrom(module_path($this->name, 'database/Migrations'));
+        $this->app['router']->aliasMiddleware('user.active', EnsureUserIsActive::class);
     }
 
     /**

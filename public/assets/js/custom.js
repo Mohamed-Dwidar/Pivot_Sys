@@ -19,3 +19,45 @@ document.addEventListener("DOMContentLoaded", function () {
         $(".close-mobile-menu").first().removeClass("close-mobile-menu--mobile-menu-open");
     };
 });
+
+// Forms with data-confirm="message" open a confirm modal before submitting (approve, reject, delete, ...).
+// Optional: data-confirm-title, data-confirm-button (confirm button text),
+// data-confirm-variant = success | warning | danger (button color + icon, default danger).
+document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (!form.dataset || !form.dataset.confirm || form.dataset.confirmed) {
+        return;
+    }
+    e.preventDefault();
+
+    var submit = function () {
+        form.dataset.confirmed = "1";
+        form.submit();
+    };
+
+    var variants = {
+        success: { color: "--color-success", icon: "question" },
+        warning: { color: "--color-pending", icon: "warning" },
+        danger: { color: "--color-danger", icon: "warning" },
+    };
+    var variant = variants[form.dataset.confirmVariant] || variants.danger;
+    var color = getComputedStyle(document.documentElement).getPropertyValue(variant.color).trim();
+
+    if (window.Swal) {
+        Swal.fire({
+            title: form.dataset.confirmTitle || "Are you sure?",
+            text: form.dataset.confirm,
+            icon: variant.icon,
+            showCancelButton: true,
+            confirmButtonText: form.dataset.confirmButton || "Yes",
+            cancelButtonText: "Cancel",
+            confirmButtonColor: color ? "rgb(" + color + ")" : undefined,
+            reverseButtons: true,
+            focusCancel: true,
+        }).then(function (result) {
+            if (result.isConfirmed) submit();
+        });
+    } else if (window.confirm(form.dataset.confirm)) {
+        submit();
+    }
+});

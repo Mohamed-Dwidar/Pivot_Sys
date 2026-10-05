@@ -1,5 +1,6 @@
 {
     "AdminModule": true,
     "UserModule": true,
-    "LayoutModule": true
+    "LayoutModule": true,
+    "AccountModule": true
 }

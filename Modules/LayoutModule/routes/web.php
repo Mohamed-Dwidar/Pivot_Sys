@@ -1,19 +1,13 @@
 <?php
 
-/*
-|--------------------------------------------------------------------------
-| Web Routes
-|--------------------------------------------------------------------------
-|
-| Here is where you can register web routes for your application. These
-| routes are loaded by the RouteServiceProvider within a group which
-| contains the "web" middleware group. Now create something great!
-|
-*/
-
 use Illuminate\Support\Facades\Route;
+use Modules\AccountModule\app\Models\Account;
 use Modules\LayoutModule\app\Http\Controllers\LayoutModuleController;
 
-Route::group(['prefix' => 'admin', 'middleWare' => 'auth'], function () {
-    Route::get('/dashboard', [LayoutModuleController::class, 'admin_dashboard'])->name('dashboard.index');
-});
+Route::get('admin/dashboard', [LayoutModuleController::class, 'adminDashboard'])
+    ->middleware('auth:admin')
+    ->name('admin.dashboard');
+
+Route::get('account/dashboard', [LayoutModuleController::class, 'accountDashboard'])
+    ->middleware(['auth', 'user.active:' . Account::class])
+    ->name('account.dashboard');

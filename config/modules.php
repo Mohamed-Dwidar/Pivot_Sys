@@ -106,7 +106,7 @@ return [
         | the migration files?
         |
         */
-        'migration' => base_path('database/migrations'),
+        'migration' => base_path('database/Migrations'),
 
         /*
         |--------------------------------------------------------------------------
@@ -165,9 +165,9 @@ return [
             'config' => ['path' => 'config', 'generate' => true],
 
             // database/
-            'factory' => ['path' => 'database/factories', 'generate' => true],
-            'migration' => ['path' => 'database/migrations', 'generate' => true],
-            'seeder' => ['path' => 'database/seeders', 'generate' => true],
+            'factory' => ['path' => 'database/Factories', 'generate' => true],
+            'migration' => ['path' => 'database/Migrations', 'generate' => true],
+            'seeder' => ['path' => 'database/Seeders', 'generate' => true],
 
             // lang/
             'lang' => ['path' => 'lang', 'generate' => false],
