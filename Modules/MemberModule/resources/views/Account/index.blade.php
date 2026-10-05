@@ -23,7 +23,7 @@
                 <option value="{{ $id }}" @selected(($filters['job_id'] ?? '') == $id)>{{ $name }}</option>
             @endforeach
         </select>
-        <button type="submit" class="btn btn-dark"><i data-lucide="search"></i> Search</button>
+        <button type="submit" class="btn btn-primary"><i data-lucide="search"></i> Search</button>
         @if (array_filter($filters))
             <a href="{{ route('account.members.index') }}" class="btn btn-secondary">Clear</a>
         @endif

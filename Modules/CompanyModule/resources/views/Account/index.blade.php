@@ -11,7 +11,7 @@
 @section('content')
     <form method="GET" action="{{ route('account.companies.index') }}" class="filter-bar">
         <input type="search" name="search" value="{{ $filters['search'] ?? '' }}" class="{{ config('layoutmodule.form.input') }}" placeholder="Search by name">
-        <button type="submit" class="btn btn-dark"><i data-lucide="search"></i> Search</button>
+        <button type="submit" class="btn btn-primary"><i data-lucide="search"></i> Search</button>
         @if (!empty($filters['search']))
             <a href="{{ route('account.companies.index') }}" class="btn btn-secondary">Clear</a>
         @endif

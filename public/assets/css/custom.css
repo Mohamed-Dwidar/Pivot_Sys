@@ -139,12 +139,6 @@
     border-color: rgb(var(--color-pending));
 }
 
-.btn-dark {
-    color: #fff;
-    background-color: rgb(var(--color-dark));
-    border-color: rgb(var(--color-dark));
-}
-
 .btn-danger {
     color: #fff;
     background-color: rgb(var(--color-danger));

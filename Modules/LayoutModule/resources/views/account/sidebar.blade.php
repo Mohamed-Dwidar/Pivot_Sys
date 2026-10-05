@@ -10,19 +10,26 @@
 
         ['divider' => 'Management'],
         [
-            'title' => 'Members', 'icon' => 'users',
-            'children' => [
-                [
-                    'title' => 'All Members', 'icon' => 'list',
-                    'url' => route('account.members.index'),
-                    'active' => request()->routeIs('account.members.*') && !request()->routeIs('account.members.create'),
-                ],
-                [
-                    'title' => 'Add Member', 'icon' => 'user-plus',
-                    'url' => route('account.members.create'), 'active' => request()->routeIs('account.members.create'),
-                ],
-            ],
+            'title' => 'Companies',
+            'icon' => 'users',
+           'url' => route('account.members.index'),
+             'active' => request()->routeIs('account.members.*') && !request()->routeIs('account.members.create'),
         ],
+
+        // [
+        //     'title' => 'Members', 'icon' => 'users',
+        //     'children' => [
+        //         [
+        //             'title' => 'All Members', 'icon' => 'list',
+        //             'url' => route('account.members.index'),
+        //             'active' => request()->routeIs('account.members.*') && !request()->routeIs('account.members.create'),
+        //         ],
+        //         [
+        //             'title' => 'Add Member', 'icon' => 'user-plus',
+        //             'url' => route('account.members.create'), 'active' => request()->routeIs('account.members.create'),
+        //         ],
+        //     ],
+        // ],
         [
             'title' => 'Companies',
             'icon' => 'briefcase',
