@@ -61,6 +61,14 @@ class UnitService
         return $unit;
     }
 
+    // the active switch of the list
+    public function setActive(Space $space, $id, bool $isActive)
+    {
+        $unit = $this->findOne($space, $id);
+        $unit->update(['is_active' => $isActive]);
+        return $unit;
+    }
+
     // soft delete: the images are kept so the unit can be restored
     public function deleteOne(Space $space, $id)
     {

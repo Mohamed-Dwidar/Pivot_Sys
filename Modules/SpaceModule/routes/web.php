@@ -17,6 +17,7 @@ Route::prefix('account')->name('account.')->middleware(['auth', 'user.active:' .
         Route::get('{id}', [SpaceAccountModuleController::class, 'show'])->name('show');
         Route::get('{id}/edit', [SpaceAccountModuleController::class, 'edit'])->name('edit');
         Route::put('{id}', [SpaceAccountModuleController::class, 'update'])->name('update');
+        Route::patch('{id}/active', [SpaceAccountModuleController::class, 'toggleActive'])->name('active');
         Route::delete('{id}', [SpaceAccountModuleController::class, 'destroy'])->name('destroy');
     });
 

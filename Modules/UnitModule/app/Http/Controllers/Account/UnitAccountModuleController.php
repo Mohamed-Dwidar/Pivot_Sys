@@ -69,7 +69,9 @@ class UnitAccountModuleController extends Controller
             ->addColumn('name_html', fn ($unit) => view('unitmodule::Account.Unit.partials.row-name', ['space' => $space, 'unit' => $unit])->render())
             ->addColumn('subscription_type', fn ($unit) => $unit->subscriptionType?->name ?? '-')
             ->editColumn('capacity', fn ($unit) => $unit->capacity ?: '-')
-            ->addColumn('status', fn ($unit) => '<span class="badge ' . ($unit->is_active ? 'badge-active">Active' : 'badge-inactive">Inactive') . '</span>')
+            ->addColumn('status', fn ($unit) => view('layoutmodule::partials.row-toggle', [
+                'url' => route('account.spaces.units.active', [$space->id, $unit->id]), 'row' => $unit->id, 'name' => 'is_active', 'checked' => $unit->is_active,
+            ])->render())
             ->addColumn('actions', fn ($unit) => view('unitmodule::Account.Unit.partials.row-actions', ['space' => $space, 'unit' => $unit])->render())
             ->rawColumns(['image', 'name_html', 'status', 'actions'])
             ->only(['DT_RowId', 'image', 'name_html', 'subscription_type', 'capacity', 'concurrent_usage', 'status', 'actions']);
@@ -121,6 +123,20 @@ class UnitAccountModuleController extends Controller
 
         return response()->json([
             'message' => 'The unit has been updated successfully.',
+            'row' => $this->row($request, $space, $id),
+            'redirect' => route('account.spaces.units.show', [$space->id, $id]),
+        ]);
+    }
+
+    // the active switch in the list (ajax)
+    public function toggleActive(Request $request, $spaceId, $id)
+    {
+        $request->validate(['is_active' => 'required|boolean']);
+        $space = $this->space($spaceId);
+        $unit = $this->unitService->setActive($space, $id, $request->boolean('is_active'));
+
+        return response()->json([
+            'message' => $unit->is_active ? 'The unit has been activated.' : 'The unit has been deactivated.',
             'row' => $this->row($request, $space, $id),
             'redirect' => route('account.spaces.units.show', [$space->id, $id]),
         ]);

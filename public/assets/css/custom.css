@@ -895,3 +895,48 @@ tr.row-removing {
     opacity: 0;
     transition: opacity 0.3s ease-out;
 }
+
+/* ------------------------------------------------------------------ */
+/* Row on / off switch (layoutmodule::partials.row-toggle)              */
+/* ------------------------------------------------------------------ */
+.row-toggle__label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.row-toggle__text {
+    font-size: 0.8rem;
+    color: rgb(100 116 139);
+}
+
+/* loading: spinner instead of the text until the server answers */
+.row-toggle__spinner {
+    display: none;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid rgb(var(--color-primary) / 0.25);
+    border-top-color: rgb(var(--color-primary));
+    border-radius: 9999px;
+    animation: row-toggle-spin 0.7s linear infinite;
+}
+
+.row-toggle.is-sending .row-toggle__spinner {
+    display: inline-block;
+}
+
+.row-toggle.is-sending .row-toggle__text {
+    display: none;
+}
+
+.row-toggle.is-sending .row-toggle__label {
+    cursor: progress;
+}
+
+@keyframes row-toggle-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

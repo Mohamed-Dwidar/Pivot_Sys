@@ -208,10 +208,16 @@ function ajaxSubmit(form) {
         Object.keys(filters).forEach(function (name) { data.append("list[" + name + "]", filters[name]); });
     }
 
-    var buttons = form.querySelectorAll("button[type=submit]");
+    // the buttons (and the switch of a row toggle) are locked while sending, FormData is already taken
+    var buttons = form.querySelectorAll("button[type=submit], [data-toggle-form] input[type=checkbox]");
     buttons.forEach(function (button) { button.disabled = true; });
     form.classList.add("is-sending");
     clearFormErrors(form);
+    // a row toggle that fails goes back to its previous position
+    var toggle = form.matches("[data-toggle-form]") ? form.querySelector("input[type=checkbox]") : null;
+    var failed = function () {
+        if (toggle) toggle.checked = !toggle.checked;
+    };
 
     fetch(form.action, {
         method: "POST",   // PUT / PATCH / DELETE go as _method (Laravel)
@@ -225,12 +231,19 @@ function ajaxSubmit(form) {
         })
         .then(function (result) {
             var json = result.json;
+            if (result.status >= 400) {
+                failed();
+            }
             if (result.status === 422) {
                 if (json.errors) {
                     showFormErrors(form, json.errors);
                 } else {
                     toast(json.message || "Please check the data.", "error");
                 }
+                return;
+            }
+            if (result.status === 404) {
+                toast("This record was not found, it may have been deleted.", "error");
                 return;
             }
             if (result.status >= 400) {
@@ -263,6 +276,7 @@ function ajaxSubmit(form) {
             if (inModal) appModal.close();
         })
         .catch(function () {
+            failed();
             toast("Could not connect to the server, please try again.", "error");
         })
         .finally(function () {
@@ -270,6 +284,14 @@ function ajaxSubmit(form) {
             form.classList.remove("is-sending");
         });
 }
+
+// Row toggles (layoutmodule::partials.row-toggle): save as soon as the switch is clicked
+document.addEventListener("change", function (e) {
+    var form = e.target.closest && e.target.closest("form[data-toggle-form]");
+    if (form && e.target.type === "checkbox") {
+        form.requestSubmit();
+    }
+});
 
 // Colors drop menu (unitmodule::partials.color-select): pick the clicked color and show it + its name on the button.
 function pickColorOption(option) {

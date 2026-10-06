@@ -65,6 +65,14 @@ class SpaceService
         return $space;
     }
 
+    // the active switch of the list
+    public function setActive($accountId, $id, bool $isActive)
+    {
+        $space = $this->findOne($accountId, $id);
+        $space->update(['is_active' => $isActive]);
+        return $space;
+    }
+
     // soft delete (the space and its units)
     public function deleteOne($accountId, $id)
     {

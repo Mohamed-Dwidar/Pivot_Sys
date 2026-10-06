@@ -15,6 +15,7 @@ Route::prefix('account/spaces/{spaceId}/units')->name('account.spaces.units.')->
     Route::get('{id}', [UnitAccountModuleController::class, 'show'])->name('show');
     Route::get('{id}/edit', [UnitAccountModuleController::class, 'edit'])->name('edit');
     Route::put('{id}', [UnitAccountModuleController::class, 'update'])->name('update');
+    Route::patch('{id}/active', [UnitAccountModuleController::class, 'toggleActive'])->name('active');
     Route::delete('{id}', [UnitAccountModuleController::class, 'destroy'])->name('destroy');
 });
 

@@ -60,7 +60,9 @@ class SpaceAccountModuleController extends Controller
             ->addColumn('name_html', fn ($space) => '<a href="' . route('account.spaces.show', $space->id) . '" class="font-medium">' . e($space->name) . '</a>')
             ->addColumn('subscription_types', fn ($space) => $space->subscriptionTypes->pluck('name')->join(', ') ?: '-')
             ->addColumn('images_count', fn ($space) => $space->images->count())
-            ->addColumn('status', fn ($space) => view('spacemodule::Account.Space.partials.status-badge', compact('space'))->render())
+            ->addColumn('status', fn ($space) => view('layoutmodule::partials.row-toggle', [
+                'url' => route('account.spaces.active', $space->id), 'row' => $space->id, 'name' => 'is_active', 'checked' => $space->is_active,
+            ])->render())
             ->addColumn('actions', fn ($space) => view('spacemodule::Account.Space.partials.row-actions', compact('space'))->render())
             ->rawColumns(['image', 'name_html', 'status', 'actions'])
             ->only(['DT_RowId', 'image', 'name_html', 'subscription_types', 'units_count', 'images_count', 'status', 'actions']);
@@ -108,6 +110,19 @@ class SpaceAccountModuleController extends Controller
 
         return response()->json([
             'message' => 'The space has been updated successfully.',
+            'row' => $this->row($request, $id),
+            'redirect' => route('account.spaces.show', $id),
+        ]);
+    }
+
+    // the active switch in the list (ajax)
+    public function toggleActive(Request $request, $id)
+    {
+        $request->validate(['is_active' => 'required|boolean']);
+        $space = $this->spaceService->setActive($this->accountId(), $id, $request->boolean('is_active'));
+
+        return response()->json([
+            'message' => $space->is_active ? 'The space has been activated.' : 'The space has been deactivated.',
             'row' => $this->row($request, $id),
             'redirect' => route('account.spaces.show', $id),
         ]);
