@@ -1,11 +1,11 @@
-@extends('layoutmodule::account.main')
+@extends(request()->ajax() ? 'layoutmodule::modal' : 'layoutmodule::account.main')
 
 @section('title')
     Company Details
 @endsection
 
 @section('actions')
-    <a href="{{ route('account.companies.edit', $company->id) }}" class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
+    <a href="{{ route('account.companies.edit', $company->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
     @include('companymodule::Account.partials.delete-form')
 @endsection
 
@@ -17,7 +17,9 @@
         <div><dt>Last Update</dt><dd>{{ $company->updated_at->format('Y-m-d H:i') }}</dd></div>
     </dl>
 
-    <div class="form-actions">
-        <a href="{{ route('account.companies.index') }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> Back to Companies</a>
-    </div>
+    @unless (request()->ajax())
+        <div class="form-actions">
+            <a href="{{ route('account.companies.index') }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> Back to Companies</a>
+        </div>
+    @endunless
 @endsection

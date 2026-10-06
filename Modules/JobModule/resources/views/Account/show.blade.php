@@ -1,11 +1,11 @@
-@extends('layoutmodule::account.main')
+@extends(request()->ajax() ? 'layoutmodule::modal' : 'layoutmodule::account.main')
 
 @section('title')
     Job Details
 @endsection
 
 @section('actions')
-    <a href="{{ route('account.jobs.edit', $job->id) }}" class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
+    <a href="{{ route('account.jobs.edit', $job->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
     @include('jobmodule::Account.partials.delete-form')
 @endsection
 
@@ -17,7 +17,9 @@
         <div><dt>Last Update</dt><dd>{{ $job->updated_at->format('Y-m-d H:i') }}</dd></div>
     </dl>
 
-    <div class="form-actions">
-        <a href="{{ route('account.jobs.index') }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> Back to Jobs</a>
-    </div>
+    @unless (request()->ajax())
+        <div class="form-actions">
+            <a href="{{ route('account.jobs.index') }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> Back to Jobs</a>
+        </div>
+    @endunless
 @endsection

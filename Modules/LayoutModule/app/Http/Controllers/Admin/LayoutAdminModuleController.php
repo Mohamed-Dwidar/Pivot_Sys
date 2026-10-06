@@ -17,8 +17,8 @@ class LayoutAdminModuleController extends Controller
     public function dashboard()
     {
         $counts = $this->accountService->countByStatus();
-        $pendingAccounts = $this->accountService->latestPending();
 
-        return view('layoutmodule::admin.dashboard', compact('counts', 'pendingAccounts'));
+        // the pending requests table loads from admin.accounts.data (DataTables)
+        return view('layoutmodule::admin.dashboard', compact('counts'));
     }
 }

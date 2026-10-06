@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html class="theme-6" lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 
 <head>
     <meta charset="utf-8">
@@ -50,6 +50,17 @@
             </div>
         </div>
     </div>
+
+    {{-- the popup for view / add / edit (data-modal links, see custom.js), the content comes from layoutmodule::modal --}}
+    <div id="app-modal" data-tw-backdrop="" aria-hidden="true" tabindex="-1" class="modal group bg-gradient-to-b from-theme-1/50 via-theme-2/50 to-black/50 transition-[visibility,opacity] w-screen h-screen fixed left-0 top-0 [&:not(.show)]:duration-[0s,0.2s] [&:not(.show)]:delay-[0.2s,0s] [&:not(.show)]:invisible [&:not(.show)]:opacity-0 [&.show]:visible [&.show]:opacity-100 [&.show]:duration-[0s,0.4s]">
+        <div data-tw-merge="" class="app-modal__dialog w-[90%] mx-auto bg-white relative rounded-md shadow-md transition-[margin-top,transform] duration-[0.4s,0.3s] -mt-16 group-[.show]:mt-16 group-[.modal-static]:scale-[1.05] dark:bg-darkmode-600">
+            <div class="app-modal__body"></div>
+        </div>
+    </div>
+    {{-- validation message under a field (ajax forms) --}}
+    <template id="field-error-template">
+        <div class="{{ config('layoutmodule.form.error') }}" data-ajax-error></div>
+    </template>
 
     <script src="{{ asset('assets/js/vendors/dom.js') }}"></script>
     <script src="{{ asset('assets/js/vendors/tailwind-merge.js') }}"></script>

@@ -9,7 +9,7 @@
     $toggleClass = config('layoutmodule.form.select') . ($errors->has('color_id') ? ' border-danger' : '');
     $toggleClass = $errors->has('color_id') ? str_replace('border-slate-200', '', $toggleClass) : $toggleClass;
 @endphp
-<div>
+<div data-field="color_id">
     <label class="{{ config('layoutmodule.form.label') }}">Color <span class="text-danger">*</span></label>
 
     @if ($colors)
@@ -24,7 +24,7 @@
                     @endif
                 </span>
             </button>
-            <div data-transition="" data-selector=".show" data-enter="transition-all ease-linear duration-150" data-enter-from="absolute !mt-5 invisible opacity-0 translate-y-1" data-enter-to="!mt-1 visible opacity-100 translate-y-0" data-leave="transition-all ease-linear duration-150" data-leave-from="!mt-1 visible opacity-100 translate-y-0" data-leave-to="absolute !mt-5 invisible opacity-0 translate-y-1" class="dropdown-menu absolute z-[9999] hidden">
+            <div class="dropdown-menu js-menu absolute z-[9999]">
                 <div data-tw-merge="" class="dropdown-content rounded-md border-transparent bg-white p-2 shadow-[0px_3px_10px_#00000017] dark:border-transparent dark:bg-darkmode-600 color-select__menu">
                     @foreach ($colors as $colorId => $colorName)
                         <label data-tw-dismiss="dropdown" data-current="{{ $currentId }}" class="color-select__option cursor-pointer flex items-center gap-2 p-2 transition duration-300 ease-in-out rounded-md hover:bg-slate-200/60">

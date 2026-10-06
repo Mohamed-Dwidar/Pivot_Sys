@@ -10,6 +10,7 @@ use Modules\CompanyModule\app\Services\CompanyService;
 use Yajra\DataTables\Facades\DataTables;
 
 // logged in account: manage his companies list
+// show / create / edit open in the popup (ajax), store / update / destroy answer JSON (custom.js ajax forms)
 class CompanyAccountModuleController extends Controller
 {
     private $companyService;
@@ -33,18 +34,33 @@ class CompanyAccountModuleController extends Controller
     // DataTables server side
     public function data(Request $request)
     {
-        return DataTables::eloquent($this->companyService->listQuery($this->accountId()))
-            ->addIndexColumn()
-            ->filter(function ($query) use ($request) {
-                $query->filter(['search' => trim((string) $request->input('search.value'))]);
-            })
+        return $this->table(['search' => $request->input('search.value')])->toJson();
+    }
+
+    // the list columns, for data() and for one row after a change (row())
+    private function table(array $filters, $id = null)
+    {
+        $query = $this->companyService->listQuery($this->accountId());
+        if ($id) {
+            $query->whereKey($id);
+        }
+
+        return DataTables::eloquent($query)
+            // inside filter() so "of N total" counts all the companies
+            ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))]))
+            ->setRowId(fn ($company) => 'row-' . $company->id)
             ->orderColumn('name', fn ($query, $order) => $query->orderByLocalized('name', $order))
-            ->addColumn('name_html', fn ($company) => '<a href="' . route('account.companies.show', $company->id) . '" class="font-medium">' . e($company->name) . '</a>')
+            ->addColumn('name_html', fn ($company) => '<a href="' . route('account.companies.show', $company->id) . '" data-modal class="font-medium">' . e($company->name) . '</a>')
             ->editColumn('created_at', fn ($company) => $company->created_at->format('Y-m-d'))
             ->addColumn('actions', fn ($company) => view('companymodule::Account.partials.row-actions', compact('company'))->render())
             ->rawColumns(['name_html', 'actions'])
-            ->only(['DT_RowIndex', 'name_html', 'created_at', 'actions'])
-            ->toJson();
+            ->only(['DT_RowId', 'name_html', 'created_at', 'actions']);
+    }
+
+    // the updated row with the list filters (list[...]), null when it does not match them any more
+    private function row(Request $request, $id)
+    {
+        return $this->table((array) $request->input('list', []), $id)->toArray()['data'][0] ?? null;
     }
 
     public function create()
@@ -56,7 +72,11 @@ class CompanyAccountModuleController extends Controller
     {
         $company = $this->companyService->create($this->accountId(), $request->validated());
 
-        return redirect()->route('account.companies.show', $company->id)->with('success', 'The company has been added successfully.');
+        return response()->json([
+            'message' => 'The company has been added successfully.',
+            'reload' => true,
+            'redirect' => route('account.companies.show', $company->id),
+        ]);
     }
 
     public function show($id)
@@ -75,13 +95,21 @@ class CompanyAccountModuleController extends Controller
     {
         $this->companyService->update($this->accountId(), $id, $request->validated());
 
-        return redirect()->route('account.companies.show', $id)->with('success', 'The company has been updated successfully.');
+        return response()->json([
+            'message' => 'The company has been updated successfully.',
+            'row' => $this->row($request, $id),
+            'redirect' => route('account.companies.show', $id),
+        ]);
     }
 
     public function destroy($id)
     {
         $this->companyService->deleteOne($this->accountId(), $id);
 
-        return redirect()->route('account.companies.index')->with('success', 'The company has been deleted successfully.');
+        return response()->json([
+            'message' => 'The company has been deleted successfully.',
+            'row' => null,
+            'redirect' => route('account.companies.index'),
+        ]);
     }
 }

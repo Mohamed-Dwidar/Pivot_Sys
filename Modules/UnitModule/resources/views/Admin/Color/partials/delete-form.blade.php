@@ -1,4 +1,4 @@
-<form method="POST" action="{{ route('admin.colors.destroy', $color->id) }}" class="{{ !empty($menu) ? '' : 'inline-form' }}"
+<form method="POST" action="{{ route('admin.colors.destroy', $color->id) }}" class="{{ !empty($menu) ? '' : 'inline-form' }}" data-ajax data-row="{{ $color->id }}"
     data-confirm="&quot;{{ $color->name }}&quot; will be deleted permanently."
     data-confirm-title="Delete this color?"
     data-confirm-button="Delete"

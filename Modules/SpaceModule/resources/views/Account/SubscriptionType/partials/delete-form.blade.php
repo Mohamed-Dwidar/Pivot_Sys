@@ -1,5 +1,5 @@
-<form method="POST" action="{{ route('account.subscription-types.destroy', $subscriptionType->id) }}" class="{{ !empty($menu) ? '' : 'inline-form' }}"
-    data-confirm="&quot;{{ $subscriptionType->name }}&quot; will be deleted and removed from {{ $subscriptionType->spaces_count }} space(s)."
+<form method="POST" action="{{ route('account.subscription-types.destroy', $subscriptionType->id) }}" class="{{ !empty($menu) ? '' : 'inline-form' }}" data-ajax data-row="{{ $subscriptionType->id }}"
+    data-confirm="&quot;{{ $subscriptionType->name }}&quot; will be deleted and removed from {{ $subscriptionType->spaces_count ?? $subscriptionType->spaces->count() }} space(s)."
     data-confirm-title="Delete this subscription type?"
     data-confirm-button="Delete"
     data-confirm-variant="danger">

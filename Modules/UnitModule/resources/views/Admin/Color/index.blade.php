@@ -5,7 +5,7 @@
 @endsection
 
 @section('actions')
-    <a href="{{ route('admin.colors.create') }}" class="btn btn-primary"><i data-lucide="plus"></i> Add Color</a>
+    <a href="{{ route('admin.colors.create') }}" data-modal class="btn btn-primary"><i data-lucide="plus"></i> Add Color</a>
 @endsection
 
 @section('content')

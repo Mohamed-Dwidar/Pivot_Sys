@@ -1,18 +1,19 @@
-@extends('layoutmodule::account.main')
+@extends(request()->ajax() ? 'layoutmodule::modal' : 'layoutmodule::account.main')
 
 @section('title')
     Add Subscription Type
 @endsection
 
 @section('content')
-    <form method="POST" action="{{ route('account.subscription-types.store') }}">
+    <form method="POST" action="{{ route('account.subscription-types.store') }}" data-ajax
+        data-confirm="The subscription type will be added, then you can assign it to your spaces."
+        data-confirm-title="Add this subscription type?"
+        data-confirm-button="Add"
+        data-confirm-variant="success">
         @csrf
 
         @include('spacemodule::Account.SubscriptionType.partials.form', ['subscriptionType' => null])
 
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary"><i data-lucide="save"></i> Save</button>
-            <a href="{{ route('account.subscription-types.index') }}" class="btn btn-secondary">Cancel</a>
-        </div>
+        @include('layoutmodule::partials.form-actions', ['cancel' => route('account.subscription-types.index')])
     </form>
 @endsection

@@ -5,7 +5,7 @@
 @endsection
 
 @section('actions')
-    <a href="{{ route('account.spaces.create') }}" class="btn btn-primary"><i data-lucide="plus"></i> Add Space</a>
+    <a href="{{ route('account.spaces.create') }}" data-modal class="btn btn-primary"><i data-lucide="plus"></i> Add Space</a>
 @endsection
 
 @section('content')

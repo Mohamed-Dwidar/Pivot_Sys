@@ -3,7 +3,7 @@
     @include('layoutmodule::partials.checkbox', ['name' => 'is_active', 'label' => 'Active', 'checked' => true, 'hint' => '...'])
 --}}
 @php($id = 'field-' . $name)
-<div>
+<div data-field="{{ $name }}">
     <input type="hidden" name="{{ $name }}" value="0">
     <div class="flex items-center">
         <input type="checkbox" name="{{ $name }}" id="{{ $id }}" value="1" class="{{ config('layoutmodule.form.checkbox') }}"

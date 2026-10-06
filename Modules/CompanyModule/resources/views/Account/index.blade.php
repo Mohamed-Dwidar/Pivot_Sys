@@ -5,7 +5,7 @@
 @endsection
 
 @section('actions')
-    <a href="{{ route('account.companies.create') }}" class="btn btn-primary"><i data-lucide="plus"></i> Add Company</a>
+    <a href="{{ route('account.companies.create') }}" data-modal class="btn btn-primary"><i data-lucide="plus"></i> Add Company</a>
 @endsection
 
 @section('content')
@@ -16,10 +16,9 @@
 
     <div class="table-wrap mt-5">
         <table class="data-table" data-datatable data-url="{{ route('account.companies.data') }}"
-            data-filters="#companies-filters" data-order='[[1, "asc"]]' data-empty="No companies yet.">
+            data-filters="#companies-filters" data-order='[[0, "asc"]]' data-empty="No companies yet.">
             <thead>
                 <tr>
-                    <th data-data="DT_RowIndex">#</th>
                     <th data-data="name_html" data-name="name">Name</th>
                     <th data-data="created_at" data-name="created_at" data-class="whitespace-nowrap">Added</th>
                     <th data-data="actions"></th>

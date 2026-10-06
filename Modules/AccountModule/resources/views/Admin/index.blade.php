@@ -5,7 +5,7 @@
 @endsection
 
 @section('actions')
-    <a href="{{ route('admin.accounts.create') }}" class="btn btn-primary"><i data-lucide="plus"></i> Add Account</a>
+    <a href="{{ route('admin.accounts.create') }}" data-modal class="btn btn-primary"><i data-lucide="plus"></i> Add Account</a>
 @endsection
 
 @section('content')
@@ -13,15 +13,15 @@
         <input type="hidden" name="status" value="{{ $status }}">
         <div class="status-tabs">
             <button type="button" data-filter-tab data-name="status" data-value="" class="{{ $status === '' ? 'active' : '' }}">
-                All ({{ array_sum($counts) }})
+                All (<span data-counter="accounts-all">{{ array_sum($counts) }}</span>)
             </button>
             @foreach (\Modules\AccountModule\app\Models\Account::STATUSES as $value => $label)
                 <button type="button" data-filter-tab data-name="status" data-value="{{ $value }}" class="{{ $status === $value ? 'active' : '' }}">
-                    {{ $label }} ({{ $counts[$value] }})
+                    {{ $label }} (<span data-counter="accounts-{{ $value }}">{{ $counts[$value] }}</span>)
                 </button>
             @endforeach
             <button type="button" data-filter-tab data-name="status" data-value="deleted" class="{{ $status === 'deleted' ? 'active' : '' }}">
-                Deleted ({{ $deletedCount }})
+                Deleted (<span data-counter="accounts-deleted">{{ $deletedCount }}</span>)
             </button>
         </div>
 

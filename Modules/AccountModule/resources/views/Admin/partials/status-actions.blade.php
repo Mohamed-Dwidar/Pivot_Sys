@@ -10,7 +10,7 @@
     ][$account->status] ?? [];
 @endphp
 @foreach ($actions as [$newStatus, $actionLabel, $btnClass, $icon, $variant, $confirmText])
-    <form method="POST" action="{{ route('admin.accounts.status', $account->id) }}" class="{{ !empty($menu) ? '' : 'inline-form' }}"
+    <form method="POST" action="{{ route('admin.accounts.status', $account->id) }}" class="{{ !empty($menu) ? '' : 'inline-form' }}" data-ajax data-row="{{ $account->id }}"
         data-confirm="&quot;{{ $account->name }}&quot; {{ $confirmText }}"
         data-confirm-title="{{ $actionLabel }} this account?"
         data-confirm-button="{{ $actionLabel }}"

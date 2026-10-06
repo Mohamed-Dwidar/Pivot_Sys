@@ -5,7 +5,7 @@
 @endsection
 
 @section('actions')
-    <a href="{{ route('account.subscription-types.create') }}" class="btn btn-primary"><i data-lucide="plus"></i> Add Subscription Type</a>
+    <a href="{{ route('account.subscription-types.create') }}" data-modal class="btn btn-primary"><i data-lucide="plus"></i> Add Subscription Type</a>
 @endsection
 
 @section('content')

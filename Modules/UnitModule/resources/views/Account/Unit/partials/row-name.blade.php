@@ -2,5 +2,5 @@
     @if ($unit->color)
         @include('unitmodule::partials.color-swatch', ['value' => $unit->color->value])
     @endif
-    <a href="{{ route('account.spaces.units.show', [$space->id, $unit->id]) }}" class="font-medium">{{ $unit->name }}</a>
+    <a href="{{ route('account.spaces.units.show', [$space->id, $unit->id]) }}" data-modal class="font-medium">{{ $unit->name }}</a>
 </div>

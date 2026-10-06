@@ -18,7 +18,7 @@
         @endforeach
     </div>
 @endif
-<div>
+<div data-field="images">
     <label for="field-images" class="{{ config('layoutmodule.form.label') }}">{{ $images && $images->isNotEmpty() ? 'Add Images' : 'Images' }}</label>
     <input type="file" name="images[]" id="field-images" multiple accept="image/*"
         class="field-long {{ str_replace('border-slate-200', $errors->has('images') || $errors->has('images.*') ? 'border-danger' : 'border-slate-200', config('layoutmodule.form.input')) }}">

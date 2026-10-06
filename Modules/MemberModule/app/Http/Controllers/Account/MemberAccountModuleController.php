@@ -3,6 +3,7 @@
 namespace Modules\MemberModule\app\Http\Controllers\Account;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
 use Modules\CompanyModule\app\Services\CompanyService;
@@ -12,6 +13,7 @@ use Modules\MemberModule\app\Services\MemberService;
 use Yajra\DataTables\Facades\DataTables;
 
 // logged in account: manage his members
+// show / create / edit open in the popup (ajax), store / update / destroy answer JSON (custom.js ajax forms)
 class MemberAccountModuleController extends Controller
 {
     private $memberService;
@@ -48,12 +50,21 @@ class MemberAccountModuleController extends Controller
     // DataTables server side: search (search.value) + company_id / job_id filters
     public function data(Request $request)
     {
-        return DataTables::eloquent($this->memberService->listQuery($this->accountId()))
-            ->addIndexColumn()
+        return $this->table(['search' => $request->input('search.value')] + $request->all())->toJson();
+    }
+
+    // the list columns, for data() and for one row after a change (row())
+    private function table(array $filters, $id = null)
+    {
+        $query = $this->memberService->listQuery($this->accountId());
+        if ($id) {
+            $query->whereKey($id);
+        }
+
+        return DataTables::eloquent($query)
             // inside filter() so "of N total" counts all the members
-            ->filter(function ($query) use ($request) {
-                $query->filter(['search' => trim((string) $request->input('search.value'))] + $request->only('company_id', 'job_id'));
-            })
+            ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['company_id', 'job_id'])))
+            ->setRowId(fn ($member) => 'row-' . $member->id)
             ->addColumn('name_html', fn ($member) => view('membermodule::Account.partials.row-name', compact('member'))->render())
             ->addColumn('company', fn ($member) => $member->company?->name ?? '-')
             ->addColumn('job', fn ($member) => $member->job?->name ?? '-')
@@ -61,8 +72,13 @@ class MemberAccountModuleController extends Controller
             ->addColumn('actions', fn ($member) => view('membermodule::Account.partials.row-actions', compact('member'))->render())
             ->rawColumns(['name_html', 'actions'])
             // send only the table columns (not all the member fields)
-            ->only(['DT_RowIndex', 'name_html', 'phone', 'company', 'job', 'created_at', 'actions'])
-            ->toJson();
+            ->only(['DT_RowId', 'name_html', 'phone', 'company', 'job', 'created_at', 'actions']);
+    }
+
+    // the updated row with the list filters (list[...]), null when it does not match them any more
+    private function row(Request $request, $id)
+    {
+        return $this->table((array) $request->input('list', []), $id)->toArray()['data'][0] ?? null;
     }
 
     public function create()
@@ -74,7 +90,11 @@ class MemberAccountModuleController extends Controller
     {
         $member = $this->memberService->create($this->accountId(), $request->validated(), Auth::user());
 
-        return redirect()->route('account.members.show', $member->id)->with('success', 'The member has been added successfully.');
+        return response()->json([
+            'message' => 'The member has been added successfully.',
+            'reload' => true,
+            'redirect' => route('account.members.show', $member->id),
+        ]);
     }
 
     public function show($id)
@@ -93,13 +113,21 @@ class MemberAccountModuleController extends Controller
     {
         $this->memberService->update($this->accountId(), $id, $request->validated());
 
-        return redirect()->route('account.members.show', $id)->with('success', 'The member has been updated successfully.');
+        return response()->json([
+            'message' => 'The member has been updated successfully.',
+            'row' => $this->row($request, $id),
+            'redirect' => route('account.members.show', $id),
+        ]);
     }
 
     public function destroy($id)
     {
         $this->memberService->deleteOne($this->accountId(), $id);
 
-        return redirect()->route('account.members.index')->with('success', 'The member has been deleted successfully.');
+        return response()->json([
+            'message' => 'The member has been deleted successfully.',
+            'row' => null,
+            'redirect' => route('account.members.index'),
+        ]);
     }
 }

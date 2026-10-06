@@ -1,4 +1,4 @@
-@extends('layoutmodule::admin.main')
+@extends(request()->ajax() ? 'layoutmodule::modal' : 'layoutmodule::admin.main')
 
 @section('title')
     Edit Color: {{ $color->name }}
@@ -9,15 +9,16 @@
 @endsection
 
 @section('content')
-    <form method="POST" action="{{ route('admin.colors.update', $color->id) }}">
+    <form method="POST" action="{{ route('admin.colors.update', $color->id) }}" data-ajax data-row="{{ $color->id }}"
+        data-confirm="The changes to &quot;{{ $color->name }}&quot; will be saved."
+        data-confirm-title="Save the changes?"
+        data-confirm-button="Save"
+        data-confirm-variant="success">
         @csrf
         @method('PUT')
 
         @include('unitmodule::Admin.Color.partials.form', ['color' => $color])
 
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary"><i data-lucide="save"></i> Save</button>
-            <a href="{{ route('admin.colors.index') }}" class="btn btn-secondary">Cancel</a>
-        </div>
+        @include('layoutmodule::partials.form-actions', ['cancel' => route('admin.colors.index')])
     </form>
 @endsection

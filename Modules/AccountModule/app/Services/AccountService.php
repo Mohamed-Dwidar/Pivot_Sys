@@ -28,11 +28,6 @@ class AccountService
         return $this->accountRepository->listQuery($filters);
     }
 
-    public function latestPending($limit = 5)
-    {
-        return $this->accountRepository->filter(['status' => Account::STATUS_PENDING])->limit($limit)->get();
-    }
-
     // [status => count] for every status, including the empty ones
     public function countByStatus(): array
     {

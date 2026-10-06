@@ -16,10 +16,99 @@
  *   - any other select / input          -> sent with the request, applied on change
  *   - [data-filter-tab][data-name][data-value] buttons -> set the hidden input with that name (status tabs)
  *   - [data-clear-button] (type=reset)  -> clears everything, disabled when nothing is applied, [data-count] badge
+ *
+ * Each row has id="row-{id}" (DT_RowId from the server). window.dataTables is used by the ajax forms (custom.js)
+ * to update / remove one row without reloading the page.
  */
 (function (jq) {
     // no browser alert() when the server fails, the table shows a message instead
     jq.fn.dataTable.ext.errMode = 'none';
+
+    // [{ table, filterValues }] of the page
+    var lists = [];
+
+    function rowOf(id) {
+        var tr = document.getElementById('row-' + id);
+        if (!tr) {
+            return null;
+        }
+        var list = lists.find(function (item) { return item.table.table().node().contains(tr); });
+        return list ? { tr: tr, list: list } : null;
+    }
+
+    function icons() {
+        createIcons({ icons: window.icons, 'stroke-width': 1.5, nameAttr: 'data-lucide' });
+    }
+
+    // "Showing 1 to 9 of 9 entries" after removing a row (the server sends the counts only on a draw,
+    // row().remove() lowers the filtered count, the total is lowered here when the record was deleted)
+    function refreshInfo(table, deleted) {
+        var settings = table.settings()[0];
+        if (deleted) {
+            settings._iRecordsTotal = Math.max(0, settings._iRecordsTotal - 1);
+        }
+        var info = table.page.info();
+        var rows = table.table().body().querySelectorAll('tr').length;
+        var text = 'Showing ' + (info.start + 1) + ' to ' + (info.start + rows) + ' of ' + info.recordsDisplay + ' entries';
+        if (info.recordsDisplay !== info.recordsTotal) {
+            text += ' (filtered from ' + info.recordsTotal + ' total entries)';
+        }
+        var infoEl = table.table().container().querySelector('.dt-info');
+        if (infoEl) {
+            infoEl.textContent = text;
+        }
+    }
+
+    window.dataTables = {
+        has: function (id) {
+            return !!rowOf(id);
+        },
+        // the filters of the list that shows the row, sent with the form so the server knows if the row still matches
+        filters: function (id) {
+            var row = rowOf(id);
+            return row ? row.list.filterValues() : {};
+        },
+        // data = the same columns as the list (from the server), null = remove the row
+        // (deleted, or it does not match the list filters any more)
+        update: function (id, data, deleted) {
+            var row = rowOf(id);
+            if (!row) {
+                return false;
+            }
+            if (!data) {
+                return this.remove(id, deleted);
+            }
+            row.list.table.row(row.tr).data(data);
+            icons();
+            row.tr.classList.remove('row-flash');
+            void row.tr.offsetWidth;
+            row.tr.classList.add('row-flash');
+            return true;
+        },
+        remove: function (id, deleted) {
+            var row = rowOf(id);
+            if (!row) {
+                return false;
+            }
+            var table = row.list.table;
+            row.tr.classList.add('row-removing');
+            setTimeout(function () {
+                table.row(row.tr).remove();
+                row.tr.remove();
+                if (!table.table().body().querySelector('tr')) {
+                    table.draw(false);   // the page is empty now: load it again (previous page / "no data")
+                } else {
+                    refreshInfo(table, deleted);
+                }
+            }, 300);
+            return true;
+        },
+        // reload the rows of every list on the page (after adding), keeps the current page
+        reload: function () {
+            lists.forEach(function (list) { list.table.draw(false); });
+            return lists.length > 0;
+        },
+    };
 
     function initDataTable(tableEl) {
         var form = tableEl.dataset.filters ? document.querySelector(tableEl.dataset.filters) : null;
@@ -70,8 +159,13 @@
                 processing: 'Loading...',
                 lengthMenu: '_MENU_ per page',
             },
-            drawCallback: function () {
-                createIcons({ icons: icons, 'stroke-width': 1.5, nameAttr: 'data-lucide' });
+            drawCallback: icons,
+        });
+
+        lists.push({
+            table: table,
+            filterValues: function () {
+                return Object.assign({ search: searchInput ? searchInput.value.trim() : '' }, filterValues());
             },
         });
 

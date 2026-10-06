@@ -1,11 +1,11 @@
 {{-- Units of $space, shown on the space page (DataTables). --}}
 <div class="flex flex-col gap-3 mt-8 mb-4 md:flex-row md:items-center">
-    <div class="text-base font-medium">Units ({{ $space->units_count }})</div>
+    <div class="text-base font-medium">Units (<span data-counter="units">{{ $space->units_count }}</span>)</div>
     <form id="units-filters" class="filter-bar md:ml-auto">
         <input type="search" name="search" class="{{ config('layoutmodule.form.input') }}" placeholder="Search units" autocomplete="off">
         @include('layoutmodule::partials.datatable-clear')
     </form>
-    <a href="{{ route('account.spaces.units.create', $space->id) }}" class="btn btn-primary"><i data-lucide="plus"></i> Add Unit</a>
+    <a href="{{ route('account.spaces.units.create', $space->id) }}" data-modal class="btn btn-primary"><i data-lucide="plus"></i> Add Unit</a>
 </div>
 
 <div class="table-wrap">

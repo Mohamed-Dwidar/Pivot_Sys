@@ -1,18 +1,19 @@
-@extends('layoutmodule::admin.main')
+@extends(request()->ajax() ? 'layoutmodule::modal' : 'layoutmodule::admin.main')
 
 @section('title')
     Add Color
 @endsection
 
 @section('content')
-    <form method="POST" action="{{ route('admin.colors.store') }}">
+    <form method="POST" action="{{ route('admin.colors.store') }}" data-ajax
+        data-confirm="The color will be available for the units of all accounts."
+        data-confirm-title="Add this color?"
+        data-confirm-button="Add"
+        data-confirm-variant="success">
         @csrf
 
         @include('unitmodule::Admin.Color.partials.form', ['color' => null])
 
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary"><i data-lucide="save"></i> Save</button>
-            <a href="{{ route('admin.colors.index') }}" class="btn btn-secondary">Cancel</a>
-        </div>
+        @include('layoutmodule::partials.form-actions', ['cancel' => route('admin.colors.index')])
     </form>
 @endsection

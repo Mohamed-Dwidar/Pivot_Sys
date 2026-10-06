@@ -12,6 +12,7 @@ use Modules\UnitModule\app\Services\UnitService;
 use Yajra\DataTables\Facades\DataTables;
 
 // logged in account: units of one of his spaces (listed on the space page)
+// show / create / edit open in the popup (ajax), store / update / destroy answer JSON (custom.js ajax forms)
 class UnitAccountModuleController extends Controller
 {
     private $unitService;
@@ -44,15 +45,25 @@ class UnitAccountModuleController extends Controller
     // DataTables server side: the units table on the space page
     public function data(Request $request, $spaceId)
     {
-        $space = $this->space($spaceId);
+        return $this->table($this->space($spaceId), ['search' => $request->input('search.value')])->toJson();
+    }
 
-        return DataTables::eloquent($this->unitService->listQuery($space))
-            ->filter(function ($query) use ($request) {
-                $search = trim((string) $request->input('search.value'));
+    // the list columns, for data() and for one row after a change (row())
+    private function table($space, array $filters, $id = null)
+    {
+        $query = $this->unitService->listQuery($space);
+        if ($id) {
+            $query->whereKey($id);
+        }
+
+        return DataTables::eloquent($query)
+            ->filter(function ($query) use ($filters) {
+                $search = trim((string) ($filters['search'] ?? ''));
                 if ($search !== '') {
                     $query->where(fn ($query) => $query->where('name_ar', 'like', "%{$search}%")->orWhere('name_en', 'like', "%{$search}%"));
                 }
             })
+            ->setRowId(fn ($unit) => 'row-' . $unit->id)
             ->orderColumn('name', fn ($query, $order) => $query->orderByLocalized('name', $order))
             ->addColumn('image', fn ($unit) => view('unitmodule::Account.Unit.partials.row-image', compact('unit'))->render())
             ->addColumn('name_html', fn ($unit) => view('unitmodule::Account.Unit.partials.row-name', ['space' => $space, 'unit' => $unit])->render())
@@ -61,8 +72,13 @@ class UnitAccountModuleController extends Controller
             ->addColumn('status', fn ($unit) => '<span class="badge ' . ($unit->is_active ? 'badge-active">Active' : 'badge-inactive">Inactive') . '</span>')
             ->addColumn('actions', fn ($unit) => view('unitmodule::Account.Unit.partials.row-actions', ['space' => $space, 'unit' => $unit])->render())
             ->rawColumns(['image', 'name_html', 'status', 'actions'])
-            ->only(['image', 'name_html', 'subscription_type', 'capacity', 'concurrent_usage', 'status', 'actions'])
-            ->toJson();
+            ->only(['DT_RowId', 'image', 'name_html', 'subscription_type', 'capacity', 'concurrent_usage', 'status', 'actions']);
+    }
+
+    // the updated row with the list filters (list[...]), null when it does not match them any more
+    private function row(Request $request, $space, $id)
+    {
+        return $this->table($space, (array) $request->input('list', []), $id)->toArray()['data'][0] ?? null;
     }
 
     public function create($spaceId)
@@ -76,7 +92,12 @@ class UnitAccountModuleController extends Controller
         $space = $this->space($spaceId);
         $unit = $this->unitService->create($space, $request->validated());
 
-        return redirect()->route('account.spaces.units.show', [$space->id, $unit->id])->with('success', 'The unit has been added successfully.');
+        return response()->json([
+            'message' => 'The unit has been added successfully.',
+            'reload' => true,
+            'counts' => ['units' => $this->unitService->countForSpace($space)],
+            'redirect' => route('account.spaces.units.show', [$space->id, $unit->id]),
+        ]);
     }
 
     public function show($spaceId, $id)
@@ -98,7 +119,11 @@ class UnitAccountModuleController extends Controller
         $space = $this->space($spaceId);
         $this->unitService->update($space, $id, $request->validated());
 
-        return redirect()->route('account.spaces.units.show', [$space->id, $id])->with('success', 'The unit has been updated successfully.');
+        return response()->json([
+            'message' => 'The unit has been updated successfully.',
+            'row' => $this->row($request, $space, $id),
+            'redirect' => route('account.spaces.units.show', [$space->id, $id]),
+        ]);
     }
 
     public function destroy($spaceId, $id)
@@ -106,6 +131,11 @@ class UnitAccountModuleController extends Controller
         $space = $this->space($spaceId);
         $this->unitService->deleteOne($space, $id);
 
-        return redirect()->route('account.spaces.show', $space->id)->with('success', 'The unit has been deleted successfully.');
+        return response()->json([
+            'message' => 'The unit has been deleted successfully.',
+            'row' => null,
+            'counts' => ['units' => $this->unitService->countForSpace($space)],
+            'redirect' => route('account.spaces.show', $space->id),
+        ]);
     }
 }

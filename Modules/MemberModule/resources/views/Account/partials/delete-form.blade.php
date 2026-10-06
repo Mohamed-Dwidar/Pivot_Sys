@@ -1,4 +1,4 @@
-<form method="POST" action="{{ route('account.members.destroy', $member->id) }}" class="{{ !empty($menu) ? '' : 'inline-form' }}"
+<form method="POST" action="{{ route('account.members.destroy', $member->id) }}" class="{{ !empty($menu) ? '' : 'inline-form' }}" data-ajax data-row="{{ $member->id }}"
     data-confirm="&quot;{{ $member->name }}&quot; will be deleted permanently."
     data-confirm-title="Delete this member?"
     data-confirm-button="Delete"

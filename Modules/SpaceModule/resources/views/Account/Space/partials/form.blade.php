@@ -8,6 +8,7 @@
 
 <div class="form-section mt-8">Subscription Types</div>
 @php($selectedTypes = array_map('intval', old('subscription_types', $space?->subscriptionTypes->pluck('id')->all() ?? [])))
+<div data-field="subscription_types">
 @if ($subscriptionTypes)
     <div class="checkbox-list">
         @foreach ($subscriptionTypes as $typeId => $typeName)
@@ -30,6 +31,7 @@
         @endforeach
     @endforeach
 @endforeach
+</div>
 
 <div class="form-section mt-8">Images</div>
 @include('layoutmodule::partials.images-input', ['images' => $space?->images, 'alt' => $space?->name])

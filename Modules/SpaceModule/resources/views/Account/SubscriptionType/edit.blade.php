@@ -1,19 +1,20 @@
-@extends('layoutmodule::account.main')
+@extends(request()->ajax() ? 'layoutmodule::modal' : 'layoutmodule::account.main')
 
 @section('title')
     Edit Subscription Type: {{ $subscriptionType->name }}
 @endsection
 
 @section('content')
-    <form method="POST" action="{{ route('account.subscription-types.update', $subscriptionType->id) }}">
+    <form method="POST" action="{{ route('account.subscription-types.update', $subscriptionType->id) }}" data-ajax data-row="{{ $subscriptionType->id }}"
+        data-confirm="The changes to &quot;{{ $subscriptionType->name }}&quot; will be saved."
+        data-confirm-title="Save the changes?"
+        data-confirm-button="Save"
+        data-confirm-variant="success">
         @csrf
         @method('PUT')
 
         @include('spacemodule::Account.SubscriptionType.partials.form', ['subscriptionType' => $subscriptionType])
 
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary"><i data-lucide="save"></i> Save</button>
-            <a href="{{ route('account.subscription-types.show', $subscriptionType->id) }}" class="btn btn-secondary">Cancel</a>
-        </div>
+        @include('layoutmodule::partials.form-actions', ['cancel' => route('account.subscription-types.show', $subscriptionType->id)])
     </form>
 @endsection

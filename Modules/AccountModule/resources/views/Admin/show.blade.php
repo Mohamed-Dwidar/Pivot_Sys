@@ -1,21 +1,15 @@
-@extends('layoutmodule::admin.main')
+@extends(request()->ajax() ? 'layoutmodule::modal' : 'layoutmodule::admin.main')
 
 @section('title')
     Account Details
 @endsection
 
+@section('modal-size', 'lg')
+
 @section('actions')
     @include('accountmodule::Admin.partials.status-actions')
-    <a href="{{ route('admin.accounts.edit', $account->id) }}" class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
-    <form method="POST" action="{{ route('admin.accounts.destroy', $account->id) }}" class="inline-form"
-        data-confirm="&quot;{{ $account->name }}&quot; will be deleted and can not log in. You can restore it later from the Deleted list."
-        data-confirm-title="Delete this account?"
-        data-confirm-button="Delete"
-        data-confirm-variant="danger">
-        @csrf
-        @method('DELETE')
-        <button type="submit" class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</button>
-    </form>
+    <a href="{{ route('admin.accounts.edit', $account->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
+    @include('accountmodule::Admin.partials.delete-form')
 @endsection
 
 @section('content')

@@ -39,7 +39,7 @@
                     </a>
                 </div>
                 <div data-tw-merge="" data-tw-placement="bottom-end" class="dropdown relative ml-5">
-                    <button data-tw-toggle="dropdown" aria-expanded="false" class="cursor-pointer flex h-[36px] w-[36px] items-center justify-center overflow-hidden rounded-full border-[3px] border-slate-200/70 bg-gradient-to-r from-theme-1 to-theme-2 font-medium text-white">
+                    <button data-tw-toggle="dropdown" aria-expanded="false" class="cursor-pointer flex h-[36px] w-[36px] items-center justify-center overflow-hidden rounded-full border-[3px] border-slate-200/70 bg-primary font-medium text-white">
                         {{ mb_strtoupper(mb_substr($userName, 0, 1)) }}
                     </button>
                     <div data-transition="" data-selector=".show" data-enter="transition-all ease-linear duration-150" data-enter-from="absolute !mt-5 invisible opacity-0 translate-y-1" data-enter-to="!mt-1 visible opacity-100 translate-y-0" data-leave="transition-all ease-linear duration-150" data-leave-from="!mt-1 visible opacity-100 translate-y-0" data-leave-to="absolute !mt-5 invisible opacity-0 translate-y-1" class="dropdown-menu absolute z-[9999] hidden">

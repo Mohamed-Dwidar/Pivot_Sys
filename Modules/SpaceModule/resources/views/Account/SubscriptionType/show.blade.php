@@ -1,11 +1,11 @@
-@extends('layoutmodule::account.main')
+@extends(request()->ajax() ? 'layoutmodule::modal' : 'layoutmodule::account.main')
 
 @section('title')
     Subscription Type Details
 @endsection
 
 @section('actions')
-    <a href="{{ route('account.subscription-types.edit', $subscriptionType->id) }}" class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
+    <a href="{{ route('account.subscription-types.edit', $subscriptionType->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
     @include('spacemodule::Account.SubscriptionType.partials.delete-form')
 @endsection
 
@@ -20,7 +20,9 @@
         <div class="text-slate-500">Not assigned to any space yet. Assign it from the space form.</div>
     @endforelse
 
-    <div class="form-actions">
-        <a href="{{ route('account.subscription-types.index') }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> Back to Subscription Types</a>
-    </div>
+    @unless (request()->ajax())
+        <div class="form-actions">
+            <a href="{{ route('account.subscription-types.index') }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> Back to Subscription Types</a>
+        </div>
+    @endunless
 @endsection

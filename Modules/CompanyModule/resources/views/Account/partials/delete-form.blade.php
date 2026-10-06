@@ -1,4 +1,4 @@
-<form method="POST" action="{{ route('account.companies.destroy', $company->id) }}" class="{{ !empty($menu) ? '' : 'inline-form' }}"
+<form method="POST" action="{{ route('account.companies.destroy', $company->id) }}" class="{{ !empty($menu) ? '' : 'inline-form' }}" data-ajax data-row="{{ $company->id }}"
     data-confirm="&quot;{{ $company->name }}&quot; will be deleted from your companies list."
     data-confirm-title="Delete this company?"
     data-confirm-button="Delete"

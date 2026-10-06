@@ -1,7 +1,8 @@
 {{--
     Renders sidebar items. Each item is one of:
       ['divider' => 'Group title']
-      ['title' => '', 'icon' => 'lucide-name', 'url' => '', 'active' => bool, 'badge' => int|null]
+      ['title' => '', 'icon' => 'lucide-name', 'url' => '', 'active' => bool, 'badge' => int|null, 'counter' => 'name']
+        (counter: the badge is updated by the ajax forms, see custom.js "counts")
       ['title' => '', 'icon' => 'lucide-name', 'children' => [items like above]]   (drop list)
     A drop list is opened and marked active when one of its children is active.
 --}}
@@ -11,13 +12,19 @@
             {{ $item['divider'] }}
         </li>
     @elseif (isset($item['children']))
-        @php($open = collect($item['children'])->contains('active', true))
+        @php
+            $open = collect($item['children'])->contains('active', true);
+            $badge = collect($item['children'])->sum('badge');
+            $counter = collect($item['children'])->pluck('counter')->filter()->first();
+        @endphp
         <li>
             <a href="javascript:;" class="side-menu__link {{ $open ? 'side-menu__link--active side-menu__link--active-dropdown' : '' }}">
                 <i data-tw-merge="" data-lucide="{{ $item['icon'] }}" class="stroke-[1] w-5 h-5 side-menu__link__icon"></i>
                 <div class="side-menu__link__title">{{ $item['title'] }}</div>
-                @if (collect($item['children'])->sum('badge'))
-                    <div class="side-menu__link__badge">{{ collect($item['children'])->sum('badge') }}</div>
+                @if ($counter)
+                    <div class="side-menu__link__badge" data-counter="{{ $counter }}" data-hide-zero @if (!$badge) hidden @endif>{{ $badge }}</div>
+                @elseif ($badge)
+                    <div class="side-menu__link__badge">{{ $badge }}</div>
                 @endif
                 <i data-tw-merge="" data-lucide="chevron-down" class="stroke-[1] w-5 h-5 side-menu__link__chevron {{ $open ? 'transform rotate-180' : '' }}"></i>
             </a>
@@ -30,7 +37,9 @@
             <a href="{{ $item['url'] }}" class="side-menu__link {{ !empty($item['active']) ? 'side-menu__link--active' : '' }}">
                 <i data-tw-merge="" data-lucide="{{ $item['icon'] }}" class="stroke-[1] w-5 h-5 side-menu__link__icon"></i>
                 <div class="side-menu__link__title">{{ $item['title'] }}</div>
-                @if (!empty($item['badge']))
+                @if (!empty($item['counter']))
+                    <div class="side-menu__link__badge" data-counter="{{ $item['counter'] }}" data-hide-zero @if (empty($item['badge'])) hidden @endif>{{ $item['badge'] ?? 0 }}</div>
+                @elseif (!empty($item['badge']))
                     <div class="side-menu__link__badge">{{ $item['badge'] }}</div>
                 @endif
             </a>

@@ -27,7 +27,7 @@
         $class = str_replace(['border-slate-200', 'border-slate-300/80'], 'border-danger', $class);
     }
 @endphp
-<div>
+<div data-field="{{ $name }}">
     <label for="{{ $id }}" class="{{ config('layoutmodule.form.label') }}">
         {{ $label }}
         @if (!empty($required))

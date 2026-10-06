@@ -20,7 +20,7 @@
                 [
                     'title' => 'Pending Requests', 'icon' => 'user-check',
                     'url' => route('admin.accounts.index', ['status' => 'pending']),
-                    'active' => $pendingList, 'badge' => $pendingAccountsCount ?? 0,
+                    'active' => $pendingList, 'badge' => $pendingAccountsCount ?? 0, 'counter' => 'accounts-pending',
                 ],
                 [
                     'title' => 'Add Account', 'icon' => 'plus-circle',

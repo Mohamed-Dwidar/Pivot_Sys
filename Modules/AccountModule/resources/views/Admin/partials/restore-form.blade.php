@@ -1,4 +1,4 @@
-<form method="POST" action="{{ route('admin.accounts.restore', $account->id) }}"
+<form method="POST" action="{{ route('admin.accounts.restore', $account->id) }}" data-ajax data-row="{{ $account->id }}"
     data-confirm="&quot;{{ $account->name }}&quot; will be restored with its previous status ({{ $account->status_label }})."
     data-confirm-title="Restore this account?"
     data-confirm-button="Restore"

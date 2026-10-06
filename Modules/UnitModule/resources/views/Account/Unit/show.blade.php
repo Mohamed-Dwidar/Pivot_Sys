@@ -1,11 +1,13 @@
-@extends('layoutmodule::account.main')
+@extends(request()->ajax() ? 'layoutmodule::modal' : 'layoutmodule::account.main')
 
 @section('title')
     {{ $space->name }} &rsaquo; Unit Details
 @endsection
 
+@section('modal-size', 'lg')
+
 @section('actions')
-    <a href="{{ route('account.spaces.units.edit', [$space->id, $unit->id]) }}" class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
+    <a href="{{ route('account.spaces.units.edit', [$space->id, $unit->id]) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
     @include('unitmodule::Account.Unit.partials.delete-form')
 @endsection
 
@@ -35,7 +37,9 @@
     <div class="form-section mt-8">Images ({{ $unit->images->count() }})</div>
     @include('layoutmodule::partials.gallery', ['images' => $unit->images, 'alt' => $unit->name])
 
-    <div class="form-actions">
-        <a href="{{ route('account.spaces.show', $space->id) }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> Back to {{ $space->name }}</a>
-    </div>
+    @unless (request()->ajax())
+        <div class="form-actions">
+            <a href="{{ route('account.spaces.show', $space->id) }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> Back to {{ $space->name }}</a>
+        </div>
+    @endunless
 @endsection

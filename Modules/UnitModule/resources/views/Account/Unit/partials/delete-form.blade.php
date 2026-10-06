@@ -1,4 +1,4 @@
-<form method="POST" action="{{ route('account.spaces.units.destroy', [$unit->space_id, $unit->id]) }}" class="{{ !empty($menu) ? '' : 'inline-form' }}"
+<form method="POST" action="{{ route('account.spaces.units.destroy', [$unit->space_id, $unit->id]) }}" class="{{ !empty($menu) ? '' : 'inline-form' }}" data-ajax data-row="{{ $unit->id }}"
     data-confirm="&quot;{{ $unit->name }}&quot; will be deleted."
     data-confirm-title="Delete this unit?"
     data-confirm-button="Delete"
