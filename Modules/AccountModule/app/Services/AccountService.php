@@ -22,9 +22,10 @@ class AccountService
         $this->userService = $userService;
     }
 
-    public function paginate(array $filters = [], $perPage = 15)
+    // list query (paged / ordered by DataTables)
+    public function listQuery(array $filters = [])
     {
-        return $this->accountRepository->filter($filters)->paginate($perPage)->withQueryString();
+        return $this->accountRepository->listQuery($filters);
     }
 
     public function latestPending($limit = 5)

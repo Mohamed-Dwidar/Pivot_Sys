@@ -23,9 +23,15 @@ class UnitService
         $this->unitRepository = $unitRepository;
     }
 
-    public function listForSpace(Space $space)
+    // units of the space list query (paged / ordered by DataTables)
+    public function listQuery(Space $space)
     {
-        return $this->unitRepository->forSpace($space->account_id, $space->id)->orderByLocalized('name')->latest('id')->get();
+        return $this->unitRepository->forSpace($space->account_id, $space->id);
+    }
+
+    public function countForSpace(Space $space): int
+    {
+        return $this->unitRepository->forSpace($space->account_id, $space->id)->count();
     }
 
     // 404 when the unit is not in this space of this account

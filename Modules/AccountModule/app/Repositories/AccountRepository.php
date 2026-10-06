@@ -17,6 +17,12 @@ class AccountRepository extends BaseRepository
         return Account::with('user')->filter($filters)->latest();
     }
 
+    // without order (DataTables orders the list)
+    public function listQuery(array $filters = [])
+    {
+        return Account::with('user')->filter($filters);
+    }
+
     public function countDeleted(): int
     {
         return Account::onlyTrashed()->count();

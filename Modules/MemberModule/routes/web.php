@@ -9,6 +9,7 @@ use Modules\MemberModule\app\Http\Controllers\Account\MemberAccountModuleControl
  */
 Route::prefix('account/members')->name('account.members.')->middleware(['auth', 'user.active:' . Account::class])->group(function () {
     Route::get('/', [MemberAccountModuleController::class, 'index'])->name('index');
+    Route::get('data', [MemberAccountModuleController::class, 'data'])->name('data');
     Route::get('create', [MemberAccountModuleController::class, 'create'])->name('create');
     Route::post('/', [MemberAccountModuleController::class, 'store'])->name('store');
     Route::get('{id}', [MemberAccountModuleController::class, 'show'])->name('show');

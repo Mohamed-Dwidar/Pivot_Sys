@@ -10,7 +10,7 @@
 
         ['divider' => 'Management'],
         [
-            'title' => 'Companies',
+            'title' => 'Members',
             'icon' => 'users',
             'url' => route('account.members.index'),
             'active' => request()->routeIs('account.members.*') && !request()->routeIs('account.members.create'),

@@ -27,4 +27,12 @@ return [
 
         'error' => "mt-2 text-xs text-danger",
     ],
+
+    /*
+     * Row actions menu (Template_Source/viper-users.html), used by layoutmodule::partials.row-menu.
+     */
+    'menu' => [
+        'item' => "cursor-pointer flex w-full items-center p-2 text-left transition duration-300 ease-in-out rounded-md hover:bg-slate-200/60 dark:bg-darkmode-600 dark:hover:bg-darkmode-400 dropdown-item",
+        'icon' => "stroke-[1] mr-2 h-4 w-4",
+    ],
 ];

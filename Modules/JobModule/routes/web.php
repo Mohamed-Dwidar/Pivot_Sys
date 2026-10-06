@@ -9,6 +9,7 @@ use Modules\JobModule\app\Http\Controllers\Account\JobAccountModuleController;
  */
 Route::prefix('account/jobs')->name('account.jobs.')->middleware(['auth', 'user.active:' . Account::class])->group(function () {
     Route::get('/', [JobAccountModuleController::class, 'index'])->name('index');
+    Route::get('data', [JobAccountModuleController::class, 'data'])->name('data');
     Route::get('create', [JobAccountModuleController::class, 'create'])->name('create');
     Route::post('/', [JobAccountModuleController::class, 'store'])->name('store');
     Route::get('{id}', [JobAccountModuleController::class, 'show'])->name('show');

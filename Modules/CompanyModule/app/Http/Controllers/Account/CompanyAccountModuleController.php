@@ -7,6 +7,7 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
 use Modules\CompanyModule\app\Http\Requests\CompanyRequest;
 use Modules\CompanyModule\app\Services\CompanyService;
+use Yajra\DataTables\Facades\DataTables;
 
 // logged in account: manage his companies list
 class CompanyAccountModuleController extends Controller
@@ -23,12 +24,27 @@ class CompanyAccountModuleController extends Controller
         return Auth::user()->userable_id;
     }
 
-    public function index(Request $request)
+    // the list page, the rows come from data() (DataTables)
+    public function index()
     {
-        $filters = $request->only('search');
-        $companies = $this->companyService->paginate($this->accountId(), $filters);
+        return view('companymodule::Account.index');
+    }
 
-        return view('companymodule::Account.index', compact('companies', 'filters'));
+    // DataTables server side
+    public function data(Request $request)
+    {
+        return DataTables::eloquent($this->companyService->listQuery($this->accountId()))
+            ->addIndexColumn()
+            ->filter(function ($query) use ($request) {
+                $query->filter(['search' => trim((string) $request->input('search.value'))]);
+            })
+            ->orderColumn('name', fn ($query, $order) => $query->orderByLocalized('name', $order))
+            ->addColumn('name_html', fn ($company) => '<a href="' . route('account.companies.show', $company->id) . '" class="font-medium">' . e($company->name) . '</a>')
+            ->editColumn('created_at', fn ($company) => $company->created_at->format('Y-m-d'))
+            ->addColumn('actions', fn ($company) => view('companymodule::Account.partials.row-actions', compact('company'))->render())
+            ->rawColumns(['name_html', 'actions'])
+            ->only(['DT_RowIndex', 'name_html', 'created_at', 'actions'])
+            ->toJson();
     }
 
     public function create()

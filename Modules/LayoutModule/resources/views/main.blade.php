@@ -12,6 +12,8 @@
     <link rel="stylesheet" href="{{ asset('assets/css/vendors/zoom-vanilla.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/themes/dagger.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/app.css') }}">
+    {{-- page vendor styles (e.g. DataTables) before custom.css, so custom.css can override them --}}
+    @stack('styles')
     <link rel="stylesheet" href="{{ asset('assets/css/custom.css') }}">
     @yield('head')
 </head>

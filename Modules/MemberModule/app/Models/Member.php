@@ -41,13 +41,21 @@ class Member extends Model
         return $this->morphTo();
     }
 
+    // "0128 898 9336" => "01288989336" (used when saving and when searching)
+    public static function cleanPhone(?string $phone): ?string
+    {
+        return $phone === null ? null : preg_replace('/\s+/u', '', $phone);
+    }
+
     public function scopeFilter($query, array $filters = [])
     {
         if (!empty($filters['search'])) {
             $search = '%' . $filters['search'] . '%';
-            $query->where(function ($query) use ($search) {
+            // phones are saved without spaces, so search them without spaces too
+            $phoneSearch = '%' . self::cleanPhone($filters['search']) . '%';
+            $query->where(function ($query) use ($search, $phoneSearch) {
                 $query->where('name', 'like', $search)
-                    ->orWhere('phone', 'like', $search)
+                    ->orWhere('phone', 'like', $phoneSearch)
                     ->orWhere('email', 'like', $search)
                     ->orWhere('national_number', 'like', $search);
             });

@@ -7,6 +7,7 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
 use Modules\SpaceModule\app\Http\Requests\SubscriptionTypeRequest;
 use Modules\SpaceModule\app\Services\SubscriptionTypeService;
+use Yajra\DataTables\Facades\DataTables;
 
 // logged in account: manage his subscription types
 class SubscriptionTypeAccountModuleController extends Controller
@@ -23,12 +24,25 @@ class SubscriptionTypeAccountModuleController extends Controller
         return Auth::user()->userable_id;
     }
 
-    public function index(Request $request)
+    // the list page, the rows come from data() (DataTables)
+    public function index()
     {
-        $filters = $request->only('search');
-        $subscriptionTypes = $this->subscriptionTypeService->paginate($this->accountId(), $filters);
+        return view('spacemodule::Account.SubscriptionType.index');
+    }
 
-        return view('spacemodule::Account.SubscriptionType.index', compact('subscriptionTypes', 'filters'));
+    // DataTables server side
+    public function data(Request $request)
+    {
+        return DataTables::eloquent($this->subscriptionTypeService->listQuery($this->accountId()))
+            ->filter(function ($query) use ($request) {
+                $query->filter(['search' => trim((string) $request->input('search.value'))]);
+            })
+            ->addColumn('name_html', fn ($subscriptionType) => '<a href="' . route('account.subscription-types.show', $subscriptionType->id) . '" class="font-medium">' . e($subscriptionType->name) . '</a>')
+            ->addColumn('options', fn ($subscriptionType) => view('spacemodule::Account.SubscriptionType.partials.options', compact('subscriptionType'))->render())
+            ->addColumn('actions', fn ($subscriptionType) => view('spacemodule::Account.SubscriptionType.partials.row-actions', compact('subscriptionType'))->render())
+            ->rawColumns(['name_html', 'options', 'actions'])
+            ->only(['name_html', 'options', 'spaces_count', 'actions'])
+            ->toJson();
     }
 
     public function create()

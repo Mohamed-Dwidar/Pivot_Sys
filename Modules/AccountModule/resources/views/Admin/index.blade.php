@@ -1,7 +1,7 @@
 @extends('layoutmodule::admin.main')
 
 @section('title')
-    {{ ['pending' => 'Pending Requests', 'deleted' => 'Deleted Accounts'][$filters['status'] ?? ''] ?? 'Accounts' }}
+    Accounts
 @endsection
 
 @section('actions')
@@ -9,33 +9,43 @@
 @endsection
 
 @section('content')
-    <div class="flex flex-col gap-y-3 md:flex-row md:items-center">
+    <form id="accounts-filters" class="flex flex-col gap-y-3 md:flex-row md:items-center">
+        <input type="hidden" name="status" value="{{ $status }}">
         <div class="status-tabs">
-            <a href="{{ route('admin.accounts.index', ['search' => $filters['search'] ?? null]) }}" class="{{ empty($filters['status']) ? 'active' : '' }}">
+            <button type="button" data-filter-tab data-name="status" data-value="" class="{{ $status === '' ? 'active' : '' }}">
                 All ({{ array_sum($counts) }})
-            </a>
-            @foreach (\Modules\AccountModule\app\Models\Account::STATUSES as $status => $label)
-                <a href="{{ route('admin.accounts.index', ['status' => $status, 'search' => $filters['search'] ?? null]) }}" class="{{ ($filters['status'] ?? '') == $status ? 'active' : '' }}">
-                    {{ $label }} ({{ $counts[$status] }})
-                </a>
+            </button>
+            @foreach (\Modules\AccountModule\app\Models\Account::STATUSES as $value => $label)
+                <button type="button" data-filter-tab data-name="status" data-value="{{ $value }}" class="{{ $status === $value ? 'active' : '' }}">
+                    {{ $label }} ({{ $counts[$value] }})
+                </button>
             @endforeach
-            <a href="{{ route('admin.accounts.index', ['status' => 'deleted', 'search' => $filters['search'] ?? null]) }}" class="{{ ($filters['status'] ?? '') == 'deleted' ? 'active' : '' }}">
+            <button type="button" data-filter-tab data-name="status" data-value="deleted" class="{{ $status === 'deleted' ? 'active' : '' }}">
                 Deleted ({{ $deletedCount }})
-            </a>
+            </button>
         </div>
 
-        <form method="GET" action="{{ route('admin.accounts.index') }}" class="filter-bar md:ml-auto">
-            @if (!empty($filters['status']))
-                <input type="hidden" name="status" value="{{ $filters['status'] }}">
-            @endif
-            <input type="search" name="search" value="{{ $filters['search'] ?? '' }}" class="{{ config('layoutmodule.form.input') }}" placeholder="Name, phone or email">
-            <button type="submit" class="btn btn-primary"><i data-lucide="search"></i> Search</button>
-        </form>
-    </div>
+        <div class="filter-bar md:ml-auto">
+            <input type="search" name="search" class="{{ config('layoutmodule.form.input') }}" placeholder="Name, phone or email" autocomplete="off">
+            @include('layoutmodule::partials.datatable-clear')
+        </div>
+    </form>
 
-    <div class="mt-5">
-        @include('accountmodule::Admin.partials.table', ['accounts' => $accounts])
+    <div class="table-wrap mt-5">
+        <table class="data-table" data-datatable data-url="{{ route('admin.accounts.data') }}"
+            data-filters="#accounts-filters" data-order='[[4, "desc"]]' data-empty="No accounts found.">
+            <thead>
+                <tr>
+                    <th data-data="name_html" data-name="name">Account</th>
+                    <th data-data="email">Email</th>
+                    <th data-data="phone" data-name="phone">Phone</th>
+                    <th data-data="status_html" data-name="status">Status</th>
+                    <th data-data="created_at" data-name="created_at" data-class="whitespace-nowrap">Registered</th>
+                    <th data-data="actions"></th>
+                </tr>
+            </thead>
+        </table>
     </div>
-
-    {{ $accounts->links('layoutmodule::pagination') }}
 @endsection
+
+@include('layoutmodule::partials.datatable-assets')

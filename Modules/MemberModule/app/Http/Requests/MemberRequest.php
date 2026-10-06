@@ -5,9 +5,18 @@ namespace Modules\MemberModule\app\Http\Requests;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Modules\AccountModule\app\Models\Account;
+use Modules\MemberModule\app\Models\Member;
 
 class MemberRequest extends FormRequest
 {
+    // remove the spaces from the phone before it is validated and saved
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('phone')) {
+            $this->merge(['phone' => Member::cleanPhone($this->input('phone'))]);
+        }
+    }
+
     public function rules(): array
     {
         $accountId = $this->user()->userable_id;

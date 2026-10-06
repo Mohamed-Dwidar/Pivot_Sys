@@ -27,6 +27,7 @@ Route::prefix('account')->name('account.')->middleware(['auth', 'user.active:' .
  */
 Route::prefix('admin/accounts')->name('admin.accounts.')->middleware('auth:admin')->group(function () {
     Route::get('/', [AccountAdminModuleController::class, 'index'])->name('index');
+    Route::get('data', [AccountAdminModuleController::class, 'data'])->name('data');
     Route::get('create', [AccountAdminModuleController::class, 'create'])->name('create');
     Route::post('/', [AccountAdminModuleController::class, 'store'])->name('store');
     Route::get('{id}', [AccountAdminModuleController::class, 'show'])->name('show');

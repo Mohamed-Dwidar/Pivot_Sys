@@ -2,7 +2,7 @@
 <div class="form-section">Member Data</div>
 <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
     @include('layoutmodule::partials.field', ['name' => 'name', 'label' => 'Name', 'required' => true, 'value' => $member?->name, 'attrs' => 'autofocus'])
-    @include('layoutmodule::partials.field', ['name' => 'phone', 'label' => 'Phone', 'type' => 'tel', 'required' => true, 'value' => $member?->phone, 'attrs' => 'inputmode="tel" pattern="\+?[0-9]{8,15}" placeholder="01012345678"'])
+    @include('layoutmodule::partials.field', ['name' => 'phone', 'label' => 'Phone', 'type' => 'tel', 'required' => true, 'value' => $member?->phone, 'attrs' => 'inputmode="tel" pattern="\+?[0-9 ]{8,30}" placeholder="01012345678"', 'hint' => 'Spaces are removed automatically.'])
     @include('layoutmodule::partials.field', ['name' => 'email', 'label' => 'Email', 'type' => 'email', 'value' => $member?->email])
     @include('layoutmodule::partials.field', ['name' => 'national_number', 'label' => 'National Number', 'value' => $member?->national_number, 'attrs' => 'inputmode="numeric" pattern="[0-9]{5,15}"'])
 </div>

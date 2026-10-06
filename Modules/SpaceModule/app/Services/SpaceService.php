@@ -26,9 +26,10 @@ class SpaceService
         $this->unitService = $unitService;
     }
 
-    public function paginate($accountId, array $filters = [], $perPage = 15)
+    // list query (paged / ordered by DataTables)
+    public function listQuery($accountId, array $filters = [])
     {
-        return $this->spaceRepository->forAccount($accountId)->filter($filters)->orderByLocalized('name')->latest('id')->paginate($perPage)->withQueryString();
+        return $this->spaceRepository->forAccount($accountId)->filter($filters);
     }
 
     // 404 when the space belongs to another account

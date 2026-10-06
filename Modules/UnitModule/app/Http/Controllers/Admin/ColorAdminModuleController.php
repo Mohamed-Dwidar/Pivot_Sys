@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\UnitModule\app\Http\Requests\ColorRequest;
 use Modules\UnitModule\app\Services\ColorService;
+use Yajra\DataTables\Facades\DataTables;
 
 // admin: colors list (shared by all accounts' units)
 class ColorAdminModuleController extends Controller
@@ -17,12 +18,24 @@ class ColorAdminModuleController extends Controller
         $this->colorService = $colorService;
     }
 
-    public function index(Request $request)
+    // the list page, the rows come from data() (DataTables)
+    public function index()
     {
-        $filters = $request->only('search');
-        $colors = $this->colorService->paginate($filters);
+        return view('unitmodule::Admin.Color.index');
+    }
 
-        return view('unitmodule::Admin.Color.index', compact('colors', 'filters'));
+    // DataTables server side
+    public function data(Request $request)
+    {
+        return DataTables::eloquent($this->colorService->listQuery())
+            ->filter(function ($query) use ($request) {
+                $query->filter(['search' => trim((string) $request->input('search.value'))]);
+            })
+            ->addColumn('name_html', fn ($color) => view('unitmodule::Admin.Color.partials.row-name', compact('color'))->render())
+            ->addColumn('actions', fn ($color) => view('unitmodule::Admin.Color.partials.row-actions', compact('color'))->render())
+            ->rawColumns(['name_html', 'actions'])
+            ->only(['name_html', 'value', 'units_count', 'actions'])
+            ->toJson();
     }
 
     public function create()

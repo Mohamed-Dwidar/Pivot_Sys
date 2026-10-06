@@ -8,6 +8,7 @@ use Illuminate\Validation\Rule;
 use Modules\AccountModule\app\Http\Requests\AccountRequest;
 use Modules\AccountModule\app\Models\Account;
 use Modules\AccountModule\app\Services\AccountService;
+use Yajra\DataTables\Facades\DataTables;
 
 class AccountAdminModuleController extends Controller
 {
@@ -18,14 +19,35 @@ class AccountAdminModuleController extends Controller
         $this->accountService = $accountService;
     }
 
+    // the list page (status tabs + search), the rows come from data() (DataTables)
     public function index(Request $request)
     {
-        $filters = $request->only('search', 'status');
-        $accounts = $this->accountService->paginate($filters);
+        $status = $request->input('status', '');
         $counts = $this->accountService->countByStatus();
         $deletedCount = $this->accountService->countDeleted();
 
-        return view('accountmodule::Admin.index', compact('accounts', 'counts', 'deletedCount', 'filters'));
+        return view('accountmodule::Admin.index', compact('status', 'counts', 'deletedCount'));
+    }
+
+    // DataTables server side: search + status ('deleted' = soft deleted accounts)
+    public function data(Request $request)
+    {
+        return DataTables::eloquent($this->accountService->listQuery())
+            // inside filter() so "of N total" counts all the accounts
+            ->filter(function ($query) use ($request) {
+                $query->filter(['search' => trim((string) $request->input('search.value'))] + $request->only('status'));
+            })
+            ->orderColumn('name', fn ($query, $order) => $query->orderByLocalized('name', $order))
+            ->addColumn('name_html', fn ($account) => $account->trashed()
+                ? '<span class="font-medium">' . e($account->name) . '</span>'
+                : '<a href="' . route('admin.accounts.show', $account->id) . '" class="font-medium">' . e($account->name) . '</a>')
+            ->addColumn('email', fn ($account) => $account->user?->email ?? '-')
+            ->addColumn('status_html', fn ($account) => view('accountmodule::Admin.partials.row-status', compact('account'))->render())
+            ->editColumn('created_at', fn ($account) => $account->created_at->format('Y-m-d'))
+            ->addColumn('actions', fn ($account) => view('accountmodule::Admin.partials.row-actions', compact('account'))->render())
+            ->rawColumns(['name_html', 'status_html', 'actions'])
+            ->only(['name_html', 'email', 'phone', 'status_html', 'created_at', 'actions'])
+            ->toJson();
     }
 
     public function create()

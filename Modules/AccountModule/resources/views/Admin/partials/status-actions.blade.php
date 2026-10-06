@@ -10,7 +10,7 @@
     ][$account->status] ?? [];
 @endphp
 @foreach ($actions as [$newStatus, $actionLabel, $btnClass, $icon, $variant, $confirmText])
-    <form method="POST" action="{{ route('admin.accounts.status', $account->id) }}" class="inline-form"
+    <form method="POST" action="{{ route('admin.accounts.status', $account->id) }}" class="{{ !empty($menu) ? '' : 'inline-form' }}"
         data-confirm="&quot;{{ $account->name }}&quot; {{ $confirmText }}"
         data-confirm-title="{{ $actionLabel }} this account?"
         data-confirm-button="{{ $actionLabel }}"
@@ -18,8 +18,14 @@
         @csrf
         @method('PATCH')
         <input type="hidden" name="status" value="{{ $newStatus }}">
-        <button type="submit" class="btn {{ $btnClass }} {{ $size ?? '' }}" title="{{ $actionLabel }}">
-            <i data-lucide="{{ $icon }}"></i> {{ $actionLabel }}
-        </button>
+        @if (!empty($menu))
+            <button type="submit" data-tw-dismiss="dropdown" class="{{ config('layoutmodule.menu.item') }} {{ ['success' => 'text-success', 'danger' => 'text-danger', 'warning' => 'text-warning'][$variant] }}">
+                <i data-lucide="{{ $icon }}" class="{{ config('layoutmodule.menu.icon') }}"></i> {{ $actionLabel }}
+            </button>
+        @else
+            <button type="submit" class="btn {{ $btnClass }} {{ $size ?? '' }}" title="{{ $actionLabel }}">
+                <i data-lucide="{{ $icon }}"></i> {{ $actionLabel }}
+            </button>
+        @endif
     </form>
 @endforeach

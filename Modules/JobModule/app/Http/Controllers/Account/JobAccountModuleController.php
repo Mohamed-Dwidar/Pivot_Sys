@@ -7,6 +7,7 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
 use Modules\JobModule\app\Http\Requests\JobRequest;
 use Modules\JobModule\app\Services\JobService;
+use Yajra\DataTables\Facades\DataTables;
 
 // logged in account: manage his jobs list
 class JobAccountModuleController extends Controller
@@ -23,12 +24,27 @@ class JobAccountModuleController extends Controller
         return Auth::user()->userable_id;
     }
 
-    public function index(Request $request)
+    // the list page, the rows come from data() (DataTables)
+    public function index()
     {
-        $filters = $request->only('search');
-        $jobs = $this->jobService->paginate($this->accountId(), $filters);
+        return view('jobmodule::Account.index');
+    }
 
-        return view('jobmodule::Account.index', compact('jobs', 'filters'));
+    // DataTables server side
+    public function data(Request $request)
+    {
+        return DataTables::eloquent($this->jobService->listQuery($this->accountId()))
+            ->addIndexColumn()
+            ->filter(function ($query) use ($request) {
+                $query->filter(['search' => trim((string) $request->input('search.value'))]);
+            })
+            ->orderColumn('name', fn ($query, $order) => $query->orderByLocalized('name', $order))
+            ->addColumn('name_html', fn ($job) => '<a href="' . route('account.jobs.show', $job->id) . '" class="font-medium">' . e($job->name) . '</a>')
+            ->editColumn('created_at', fn ($job) => $job->created_at->format('Y-m-d'))
+            ->addColumn('actions', fn ($job) => view('jobmodule::Account.partials.row-actions', compact('job'))->render())
+            ->rawColumns(['name_html', 'actions'])
+            ->only(['DT_RowIndex', 'name_html', 'created_at', 'actions'])
+            ->toJson();
     }
 
     public function create()

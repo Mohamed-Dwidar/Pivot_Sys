@@ -1,11 +1,17 @@
-<form method="POST" action="{{ route('account.companies.destroy', $company->id) }}" class="inline-form"
+<form method="POST" action="{{ route('account.companies.destroy', $company->id) }}" class="{{ !empty($menu) ? '' : 'inline-form' }}"
     data-confirm="&quot;{{ $company->name }}&quot; will be deleted from your companies list."
     data-confirm-title="Delete this company?"
     data-confirm-button="Delete"
     data-confirm-variant="danger">
     @csrf
     @method('DELETE')
-    <button type="submit" class="btn btn-danger {{ $size ?? '' }}" title="Delete">
-        <i data-lucide="trash-2"></i> @if (empty($size)) Delete @endif
-    </button>
+    @if (!empty($menu))
+        <button type="submit" data-tw-dismiss="dropdown" class="{{ config('layoutmodule.menu.item') }} text-danger" title="Delete">
+            <i data-lucide="trash-2" class="{{ config('layoutmodule.menu.icon') }}"></i> Delete
+        </button>
+    @else
+        <button type="submit" class="btn btn-danger {{ $size ?? '' }}" title="Delete">
+            <i data-lucide="trash-2"></i> @if (empty($size)) Delete @endif
+        </button>
+    @endif
 </form>

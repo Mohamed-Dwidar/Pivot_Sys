@@ -16,9 +16,10 @@ class CompanyService
         $this->companyRepository = $companyRepository;
     }
 
-    public function paginate($accountId, array $filters = [], $perPage = 15)
+    // list query (paged / ordered by DataTables)
+    public function listQuery($accountId, array $filters = [])
     {
-        return $this->companyRepository->forAccount($accountId)->filter($filters)->orderByLocalized('name')->paginate($perPage)->withQueryString();
+        return $this->companyRepository->forAccount($accountId)->filter($filters);
     }
 
     public function countForAccount($accountId): int

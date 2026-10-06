@@ -17,9 +17,10 @@ class MemberService
         $this->memberRepository = $memberRepository;
     }
 
-    public function paginate($accountId, array $filters = [], $perPage = 15)
+    // members list query (paged / ordered by DataTables)
+    public function listQuery($accountId, array $filters = [])
     {
-        return $this->memberRepository->forAccount($accountId)->filter($filters)->orderBy('name')->latest('id')->paginate($perPage)->withQueryString();
+        return $this->memberRepository->forAccount($accountId)->filter($filters);
     }
 
     // 404 when the member belongs to another account

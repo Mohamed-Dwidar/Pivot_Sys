@@ -8,20 +8,18 @@ use Illuminate\Support\Facades\Auth;
 use Modules\SpaceModule\app\Http\Requests\SpaceRequest;
 use Modules\SpaceModule\app\Services\SpaceService;
 use Modules\SpaceModule\app\Services\SubscriptionTypeService;
-use Modules\UnitModule\app\Services\UnitService;
+use Yajra\DataTables\Facades\DataTables;
 
 // logged in account: manage his spaces
 class SpaceAccountModuleController extends Controller
 {
     private $spaceService;
     private $subscriptionTypeService;
-    private $unitService;
 
-    public function __construct(SpaceService $spaceService, SubscriptionTypeService $subscriptionTypeService, UnitService $unitService)
+    public function __construct(SpaceService $spaceService, SubscriptionTypeService $subscriptionTypeService)
     {
         $this->spaceService = $spaceService;
         $this->subscriptionTypeService = $subscriptionTypeService;
-        $this->unitService = $unitService;
     }
 
     private function accountId()
@@ -29,13 +27,31 @@ class SpaceAccountModuleController extends Controller
         return Auth::user()->userable_id;
     }
 
-    public function index(Request $request)
+    // the list page, the rows come from data() (DataTables)
+    public function index()
     {
-        $filters = $request->only('search', 'is_active', 'subscription_type_id');
-        $spaces = $this->spaceService->paginate($this->accountId(), $filters);
         $subscriptionTypes = $this->subscriptionTypeService->options($this->accountId());
+        return view('spacemodule::Account.Space.index', compact('subscriptionTypes'));
+    }
 
-        return view('spacemodule::Account.Space.index', compact('spaces', 'filters', 'subscriptionTypes'));
+    // DataTables server side: search + subscription_type_id / is_active filters
+    public function data(Request $request)
+    {
+        return DataTables::eloquent($this->spaceService->listQuery($this->accountId()))
+            // inside filter() so "of N total" counts all the spaces
+            ->filter(function ($query) use ($request) {
+                $query->filter(['search' => trim((string) $request->input('search.value'))] + $request->only('subscription_type_id', 'is_active'));
+            })
+            ->orderColumn('name', fn ($query, $order) => $query->orderByLocalized('name', $order))
+            ->addColumn('image', fn ($space) => view('spacemodule::Account.Space.partials.row-image', compact('space'))->render())
+            ->addColumn('name_html', fn ($space) => '<a href="' . route('account.spaces.show', $space->id) . '" class="font-medium">' . e($space->name) . '</a>')
+            ->addColumn('subscription_types', fn ($space) => $space->subscriptionTypes->pluck('name')->join(', ') ?: '-')
+            ->addColumn('images_count', fn ($space) => $space->images->count())
+            ->addColumn('status', fn ($space) => view('spacemodule::Account.Space.partials.status-badge', compact('space'))->render())
+            ->addColumn('actions', fn ($space) => view('spacemodule::Account.Space.partials.row-actions', compact('space'))->render())
+            ->rawColumns(['image', 'name_html', 'status', 'actions'])
+            ->only(['image', 'name_html', 'subscription_types', 'units_count', 'images_count', 'status', 'actions'])
+            ->toJson();
     }
 
     public function create()
@@ -54,8 +70,7 @@ class SpaceAccountModuleController extends Controller
     public function show($id)
     {
         $space = $this->spaceService->findOne($this->accountId(), $id);
-        $units = $this->unitService->listForSpace($space);
-        return view('spacemodule::Account.Space.show', compact('space', 'units'));
+        return view('spacemodule::Account.Space.show', compact('space'));
     }
 
     public function edit($id)

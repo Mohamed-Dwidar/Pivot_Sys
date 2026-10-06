@@ -11,6 +11,7 @@ use Modules\SpaceModule\app\Http\Controllers\Account\SubscriptionTypeAccountModu
 Route::prefix('account')->name('account.')->middleware(['auth', 'user.active:' . Account::class])->group(function () {
     Route::prefix('spaces')->name('spaces.')->group(function () {
         Route::get('/', [SpaceAccountModuleController::class, 'index'])->name('index');
+        Route::get('data', [SpaceAccountModuleController::class, 'data'])->name('data');
         Route::get('create', [SpaceAccountModuleController::class, 'create'])->name('create');
         Route::post('/', [SpaceAccountModuleController::class, 'store'])->name('store');
         Route::get('{id}', [SpaceAccountModuleController::class, 'show'])->name('show');
@@ -21,6 +22,7 @@ Route::prefix('account')->name('account.')->middleware(['auth', 'user.active:' .
 
     Route::prefix('subscription-types')->name('subscription-types.')->group(function () {
         Route::get('/', [SubscriptionTypeAccountModuleController::class, 'index'])->name('index');
+        Route::get('data', [SubscriptionTypeAccountModuleController::class, 'data'])->name('data');
         Route::get('create', [SubscriptionTypeAccountModuleController::class, 'create'])->name('create');
         Route::post('/', [SubscriptionTypeAccountModuleController::class, 'store'])->name('store');
         Route::get('{id}', [SubscriptionTypeAccountModuleController::class, 'show'])->name('show');

@@ -33,7 +33,7 @@
         </div>
     </div>
 
-    @include('unitmodule::Account.Unit.partials.list', ['units' => $units])
+    @include('unitmodule::Account.Unit.partials.list')
 
     <div class="form-actions">
         <a href="{{ route('account.spaces.index') }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> Back to Spaces</a>

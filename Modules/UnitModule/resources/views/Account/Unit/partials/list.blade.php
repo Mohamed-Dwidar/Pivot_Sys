@@ -1,60 +1,28 @@
-{{-- Units of $space, shown on the space page. --}}
-<div class="flex items-center mt-8 mb-4">
-    <div class="text-base font-medium">Units ({{ $units->count() }})</div>
-    <a href="{{ route('account.spaces.units.create', $space->id) }}" class="btn btn-primary btn-sm ml-auto"><i data-lucide="plus"></i> Add Unit</a>
+{{-- Units of $space, shown on the space page (DataTables). --}}
+<div class="flex flex-col gap-3 mt-8 mb-4 md:flex-row md:items-center">
+    <div class="text-base font-medium">Units ({{ $space->units_count }})</div>
+    <form id="units-filters" class="filter-bar md:ml-auto">
+        <input type="search" name="search" class="{{ config('layoutmodule.form.input') }}" placeholder="Search units" autocomplete="off">
+        @include('layoutmodule::partials.datatable-clear')
+    </form>
+    <a href="{{ route('account.spaces.units.create', $space->id) }}" class="btn btn-primary"><i data-lucide="plus"></i> Add Unit</a>
 </div>
 
 <div class="table-wrap">
-    <table class="data-table">
+    <table class="data-table" data-datatable data-url="{{ route('account.spaces.units.data', $space->id) }}"
+        data-filters="#units-filters" data-order='[[1, "asc"]]' data-page-length="10" data-empty="No units in this space yet.">
         <thead>
             <tr>
-                <th></th>
-                <th>Name</th>
-                <th>Subscription Type</th>
-                <th>Capacity</th>
-                <th>Concurrent</th>
-                <th>Status</th>
-                <th></th>
+                <th data-data="image"></th>
+                <th data-data="name_html" data-name="name">Name</th>
+                <th data-data="subscription_type">Subscription Type</th>
+                <th data-data="capacity" data-name="capacity">Capacity</th>
+                <th data-data="concurrent_usage" data-name="concurrent_usage">Concurrent</th>
+                <th data-data="status" data-name="is_active">Status</th>
+                <th data-data="actions"></th>
             </tr>
         </thead>
-        <tbody>
-            @forelse ($units as $unit)
-                <tr>
-                    <td>
-                        @if ($unit->images->isNotEmpty())
-                            <img src="{{ $unit->images->first()->url }}" alt="{{ $unit->name }}" class="table-thumb" data-action="zoom">
-                        @else
-                            <div class="table-thumb table-thumb--empty"><i data-lucide="image"></i></div>
-                        @endif
-                    </td>
-                    <td>
-                        <div class="flex items-center gap-2">
-                            @if ($unit->color)
-                                @include('unitmodule::partials.color-swatch', ['value' => $unit->color->value])
-                            @endif
-                            <a href="{{ route('account.spaces.units.show', [$space->id, $unit->id]) }}" class="font-medium">{{ $unit->name }}</a>
-                        </div>
-                    </td>
-                    <td>{{ $unit->subscriptionType?->name ?? '-' }}</td>
-                    <td>{{ $unit->capacity ?: '-' }}</td>
-                    <td>{{ $unit->concurrent_usage }}</td>
-                    <td><span class="badge {{ $unit->is_active ? 'badge-active' : 'badge-inactive' }}">{{ $unit->is_active ? 'Active' : 'Inactive' }}</span></td>
-                    <td>
-                        <div class="actions">
-                            <a href="{{ route('account.spaces.units.show', [$space->id, $unit->id]) }}" class="btn btn-secondary btn-sm" title="View"><i data-lucide="eye"></i></a>
-                            <a href="{{ route('account.spaces.units.edit', [$space->id, $unit->id]) }}" class="btn btn-secondary btn-sm" title="Edit"><i data-lucide="pencil"></i></a>
-                            @include('unitmodule::Account.Unit.partials.delete-form', ['size' => 'btn-sm'])
-                        </div>
-                    </td>
-                </tr>
-            @empty
-                <tr>
-                    <td colspan="7" class="empty-state">
-                        No units in this space yet.
-                        <a href="{{ route('account.spaces.units.create', $space->id) }}" class="text-primary">Add the first unit</a>
-                    </td>
-                </tr>
-            @endforelse
-        </tbody>
     </table>
 </div>
+
+@include('layoutmodule::partials.datatable-assets')

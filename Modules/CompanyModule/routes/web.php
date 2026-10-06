@@ -9,6 +9,7 @@ use Modules\CompanyModule\app\Http\Controllers\Account\CompanyAccountModuleContr
  */
 Route::prefix('account/companies')->name('account.companies.')->middleware(['auth', 'user.active:' . Account::class])->group(function () {
     Route::get('/', [CompanyAccountModuleController::class, 'index'])->name('index');
+    Route::get('data', [CompanyAccountModuleController::class, 'data'])->name('data');
     Route::get('create', [CompanyAccountModuleController::class, 'create'])->name('create');
     Route::post('/', [CompanyAccountModuleController::class, 'store'])->name('store');
     Route::get('{id}', [CompanyAccountModuleController::class, 'show'])->name('show');

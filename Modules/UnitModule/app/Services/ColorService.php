@@ -13,9 +13,10 @@ class ColorService
         $this->colorRepository = $colorRepository;
     }
 
-    public function paginate(array $filters = [], $perPage = 15)
+    // list query (paged / ordered by DataTables)
+    public function listQuery(array $filters = [])
     {
-        return $this->colorRepository->query()->filter($filters)->orderBy('name')->paginate($perPage)->withQueryString();
+        return $this->colorRepository->query()->filter($filters);
     }
 
     // [id => name], for the units form

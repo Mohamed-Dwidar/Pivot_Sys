@@ -117,6 +117,28 @@
     stroke-width: 1.5;
 }
 
+.btn:disabled,
+.btn:disabled:hover {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+/* small counter inside a button, e.g. "Clear (2)" */
+.btn-count {
+    min-width: 1.15rem;
+    padding: 0 0.35rem;
+    font-size: 0.7rem;
+    line-height: 1.15rem;
+    color: #fff;
+    text-align: center;
+    background-color: rgb(var(--color-primary));
+    border-radius: 9999px;
+}
+
+.btn-count[hidden] {
+    display: none;
+}
+
 .btn-sm {
     padding: 0.3rem 0.6rem;
     font-size: 0.75rem;
@@ -163,6 +185,38 @@
     color: #fff;
     background-color: rgb(var(--color-danger));
     border-color: rgb(var(--color-danger));
+}
+
+/* row actions menu (layoutmodule::partials.row-menu)
+   Popper places the menu with an inline transform, so only the inner box is animated. */
+.row-menu:not(.show) {
+    display: none !important;
+}
+
+.row-menu.show {
+    margin-top: 0.25rem;
+}
+
+/* hidden until Popper has placed it next to the button (it starts at the page corner) */
+.row-menu.show:not([data-popper-placement]) {
+    visibility: hidden;
+}
+
+.row-menu.show .dropdown-content {
+    animation: row-menu-in 0.15s ease-out;
+}
+
+@keyframes row-menu-in {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+}
+
+.dropdown-item:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+    background: none;
 }
 
 .inline-form {
@@ -492,6 +546,91 @@ input[type="color"] {
     border-color: #fff;
 }
 
+/* ===== DataTables (members list) ===== */
+.dt-container .dt-layout-row {
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    color: rgb(100 116 139);
+}
+
+/* "per page" select: room on the right for the arrow (DataTables css sets padding: 4px) */
+div.dt-container .dt-length select {
+    min-width: 4.25rem;
+    padding: 0.3rem 1.9rem 0.3rem 0.65rem;
+    margin-right: 0.4rem;
+    font-size: 0.8rem;
+    background-position: right 0.45rem center;
+    background-size: 1rem 1rem;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.4rem;
+}
+
+.dt-container .dt-info {
+    margin-left: 1rem;
+}
+
+.dt-container .dt-paging .dt-paging-button {
+    min-width: 2rem;
+    padding: 0.3rem 0.6rem !important;
+    margin-left: 0.25rem !important;
+    font-size: 0.8rem;
+    color: rgb(71 85 105) !important;
+    background: #fff !important;
+    border: 1px solid rgb(226 232 240) !important;
+    border-radius: 0.4rem !important;
+}
+
+.dt-container .dt-paging .dt-paging-button.current,
+.dt-container .dt-paging .dt-paging-button.current:hover {
+    color: #fff !important;
+    background: rgb(var(--color-primary)) !important;
+    border-color: rgb(var(--color-primary)) !important;
+}
+
+.dt-container .dt-paging .dt-paging-button.disabled {
+    color: rgb(148 163 184) !important;
+}
+
+/* keep the template table look */
+table.dataTable.data-table > thead > tr > th {
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid rgb(226 232 240 / 0.6);
+}
+
+table.dataTable.data-table > tbody > tr > td {
+    padding: 0.9rem 1rem;
+    border-top: 0;
+}
+
+/* DataTables right-aligns number / date columns, keep them left like the other tables */
+table.dataTable.data-table th.dt-type-numeric,
+table.dataTable.data-table th.dt-type-date,
+table.dataTable.data-table td.dt-type-numeric,
+table.dataTable.data-table td.dt-type-date {
+    text-align: left;
+}
+
+table.dataTable.data-table th.dt-type-numeric div.dt-column-header,
+table.dataTable.data-table th.dt-type-date div.dt-column-header {
+    flex-direction: row;
+}
+
+table.dataTable.data-table > tbody > tr:hover > * {
+    box-shadow: none;
+}
+
+div.dt-container div.dt-processing {
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.5rem;
+    box-shadow: 0 3px 10px rgb(0 0 0 / 0.08);
+}
+
+div.dt-container div.dt-processing > div:last-child {
+    display: none;
+}
+
 /* ===== Status badges ===== */
 .badge {
     display: inline-flex;
@@ -535,7 +674,8 @@ input[type="color"] {
     gap: 0.4rem;
 }
 
-.status-tabs a {
+.status-tabs a,
+.status-tabs button {
     padding: 0.35rem 0.8rem;
     font-size: 0.8rem;
     color: rgb(71 85 105);
@@ -543,40 +683,11 @@ input[type="color"] {
     border-radius: 9999px;
 }
 
-.status-tabs a.active {
+.status-tabs a.active,
+.status-tabs button.active {
     color: #fff;
     background-color: rgb(var(--color-primary));
     border-color: rgb(var(--color-primary));
-}
-
-/* ===== Pagination ===== */
-.pagination {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
-    align-items: center;
-    justify-content: flex-end;
-    margin-top: 1.25rem;
-}
-
-.pagination a,
-.pagination span {
-    min-width: 2rem;
-    padding: 0.3rem 0.6rem;
-    font-size: 0.8rem;
-    text-align: center;
-    border: 1px solid rgb(226 232 240);
-    border-radius: 0.4rem;
-}
-
-.pagination .active {
-    color: #fff;
-    background-color: rgb(var(--color-primary));
-    border-color: rgb(var(--color-primary));
-}
-
-.pagination .disabled {
-    color: rgb(148 163 184);
 }
 
 /* ===== Dashboard cards ===== */

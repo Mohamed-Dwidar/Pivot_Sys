@@ -9,6 +9,7 @@ use Modules\CompanyModule\app\Services\CompanyService;
 use Modules\JobModule\app\Services\JobService;
 use Modules\MemberModule\app\Http\Requests\MemberRequest;
 use Modules\MemberModule\app\Services\MemberService;
+use Yajra\DataTables\Facades\DataTables;
 
 // logged in account: manage his members
 class MemberAccountModuleController extends Controller
@@ -38,12 +39,30 @@ class MemberAccountModuleController extends Controller
         ];
     }
 
-    public function index(Request $request)
+    // the list page, the rows come from data() (DataTables)
+    public function index()
     {
-        $filters = $request->only('search', 'company_id', 'job_id');
-        $members = $this->memberService->paginate($this->accountId(), $filters);
+        return view('membermodule::Account.index', $this->formOptions());
+    }
 
-        return view('membermodule::Account.index', compact('members', 'filters') + $this->formOptions());
+    // DataTables server side: search (search.value) + company_id / job_id filters
+    public function data(Request $request)
+    {
+        return DataTables::eloquent($this->memberService->listQuery($this->accountId()))
+            ->addIndexColumn()
+            // inside filter() so "of N total" counts all the members
+            ->filter(function ($query) use ($request) {
+                $query->filter(['search' => trim((string) $request->input('search.value'))] + $request->only('company_id', 'job_id'));
+            })
+            ->addColumn('name_html', fn ($member) => view('membermodule::Account.partials.row-name', compact('member'))->render())
+            ->addColumn('company', fn ($member) => $member->company?->name ?? '-')
+            ->addColumn('job', fn ($member) => $member->job?->name ?? '-')
+            ->editColumn('created_at', fn ($member) => $member->created_at->format('Y-m-d'))
+            ->addColumn('actions', fn ($member) => view('membermodule::Account.partials.row-actions', compact('member'))->render())
+            ->rawColumns(['name_html', 'actions'])
+            // send only the table columns (not all the member fields)
+            ->only(['DT_RowIndex', 'name_html', 'phone', 'company', 'job', 'created_at', 'actions'])
+            ->toJson();
     }
 
     public function create()

@@ -21,9 +21,10 @@ class SubscriptionTypeService
         $this->unitService = $unitService;
     }
 
-    public function paginate($accountId, array $filters = [], $perPage = 15)
+    // list query (paged / ordered by DataTables)
+    public function listQuery($accountId, array $filters = [])
     {
-        return $this->subscriptionTypeRepository->forAccount($accountId)->filter($filters)->orderBy('name')->paginate($perPage)->withQueryString();
+        return $this->subscriptionTypeRepository->forAccount($accountId)->filter($filters);
     }
 
     // [id => name], for the spaces form / filter
