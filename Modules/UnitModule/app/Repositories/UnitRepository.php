@@ -15,6 +15,6 @@ class UnitRepository extends BaseRepository
     // units of one space of one account
     public function forSpace($accountId, $spaceId)
     {
-        return Unit::with('images', 'color', 'subscriptionType')->where('account_id', $accountId)->where('space_id', $spaceId);
+        return Unit::with('images', 'color', 'subscriptionType', 'plans')->where('account_id', $accountId)->where('space_id', $spaceId);
     }
 }

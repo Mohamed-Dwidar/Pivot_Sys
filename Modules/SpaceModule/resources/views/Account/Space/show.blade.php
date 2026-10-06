@@ -30,6 +30,13 @@
             @empty
                 <div class="text-slate-500">No subscription types assigned.</div>
             @endforelse
+
+            <div class="form-section mt-6">Plans</div>
+            @forelse ($space->plans as $plan)
+                <a href="{{ route('account.plans.show', $plan->id) }}" data-modal class="badge badge-inactive mr-1">{{ $plan->name }}</a>
+            @empty
+                <div class="text-slate-500">No plans assigned.</div>
+            @endforelse
         </div>
 
         {{-- images (right side) --}}

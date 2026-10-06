@@ -24,6 +24,9 @@ class UnitRequest extends FormRequest
             // only a subscription type assigned to this space
             'subscription_type_id' => ['nullable', 'integer',
                 Rule::exists('space_subscription_type', 'subscription_type_id')->where('space_id', $this->route('spaceId'))],
+            // only plans assigned to this space
+            'plans' => 'nullable|array',
+            'plans.*' => ['integer', Rule::exists('plan_space', 'plan_id')->where('space_id', $this->route('spaceId'))],
             'color_id' => 'required|integer|exists:colors,id',
             'description_ar' => 'nullable|string|max:5000',
             'description_en' => 'nullable|string|max:5000',
@@ -56,6 +59,7 @@ class UnitRequest extends FormRequest
             'name_en' => 'name (English)',
             'subscription_type_id' => 'subscription type',
             'color_id' => 'color',
+            'plans.*' => 'plan',
             'description_ar' => 'description (Arabic)',
             'description_en' => 'description (English)',
             'notes_ar' => 'notes (Arabic)',

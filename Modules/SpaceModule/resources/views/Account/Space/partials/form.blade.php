@@ -33,5 +33,12 @@
 @endforeach
 </div>
 
+<div class="form-section mt-8">Plans</div>
+@include('planmodule::Account.partials.checklist', [
+    'plans' => $plans, 'selected' => $space?->plans->pluck('id')->all() ?? [],
+    'empty' => 'No plans yet. <a href="' . route('account.plans.index') . '" class="text-primary">Add plans</a>',
+    'hint' => 'The units of this space can use these plans.',
+])
+
 <div class="form-section mt-8">Images</div>
 @include('layoutmodule::partials.images-input', ['images' => $space?->images, 'alt' => $space?->name])

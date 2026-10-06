@@ -33,6 +33,12 @@ class SpaceService
     }
 
     // 404 when the space belongs to another account
+    // [id => name] in the active language, for the filters
+    public function options($accountId): array
+    {
+        return $this->spaceRepository->forAccount($accountId)->orderByLocalized('name')->get()->pluck('name', 'id')->all();
+    }
+
     public function findOne($accountId, $id)
     {
         return $this->spaceRepository->forAccount($accountId)->findOrFail($id);
@@ -43,6 +49,7 @@ class SpaceService
         $space = DB::transaction(function () use ($accountId, $data) {
             $space = $this->spaceRepository->create($this->spaceData($data) + ['account_id' => $accountId]);
             $space->subscriptionTypes()->sync($data['subscription_types'] ?? []);
+            $space->plans()->sync($data['plans'] ?? []);
             return $space;
         });
 
@@ -58,6 +65,8 @@ class SpaceService
             $space->update($this->spaceData($data));
             $space->subscriptionTypes()->sync($data['subscription_types'] ?? []);
             $this->unitService->syncSpaceSubscriptionTypes($space->id, $data['subscription_types'] ?? []);
+            $space->plans()->sync($data['plans'] ?? []);
+            $this->unitService->syncSpacePlans($space->id, $data['plans'] ?? []);
         });
 
         $this->deleteImages($space, $data['delete_images'] ?? []);

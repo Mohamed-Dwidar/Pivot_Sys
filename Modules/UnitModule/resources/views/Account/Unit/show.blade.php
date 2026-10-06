@@ -34,6 +34,13 @@
         <div class="wide"><dt>Notes (English)</dt><dd>{{ $unit->notes_en ?: '-' }}</dd></div>
     </dl>
 
+    <div class="form-section mt-8">Plans</div>
+    @forelse ($unit->plans as $plan)
+        <a href="{{ route('account.plans.show', $plan->id) }}" data-modal class="badge badge-inactive mr-1">{{ $plan->name }}</a>
+    @empty
+        <div class="text-slate-500">No plans chosen.</div>
+    @endforelse
+
     <div class="form-section mt-8">Images ({{ $unit->images->count() }})</div>
     @include('layoutmodule::partials.gallery', ['images' => $unit->images, 'alt' => $unit->name])
 

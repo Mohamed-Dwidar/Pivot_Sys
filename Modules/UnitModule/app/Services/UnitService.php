@@ -3,6 +3,7 @@
 namespace Modules\UnitModule\app\Services;
 
 use App\Helpers\UploaderHelper;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Modules\SpaceModule\app\Models\Space;
 use Modules\UnitModule\app\Models\Unit;
@@ -46,6 +47,7 @@ class UnitService
             'account_id' => $space->account_id,
             'space_id' => $space->id,
         ]);
+        $unit->plans()->sync($data['plans'] ?? []);
 
         $this->storeImages($unit, $data['images'] ?? []);
         return $unit;
@@ -55,6 +57,7 @@ class UnitService
     {
         $unit = $this->findOne($space, $id);
         $unit->update($this->unitData($data));
+        $unit->plans()->sync($data['plans'] ?? []);
 
         $this->deleteImages($unit, $data['delete_images'] ?? []);
         $this->storeImages($unit, $data['images'] ?? []);
@@ -87,6 +90,15 @@ class UnitService
         Unit::withTrashed()->where('space_id', $spaceId)
             ->whereNotIn('subscription_type_id', array_merge([0], $subscriptionTypeIds))
             ->update(['subscription_type_id' => 0]);
+    }
+
+    // units keep only plans that are still assigned to their space
+    public function syncSpacePlans($spaceId, array $planIds)
+    {
+        DB::table('plan_unit')
+            ->whereIn('unit_id', Unit::withTrashed()->where('space_id', $spaceId)->select('id'))
+            ->whereNotIn('plan_id', array_merge([0], $planIds))
+            ->delete();
     }
 
     // when the subscription type is deleted

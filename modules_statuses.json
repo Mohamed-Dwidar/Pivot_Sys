@@ -7,5 +7,6 @@
     "CompanyModule": true,
     "JobModule": true,
     "SpaceModule": true,
-    "UnitModule": true
+    "UnitModule": true,
+    "PlanModule": true
 }

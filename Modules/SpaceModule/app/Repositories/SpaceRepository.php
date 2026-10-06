@@ -15,6 +15,6 @@ class SpaceRepository extends BaseRepository
     // spaces of one account only
     public function forAccount($accountId)
     {
-        return Space::with('images', 'subscriptionTypes')->withCount('units')->where('account_id', $accountId);
+        return Space::with('images', 'subscriptionTypes', 'plans')->withCount('units')->where('account_id', $accountId);
     }
 }

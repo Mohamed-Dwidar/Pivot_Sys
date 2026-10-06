@@ -16,6 +16,13 @@
     @include('layoutmodule::partials.checkbox', ['name' => 'is_active', 'label' => 'Active', 'checked' => $unit?->is_active ?? true])
 </div>
 
+<div class="form-section mt-8">Plans</div>
+@include('planmodule::Account.partials.checklist', [
+    'plans' => $plans, 'selected' => $unit?->plans->pluck('id')->all() ?? [],
+    'empty' => 'This space has no plans, assign them from the space form.',
+    'hint' => 'Only the plans assigned to this space.',
+])
+
 <div class="form-section mt-8">Description & Notes</div>
 <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
     @include('layoutmodule::partials.field', ['name' => 'description_ar', 'label' => 'Description (Arabic)', 'type' => 'textarea', 'value' => $unit?->description_ar, 'attrs' => 'dir="rtl"'])

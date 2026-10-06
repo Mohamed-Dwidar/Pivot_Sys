@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
+use Modules\PlanModule\app\Services\PlanService;
 use Modules\SpaceModule\app\Http\Requests\SpaceRequest;
 use Modules\SpaceModule\app\Services\SpaceService;
 use Modules\SpaceModule\app\Services\SubscriptionTypeService;
@@ -17,11 +18,22 @@ class SpaceAccountModuleController extends Controller
 {
     private $spaceService;
     private $subscriptionTypeService;
+    private $planService;
 
-    public function __construct(SpaceService $spaceService, SubscriptionTypeService $subscriptionTypeService)
+    public function __construct(SpaceService $spaceService, SubscriptionTypeService $subscriptionTypeService, PlanService $planService)
     {
         $this->spaceService = $spaceService;
         $this->subscriptionTypeService = $subscriptionTypeService;
+        $this->planService = $planService;
+    }
+
+    // subscription types + plans checkboxes of the form
+    private function formOptions(): array
+    {
+        return [
+            'subscriptionTypes' => $this->subscriptionTypeService->options($this->accountId()),
+            'plans' => $this->planService->options($this->accountId()),
+        ];
     }
 
     private function accountId()
@@ -76,8 +88,7 @@ class SpaceAccountModuleController extends Controller
 
     public function create()
     {
-        $subscriptionTypes = $this->subscriptionTypeService->options($this->accountId());
-        return view('spacemodule::Account.Space.create', compact('subscriptionTypes'));
+        return view('spacemodule::Account.Space.create', $this->formOptions());
     }
 
     public function store(SpaceRequest $request)
@@ -100,8 +111,7 @@ class SpaceAccountModuleController extends Controller
     public function edit($id)
     {
         $space = $this->spaceService->findOne($this->accountId(), $id);
-        $subscriptionTypes = $this->subscriptionTypeService->options($this->accountId());
-        return view('spacemodule::Account.Space.edit', compact('space', 'subscriptionTypes'));
+        return view('spacemodule::Account.Space.edit', compact('space') + $this->formOptions());
     }
 
     public function update(SpaceRequest $request, $id)

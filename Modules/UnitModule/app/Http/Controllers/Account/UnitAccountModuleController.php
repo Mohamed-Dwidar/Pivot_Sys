@@ -37,6 +37,7 @@ class UnitAccountModuleController extends Controller
     {
         return [
             'subscriptionTypes' => $space->subscriptionTypes->pluck('name', 'id')->all(),
+            'plans' => $space->plans->sortBy('name')->pluck('name', 'id')->all(),
             'colors' => $this->colorService->options(),
             'colorValues' => $this->colorService->values(),
         ];

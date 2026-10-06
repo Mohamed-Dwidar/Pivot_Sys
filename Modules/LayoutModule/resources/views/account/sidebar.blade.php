@@ -45,6 +45,12 @@
                 ],
             ],
         ],
+        [
+            'title' => 'Plans',
+            'icon' => 'receipt',
+            'url' => route('account.plans.index'),
+            'active' => request()->routeIs('account.plans.*'),
+        ],
     ];
 @endphp
 

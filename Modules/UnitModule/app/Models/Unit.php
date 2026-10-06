@@ -5,9 +5,11 @@ namespace Modules\UnitModule\app\Models;
 use App\Helpers\LocalizedHelper;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\AccountModule\app\Models\Account;
+use Modules\PlanModule\app\Models\Plan;
 use Modules\SpaceModule\app\Models\Space;
 use Modules\SpaceModule\app\Models\SubscriptionType;
 
@@ -54,6 +56,12 @@ class Unit extends Model
     public function subscriptionType(): BelongsTo
     {
         return $this->belongsTo(SubscriptionType::class);
+    }
+
+    // many to many (pivot: plan_unit), only plans assigned to the unit's space
+    public function plans(): BelongsToMany
+    {
+        return $this->belongsToMany(Plan::class, 'plan_unit', 'unit_id', 'plan_id')->withTimestamps();
     }
 
     public function color(): BelongsTo

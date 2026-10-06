@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\AccountModule\app\Models\Account;
+use Modules\PlanModule\app\Models\Plan;
 use Modules\UnitModule\app\Models\Unit;
 
 class Space extends Model {
@@ -38,6 +39,11 @@ class Space extends Model {
     // many to many (pivot: space_subscription_type)
     public function subscriptionTypes(): BelongsToMany {
         return $this->belongsToMany(SubscriptionType::class, 'space_subscription_type', 'space_id', 'subscription_type_id')->withTimestamps();
+    }
+
+    // many to many (pivot: plan_space), the units choose from these plans
+    public function plans(): BelongsToMany {
+        return $this->belongsToMany(Plan::class, 'plan_space', 'space_id', 'plan_id')->withTimestamps();
     }
 
     public function scopeFilter($query, array $filters = []) {
