@@ -2,6 +2,7 @@
 
 namespace Modules\AccountModule\app\Models;
 
+use App\Helpers\LocalizedHelper;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
@@ -9,12 +10,17 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\CompanyModule\app\Models\Company;
 use Modules\JobModule\app\Models\Job;
 use Modules\MemberModule\app\Models\Member;
+use Modules\SpaceModule\app\Models\Space;
+use Modules\SpaceModule\app\Models\SubscriptionType;
 use Modules\UserModule\app\Contracts\Userable;
 use Modules\UserModule\app\Models\User;
 
 class Account extends Model implements Userable
 {
-    use SoftDeletes;
+    use LocalizedHelper, SoftDeletes;
+
+    // read in the active language: $model->name (see App\Helpers\LocalizedHelper)
+    protected array $localizedFields = ['name', 'description'];
 
     const STATUS_PENDING = 'pending';
     const STATUS_ACTIVE = 'active';
@@ -64,6 +70,16 @@ class Account extends Model implements Userable
     public function members(): HasMany
     {
         return $this->hasMany(Member::class);
+    }
+
+    public function spaces(): HasMany
+    {
+        return $this->hasMany(Space::class);
+    }
+
+    public function subscriptionTypes(): HasMany
+    {
+        return $this->hasMany(SubscriptionType::class);
     }
 
     public function scopeFilter($query, array $filters = [])
@@ -130,6 +146,6 @@ class Account extends Model implements Userable
 
     public function displayName(): string
     {
-        return $this->name_ar;
+        return $this->name;
     }
 }

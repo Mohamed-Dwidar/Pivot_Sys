@@ -8,7 +8,7 @@
     <div class="flex items-center gap-4">
         @include('accountmodule::Account.partials.logo', ['account' => $account])
         <div>
-            <div class="text-base font-medium">Welcome, {{ $account->name_ar }}</div>
+            <div class="text-base font-medium">Welcome, {{ $account->name }}</div>
             <div class="mt-1 text-slate-500">{{ config('app.name') }}</div>
         </div>
     </div>

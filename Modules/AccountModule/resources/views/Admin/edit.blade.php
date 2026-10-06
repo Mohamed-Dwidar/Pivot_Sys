@@ -1,7 +1,7 @@
 @extends('layoutmodule::admin.main')
 
 @section('title')
-    Edit Account: {{ $account->name_ar }}
+    Edit Account: {{ $account->name }}
 @endsection
 
 @section('content')

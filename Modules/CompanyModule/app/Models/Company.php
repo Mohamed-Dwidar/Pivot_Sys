@@ -2,6 +2,7 @@
 
 namespace Modules\CompanyModule\app\Models;
 
+use App\Helpers\LocalizedHelper;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -9,7 +10,10 @@ use Modules\AccountModule\app\Models\Account;
 
 class Company extends Model
 {
-    use SoftDeletes;
+    use LocalizedHelper, SoftDeletes;
+
+    // read in the active language: $model->name (see App\Helpers\LocalizedHelper)
+    protected array $localizedFields = ['name'];
 
     protected $fillable = ['account_id', 'name_ar', 'name_en'];
 

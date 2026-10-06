@@ -15,6 +15,14 @@
 
     $classKey = in_array($type, ['textarea', 'select']) ? $type : (($size ?? null) == 'lg' ? 'input_lg' : 'input');
     $class = config('layoutmodule.form.' . $classKey);
+    // number / date / time / select / file are not full width (see custom.css "Field widths")
+    $widthClass = [
+        'number' => 'field-short', 'date' => 'field-short', 'time' => 'field-short', 'datetime-local' => 'field-medium',
+        'select' => 'field-medium', 'file' => 'field-long',
+    ][$type] ?? null;
+    if ($widthClass) {
+        $class .= ' ' . $widthClass;
+    }
     if ($errors->has($name)) {
         $class = str_replace(['border-slate-200', 'border-slate-300/80'], 'border-danger', $class);
     }

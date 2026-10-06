@@ -22,8 +22,7 @@
             <thead>
                 <tr>
                     <th>#</th>
-                    <th>Name (Arabic)</th>
-                    <th>Name (English)</th>
+                    <th>Name</th>
                     <th>Added</th>
                     <th></th>
                 </tr>
@@ -33,9 +32,8 @@
                     <tr>
                         <td>{{ $jobs->firstItem() + $loop->index }}</td>
                         <td>
-                            <a href="{{ route('account.jobs.show', $job->id) }}" class="font-medium">{{ $job->name_ar }}</a>
+                            <a href="{{ route('account.jobs.show', $job->id) }}" class="font-medium">{{ $job->name }}</a>
                         </td>
-                        <td>{{ $job->name_en ?: '-' }}</td>
                         <td class="whitespace-nowrap">{{ $job->created_at->format('Y-m-d') }}</td>
                         <td>
                             <div class="actions">
@@ -47,7 +45,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="5" class="empty-state">
+                        <td colspan="4" class="empty-state">
                             No jobs yet.
                             <a href="{{ route('account.jobs.create') }}" class="text-primary">Add your first job</a>
                         </td>

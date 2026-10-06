@@ -18,7 +18,7 @@ class CompanyService
 
     public function paginate($accountId, array $filters = [], $perPage = 15)
     {
-        return $this->companyRepository->forAccount($accountId)->filter($filters)->latest()->paginate($perPage)->withQueryString();
+        return $this->companyRepository->forAccount($accountId)->filter($filters)->orderByLocalized('name')->paginate($perPage)->withQueryString();
     }
 
     public function countForAccount($accountId): int
@@ -29,7 +29,7 @@ class CompanyService
     // [id => name] of the account companys, for select inputs
     public function options($accountId): array
     {
-        return $this->companyRepository->forAccount($accountId)->orderBy('name_ar')->pluck('name_ar', 'id')->all();
+        return $this->companyRepository->forAccount($accountId)->orderByLocalized('name')->get()->pluck('name', 'id')->all();
     }
 
     // 404 when the company belongs to another account

@@ -31,6 +31,10 @@
 
         ['divider' => 'Settings'],
         [
+            'title' => 'Colors', 'icon' => 'palette',
+            'url' => route('admin.colors.index'), 'active' => request()->routeIs('admin.colors.*'),
+        ],
+        [
             'title' => 'Account Settings', 'icon' => 'settings',
             'children' => [
                 [

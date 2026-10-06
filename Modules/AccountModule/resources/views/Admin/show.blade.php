@@ -8,7 +8,7 @@
     @include('accountmodule::Admin.partials.status-actions')
     <a href="{{ route('admin.accounts.edit', $account->id) }}" class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
     <form method="POST" action="{{ route('admin.accounts.destroy', $account->id) }}" class="inline-form"
-        data-confirm="&quot;{{ $account->name_ar }}&quot; will be deleted and can not log in. You can restore it later from the Deleted list."
+        data-confirm="&quot;{{ $account->name }}&quot; will be deleted and can not log in. You can restore it later from the Deleted list."
         data-confirm-title="Delete this account?"
         data-confirm-button="Delete"
         data-confirm-variant="danger">
@@ -22,10 +22,7 @@
     <div class="flex items-center gap-4">
         @include('accountmodule::Account.partials.logo')
         <div>
-            <div class="text-lg font-medium">{{ $account->name_ar }}</div>
-            @if ($account->name_en)
-                <div class="text-slate-500">{{ $account->name_en }}</div>
-            @endif
+            <div class="text-lg font-medium">{{ $account->name }}</div>
             <div class="mt-2">@include('accountmodule::Admin.partials.status-badge')</div>
         </div>
     </div>

@@ -61,3 +61,72 @@ document.addEventListener("submit", function (e) {
         submit();
     }
 });
+
+// Colors drop menu (unitmodule::partials.color-select): pick the clicked color and show it + its name on the button.
+function pickColorOption(option) {
+    // the open menu is moved to <body> by the template, so find the button by id, not by parents
+    var radio = option.querySelector(".color-select__radio");
+    radio.checked = true;
+    var current = document.getElementById(option.dataset.current);
+    current.innerHTML = option.querySelector(".color-swatch").outerHTML + " " + option.querySelector("span").textContent;
+}
+
+document.addEventListener("click", function (e) {
+    var option = e.target.closest && e.target.closest(".color-select__option");
+    if (option) {
+        pickColorOption(option);
+    }
+});
+
+document.addEventListener("change", function (e) {
+    if (e.target.matches(".color-select__radio")) {
+        pickColorOption(e.target.closest(".color-select__option"));
+    }
+});
+
+// Images gallery (layoutmodule::partials.gallery): open the viewer on a thumbnail and navigate between the images.
+function galleryShow(modal, index) {
+    var items = modal.querySelectorAll(".gallery-modal__strip-item");
+    index = (index + items.length) % items.length;
+    modal.dataset.index = index;
+    modal.querySelector(".gallery-modal__image").src = items[index].dataset.src;
+    modal.querySelector(".gallery-modal__counter").textContent = (index + 1) + " / " + items.length;
+    items.forEach(function (item, i) {
+        item.classList.toggle("active", i === index);
+    });
+    items[index].scrollIntoView({ block: "nearest", inline: "center" });
+    modal.querySelectorAll(".gallery-modal__nav").forEach(function (nav) {
+        nav.hidden = items.length < 2;
+    });
+}
+
+document.addEventListener("click", function (e) {
+    if (!e.target.closest) {
+        return;
+    }
+    var thumb = e.target.closest("[data-gallery-open]");
+    if (thumb) {
+        var modal = document.getElementById(thumb.dataset.galleryOpen);
+        galleryShow(modal, Number(thumb.dataset.index));
+        tailwind.Modal.getOrCreateInstance(modal).show();
+        return;
+    }
+    var step = e.target.closest("[data-gallery-step]");
+    if (step) {
+        var stepModal = step.closest(".gallery-modal");
+        galleryShow(stepModal, Number(stepModal.dataset.index) + Number(step.dataset.galleryStep));
+        return;
+    }
+    var go = e.target.closest("[data-gallery-go]");
+    if (go) {
+        galleryShow(go.closest(".gallery-modal"), Number(go.dataset.galleryGo));
+    }
+});
+
+document.addEventListener("keydown", function (e) {
+    var modal = document.querySelector(".gallery-modal.show");
+    if (!modal || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) {
+        return;
+    }
+    galleryShow(modal, Number(modal.dataset.index) + (e.key === "ArrowRight" ? 1 : -1));
+});

@@ -9,6 +9,7 @@
 
     <link rel="icon" href="{{ asset('assets/images/favicon.jpg') }}" type="image/png">
     <link rel="stylesheet" href="{{ asset('assets/css/vendors/simplebar.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/css/vendors/zoom-vanilla.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/themes/dagger.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/app.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/custom.css') }}">
@@ -55,6 +56,8 @@
     <script src="{{ asset('assets/js/vendors/dropdown.js') }}"></script>
     <script src="{{ asset('assets/js/vendors/transition.js') }}"></script>
     <script src="{{ asset('assets/js/vendors/simplebar.js') }}"></script>
+    <script src="{{ asset('assets/js/vendors/image-zoom.js') }}"></script>
+    <script src="{{ asset('assets/js/vendors/modal.js') }}"></script>
     <script src="{{ asset('assets/js/components/base/lucide.js') }}"></script>
     <script src="{{ asset('assets/js/custom.js') }}"></script>
     <script src="{{ asset('assets/js/themes/dagger.js') }}"></script>

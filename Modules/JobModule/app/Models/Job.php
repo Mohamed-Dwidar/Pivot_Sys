@@ -2,6 +2,7 @@
 
 namespace Modules\JobModule\app\Models;
 
+use App\Helpers\LocalizedHelper;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -9,7 +10,10 @@ use Modules\AccountModule\app\Models\Account;
 
 class Job extends Model
 {
-    use SoftDeletes;
+    use LocalizedHelper, SoftDeletes;
+
+    // read in the active language: $model->name (see App\Helpers\LocalizedHelper)
+    protected array $localizedFields = ['name'];
 
     public $table = 'job_positions';
 
@@ -32,10 +36,4 @@ class Job extends Model
         return $query;
     }
 
-    // name in the current locale, falls back to the Arabic name
-    public function getNameAttribute()
-    {
-        $lang = config('app.locale') == 'ar' ? '_ar' : '_en';
-        return $this->attributes['name' . $lang] ?: $this->attributes['name_ar'];
-    }
 }

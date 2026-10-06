@@ -18,7 +18,7 @@ class JobService
 
     public function paginate($accountId, array $filters = [], $perPage = 15)
     {
-        return $this->jobRepository->forAccount($accountId)->filter($filters)->latest()->paginate($perPage)->withQueryString();
+        return $this->jobRepository->forAccount($accountId)->filter($filters)->orderByLocalized('name')->paginate($perPage)->withQueryString();
     }
 
     public function countForAccount($accountId): int
@@ -29,7 +29,7 @@ class JobService
     // [id => name] of the account jobs, for select inputs
     public function options($accountId): array
     {
-        return $this->jobRepository->forAccount($accountId)->orderBy('name_ar')->pluck('name_ar', 'id')->all();
+        return $this->jobRepository->forAccount($accountId)->orderByLocalized('name')->get()->pluck('name', 'id')->all();
     }
 
     // 404 when the job belongs to another account

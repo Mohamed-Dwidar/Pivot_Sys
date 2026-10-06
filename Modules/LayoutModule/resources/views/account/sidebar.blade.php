@@ -12,24 +12,9 @@
         [
             'title' => 'Companies',
             'icon' => 'users',
-           'url' => route('account.members.index'),
-             'active' => request()->routeIs('account.members.*') && !request()->routeIs('account.members.create'),
+            'url' => route('account.members.index'),
+            'active' => request()->routeIs('account.members.*') && !request()->routeIs('account.members.create'),
         ],
-
-        // [
-        //     'title' => 'Members', 'icon' => 'users',
-        //     'children' => [
-        //         [
-        //             'title' => 'All Members', 'icon' => 'list',
-        //             'url' => route('account.members.index'),
-        //             'active' => request()->routeIs('account.members.*') && !request()->routeIs('account.members.create'),
-        //         ],
-        //         [
-        //             'title' => 'Add Member', 'icon' => 'user-plus',
-        //             'url' => route('account.members.create'), 'active' => request()->routeIs('account.members.create'),
-        //         ],
-        //     ],
-        // ],
         [
             'title' => 'Companies',
             'icon' => 'briefcase',
@@ -41,6 +26,24 @@
             'icon' => 'clipboard-list',
             'url' => route('account.jobs.index'),
             'active' => request()->routeIs('account.jobs.*') && !request()->routeIs('account.jobs.create'),
+        ],
+        [
+            'title' => 'Spaces',
+            'icon' => 'layout-grid',
+            'children' => [
+                [
+                    'title' => 'All Spaces',
+                    'icon' => 'list',
+                    'url' => route('account.spaces.index'),
+                    'active' => request()->routeIs('account.spaces.*'),
+                ],
+                [
+                    'title' => 'Subscription Types',
+                    'icon' => 'tags',
+                    'url' => route('account.subscription-types.index'),
+                    'active' => request()->routeIs('account.subscription-types.*'),
+                ],
+            ],
         ],
     ];
 @endphp

@@ -22,8 +22,7 @@
             <thead>
                 <tr>
                     <th>#</th>
-                    <th>Name (Arabic)</th>
-                    <th>Name (English)</th>
+                    <th>Name</th>
                     <th>Added</th>
                     <th></th>
                 </tr>
@@ -33,9 +32,8 @@
                     <tr>
                         <td>{{ $companies->firstItem() + $loop->index }}</td>
                         <td>
-                            <a href="{{ route('account.companies.show', $company->id) }}" class="font-medium">{{ $company->name_ar }}</a>
+                            <a href="{{ route('account.companies.show', $company->id) }}" class="font-medium">{{ $company->name }}</a>
                         </td>
-                        <td>{{ $company->name_en ?: '-' }}</td>
                         <td class="whitespace-nowrap">{{ $company->created_at->format('Y-m-d') }}</td>
                         <td>
                             <div class="actions">
@@ -47,7 +45,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="5" class="empty-state">
+                        <td colspan="4" class="empty-state">
                             No companies yet.
                             <a href="{{ route('account.companies.create') }}" class="text-primary">Add your first company</a>
                         </td>

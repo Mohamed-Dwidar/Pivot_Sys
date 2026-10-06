@@ -1,0 +1,11 @@
+{
+    "name": "UnitModule",
+    "alias": "unitmodule",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\UnitModule\\Providers\\UnitModuleServiceProvider"
+    ],
+    "files": []
+}

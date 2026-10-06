@@ -35,6 +35,26 @@
 }
 
 /* ===== Forms ===== */
+/* Field widths: number / date / time / select / file are not full width
+   (added by layoutmodule::partials.field). They still shrink on small screens. */
+.field-short,
+.field-medium,
+.field-long {
+    display: block;
+}
+
+.field-short {
+    max-width: 200px;
+}
+
+.field-medium {
+    max-width: 300px;
+}
+
+.field-long {
+    max-width: 400px;
+}
+
 .form-section {
     padding-bottom: 0.5rem;
     margin-bottom: 1.25rem;
@@ -190,6 +210,286 @@
     padding: 2.5rem 1rem;
     color: rgb(100 116 139);
     text-align: center;
+}
+
+/* ===== Images ===== */
+.table-thumb {
+    width: 3.5rem;
+    height: 2.75rem;
+    object-fit: cover;
+    border-radius: 0.4rem;
+}
+
+.table-thumb--empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgb(148 163 184);
+    background-color: rgb(241 245 249);
+}
+
+.table-thumb--empty svg {
+    width: 1.1rem;
+    height: 1.1rem;
+}
+
+.image-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 0.75rem;
+}
+
+.image-grid__item {
+    position: relative;
+    display: block;
+    overflow: hidden;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.6rem;
+}
+
+.image-grid__item img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+}
+
+/* image zoom (template vendors/image-zoom.js): show the whole image, not the cropped thumbnail */
+img.zoom-img {
+    aspect-ratio: auto;
+    object-fit: contain;
+}
+
+.zoom-overlay-open .image-grid__item,
+.zoom-overlay-open .table-wrap {
+    overflow: visible;
+}
+
+.image-grid__remove {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.75rem;
+    color: rgb(var(--color-danger));
+    cursor: pointer;
+}
+
+.checkbox-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.75rem 1.5rem;
+}
+
+/* ===== Colors ===== */
+.color-swatch {
+    flex: none;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 0.25rem;
+    box-shadow: 0 0 0 1px rgb(0 0 0 / 0.08);
+}
+
+.color-swatch--lg {
+    width: 1.5rem;
+    height: 1.5rem;
+}
+
+.color-select__toggle {
+    display: flex;
+    width: 100%;
+    border-width: 1px;
+    align-items: center;
+    text-align: left;
+    background-color: #fff;
+}
+
+.color-select__current {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.color-select__menu {
+    width: 100%;
+    min-width: 240px;
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+/* the radio is only the value holder, the row is the clickable option */
+.color-select__radio {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.color-select__option:has(.color-select__radio:checked) {
+    font-weight: 500;
+    background-color: rgb(var(--color-primary) / 0.08);
+}
+
+input[type="color"] {
+    height: 2.6rem;
+    padding: 0.25rem;
+    cursor: pointer;
+}
+
+/* ===== Gallery (layoutmodule::partials.gallery) ===== */
+.gallery-thumbs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.gallery-thumbs__item {
+    width: 4.5rem;
+    height: 4.5rem;
+    padding: 0;
+    overflow: hidden;
+    cursor: zoom-in;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.5rem;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.gallery-thumbs__item:hover {
+    box-shadow: 0 0 0 3px rgb(var(--color-primary) / 0.2);
+    transform: translateY(-1px);
+}
+
+.gallery-thumbs__item img,
+.gallery-modal__strip-item img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.gallery-modal {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    visibility: hidden;
+    opacity: 0;
+    background-color: rgb(15 23 42 / 0.9);
+    transition: visibility 0s 0.2s, opacity 0.2s;
+}
+
+.gallery-modal.show {
+    visibility: visible;
+    opacity: 1;
+    transition: visibility 0s, opacity 0.25s;
+}
+
+.gallery-modal__dialog {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    width: min(1100px, 94vw);
+    height: 100%;
+    padding: 1.25rem 0;
+    margin: 0 auto;
+}
+
+.gallery-modal__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #fff;
+}
+
+.gallery-modal__counter {
+    font-size: 0.875rem;
+    opacity: 0.8;
+}
+
+.gallery-modal__stage {
+    position: relative;
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+}
+
+.gallery-modal__image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 40px rgb(0 0 0 / 0.4);
+}
+
+.gallery-modal__close,
+.gallery-modal__nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    color: #fff;
+    cursor: pointer;
+    background-color: rgb(255 255 255 / 0.12);
+    border-radius: 9999px;
+    transition: background-color 0.2s;
+}
+
+.gallery-modal__close:hover,
+.gallery-modal__nav:hover {
+    background-color: rgb(255 255 255 / 0.25);
+}
+
+.gallery-modal__nav {
+    position: absolute;
+    top: 50%;
+    z-index: 1;
+    transform: translateY(-50%);
+}
+
+.gallery-modal__nav--prev {
+    left: 0.5rem;
+}
+
+.gallery-modal__nav--next {
+    right: 0.5rem;
+}
+
+.gallery-modal__nav[hidden] {
+    display: none;
+}
+
+.gallery-modal__strip {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    padding-bottom: 0.25rem;
+    overflow-x: auto;
+}
+
+.gallery-modal__strip-item {
+    flex: none;
+    width: 4rem;
+    height: 3rem;
+    padding: 0;
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid transparent;
+    border-radius: 0.4rem;
+    opacity: 0.55;
+    transition: opacity 0.2s, border-color 0.2s;
+}
+
+.gallery-modal__strip-item:hover,
+.gallery-modal__strip-item.active {
+    opacity: 1;
+}
+
+.gallery-modal__strip-item.active {
+    border-color: #fff;
 }
 
 /* ===== Status badges ===== */

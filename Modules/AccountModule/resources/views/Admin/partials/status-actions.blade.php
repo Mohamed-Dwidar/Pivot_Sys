@@ -11,7 +11,7 @@
 @endphp
 @foreach ($actions as [$newStatus, $actionLabel, $btnClass, $icon, $variant, $confirmText])
     <form method="POST" action="{{ route('admin.accounts.status', $account->id) }}" class="inline-form"
-        data-confirm="&quot;{{ $account->name_ar }}&quot; {{ $confirmText }}"
+        data-confirm="&quot;{{ $account->name }}&quot; {{ $confirmText }}"
         data-confirm-title="{{ $actionLabel }} this account?"
         data-confirm-button="{{ $actionLabel }}"
         data-confirm-variant="{{ $variant }}">

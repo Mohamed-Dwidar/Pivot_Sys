@@ -15,12 +15,9 @@
                 <tr>
                     <td>
                         @if ($account->trashed())
-                            <span class="font-medium">{{ $account->name_ar }}</span>
+                            <span class="font-medium">{{ $account->name }}</span>
                         @else
-                            <a href="{{ route('admin.accounts.show', $account->id) }}" class="font-medium">{{ $account->name_ar }}</a>
-                        @endif
-                        @if ($account->name_en)
-                            <div class="mt-0.5 text-xs text-slate-500">{{ $account->name_en }}</div>
+                            <a href="{{ route('admin.accounts.show', $account->id) }}" class="font-medium">{{ $account->name }}</a>
                         @endif
                     </td>
                     <td>{{ $account->user?->email }}</td>
@@ -37,7 +34,7 @@
                         <div class="actions">
                             @if ($account->trashed())
                                 <form method="POST" action="{{ route('admin.accounts.restore', $account->id) }}" class="inline-form"
-                                    data-confirm="&quot;{{ $account->name_ar }}&quot; will be restored with its previous status ({{ $account->status_label }})."
+                                    data-confirm="&quot;{{ $account->name }}&quot; will be restored with its previous status ({{ $account->status_label }})."
                                     data-confirm-title="Restore this account?"
                                     data-confirm-button="Restore"
                                     data-confirm-variant="success">

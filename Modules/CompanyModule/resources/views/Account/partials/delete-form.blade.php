@@ -1,5 +1,5 @@
 <form method="POST" action="{{ route('account.companies.destroy', $company->id) }}" class="inline-form"
-    data-confirm="&quot;{{ $company->name_ar }}&quot; will be deleted from your companies list."
+    data-confirm="&quot;{{ $company->name }}&quot; will be deleted from your companies list."
     data-confirm-title="Delete this company?"
     data-confirm-button="Delete"
     data-confirm-variant="danger">

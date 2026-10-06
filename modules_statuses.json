@@ -5,5 +5,7 @@
     "AccountModule": true,
     "MemberModule": true,
     "CompanyModule": true,
-    "JobModule": true
+    "JobModule": true,
+    "SpaceModule": true,
+    "UnitModule": true
 }

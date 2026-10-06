@@ -53,8 +53,8 @@
                             @endif
                         </td>
                         <td class="whitespace-nowrap">{{ $member->phone }}</td>
-                        <td>{{ $member->company?->name_ar ?? '-' }}</td>
-                        <td>{{ $member->job?->name_ar ?? '-' }}</td>
+                        <td>{{ $member->company?->name ?? '-' }}</td>
+                        <td>{{ $member->job?->name ?? '-' }}</td>
                         <td class="whitespace-nowrap">{{ $member->created_at->format('Y-m-d') }}</td>
                         <td>
                             <div class="actions">

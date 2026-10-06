@@ -1,0 +1,11 @@
+{
+    "name": "SpaceModule",
+    "alias": "spacemodule",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\SpaceModule\\Providers\\SpaceModuleServiceProvider"
+    ],
+    "files": []
+}

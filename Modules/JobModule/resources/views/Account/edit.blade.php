@@ -1,7 +1,7 @@
 @extends('layoutmodule::account.main')
 
 @section('title')
-    Edit Job: {{ $job->name_ar }}
+    Edit Job: {{ $job->name }}
 @endsection
 
 @section('content')
