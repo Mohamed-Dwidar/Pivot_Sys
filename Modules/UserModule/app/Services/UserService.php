@@ -20,7 +20,7 @@ class UserService
         return $this->userRepository->find($id);
     }
 
-    // create the login of a userable model (Account, ...)
+    // create the login of a userable model (Account, Employee, ...)
     public function createFor(Model $userable, array $data)
     {
         return $userable->user()->create([
@@ -29,12 +29,13 @@ class UserService
         ]);
     }
 
-    // update email; the password is changed only when a new one is sent
+    // update email (when sent); the password is changed only when a new one is sent
     public function update($id, array $data)
     {
-        $user_data = [
-            'email' => $data['email'],
-        ];
+        $user_data = [];
+        if (array_key_exists('email', $data)) {
+            $user_data['email'] = $data['email'];
+        }
         if (!empty($data['password'])) {
             $user_data['password'] = Hash::make($data['password']);
         }

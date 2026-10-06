@@ -28,6 +28,30 @@
             'active' => request()->routeIs('account.jobs.*') && !request()->routeIs('account.jobs.create'),
         ],
         [
+            'title' => 'Employees',
+            'icon' => 'contact',
+            'children' => [
+                [
+                    'title' => 'All Employees',
+                    'icon' => 'list',
+                    'url' => route('account.employees.index'),
+                    'active' => request()->routeIs('account.employees.*'),
+                ],
+                [
+                    'title' => 'Positions',
+                    'icon' => 'award',
+                    'url' => route('account.employee-positions.index'),
+                    'active' => request()->routeIs('account.employee-positions.*'),
+                ],
+                [
+                    'title' => 'Shifts',
+                    'icon' => 'clock',
+                    'url' => route('account.employee-shifts.index'),
+                    'active' => request()->routeIs('account.employee-shifts.*'),
+                ],
+            ],
+        ],
+        [
             'title' => 'Spaces',
             'icon' => 'layout-grid',
             'children' => [

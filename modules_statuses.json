@@ -8,5 +8,6 @@
     "JobModule": true,
     "SpaceModule": true,
     "UnitModule": true,
-    "PlanModule": true
+    "PlanModule": true,
+    "EmployeeModule": true
 }

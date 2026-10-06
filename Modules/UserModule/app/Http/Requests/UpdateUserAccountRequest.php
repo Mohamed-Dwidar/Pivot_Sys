@@ -12,7 +12,10 @@ class UpdateUserAccountRequest extends FormRequest
         $id = $this->user()->id;
 
         return [
-            'email' => ['required', 'email:rfc,filter', 'max:255', Rule::unique('users', 'email')->ignore($id)],
+            // employees can not change their email (their account manages it)
+            'email' => $this->user()->userable->canChangeEmail()
+                ? ['required', 'email:rfc,filter', 'max:255', Rule::unique('users', 'email')->ignore($id)]
+                : ['exclude'],
             'current_password' => 'required|current_password:web',
             'password' => 'nullable|string|min:6|confirmed',
         ];

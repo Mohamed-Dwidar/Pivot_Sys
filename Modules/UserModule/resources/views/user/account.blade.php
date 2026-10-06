@@ -2,7 +2,7 @@
 @extends($layout)
 
 @section('title')
-    Login Details
+    {{ $user->userable->canChangeEmail() ? 'Login Details' : 'Change Password' }}
 @endsection
 
 @section('content')
@@ -11,7 +11,12 @@
         @method('PUT')
 
         <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
-            @include('layoutmodule::partials.field', ['name' => 'email', 'label' => 'Email', 'type' => 'email', 'required' => true, 'value' => $user->email])
+            @if ($user->userable->canChangeEmail())
+                @include('layoutmodule::partials.field', ['name' => 'email', 'label' => 'Email', 'type' => 'email', 'required' => true, 'value' => $user->email])
+            @else
+                @include('layoutmodule::partials.field', ['name' => 'email_display', 'label' => 'Email', 'type' => 'email', 'value' => $user->email,
+                    'attrs' => 'disabled', 'hint' => 'Your company manages your email, you can change your password.'])
+            @endif
         </div>
 
         <div class="form-section mt-8">Change Password</div>

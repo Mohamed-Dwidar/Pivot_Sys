@@ -17,4 +17,7 @@ interface Userable
     public function layout(): string;
 
     public function displayName(): string;
+
+    // Can he change his login email from "Login Details"? (false = only his password, e.g. employees)
+    public function canChangeEmail(): bool;
 }

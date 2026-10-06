@@ -293,6 +293,25 @@ document.addEventListener("change", function (e) {
     }
 });
 
+// Repeated rows (e.g. employee attachments): [data-repeat] > [data-repeat-list] + <template data-repeat-template> (__INDEX__)
+// + [data-repeat-add] button; [data-repeat-remove] inside a row removes it.
+document.addEventListener("click", function (e) {
+    if (!e.target.closest) return;
+    var add = e.target.closest("[data-repeat-add]");
+    if (add) {
+        var box = add.closest("[data-repeat]");
+        var template = box.querySelector("template[data-repeat-template]");
+        box.dataset.next = Number(box.dataset.next || box.querySelectorAll("[data-repeat-list] [data-repeat-row]").length) + 1;
+        box.querySelector("[data-repeat-list]").insertAdjacentHTML("beforeend", template.innerHTML.replace(/__INDEX__/g, box.dataset.next));
+        createIcons({ icons: icons, "stroke-width": 1.5, nameAttr: "data-lucide" });
+        return;
+    }
+    var remove = e.target.closest("[data-repeat-remove]");
+    if (remove) {
+        remove.closest("[data-repeat-row]").remove();
+    }
+});
+
 // Colors drop menu (unitmodule::partials.color-select): pick the clicked color and show it + its name on the button.
 function pickColorOption(option) {
     // the open menu is moved to <body> by the template, so find the button by id, not by parents

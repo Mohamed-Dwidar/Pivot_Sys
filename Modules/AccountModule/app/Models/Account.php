@@ -148,4 +148,9 @@ class Account extends Model implements Userable
     {
         return $this->name;
     }
+
+    public function canChangeEmail(): bool
+    {
+        return true;
+    }
 }

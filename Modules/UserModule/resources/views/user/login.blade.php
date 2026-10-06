@@ -8,8 +8,8 @@
             'remember' => 'remember',
         ])
 
-        <div class="auth-links">
+        {{-- <div class="auth-links">
             Don't have an account? <a href="{{ route('account.register') }}">Create one</a>
-        </div>
+        </div> --}}
     </div>
 @endsection
