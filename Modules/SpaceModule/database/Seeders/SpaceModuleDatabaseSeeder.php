@@ -16,9 +16,9 @@ class SpaceModuleDatabaseSeeder extends Seeder {
 
         DB::table("subscription_types")->truncate();
         $subscriptions = array(
-            array("id" => "1", "name" => "day use", "full_day" => 1, "is_continue" => 0, "is_repeat" => 0, 'show_home' => 0),
-            array("id" => "2", "name" => "subscriptions", "full_day" => 0, "is_continue" => 1, "is_repeat" => 0, 'show_home' => 0),
-            array("id" => "3", "name" => "meeting", "full_day" => 0, "is_continue" => 0, "is_repeat" => 1, 'show_home' => 0),
+            array("id" => "1", "name" => "day use", "full_day" => 1, "auto_renew" => 0, "can_repeat" => 0, 'show_home' => 0),
+            array("id" => "2", "name" => "subscriptions", "full_day" => 0, "auto_renew" => 1, "can_repeat" => 0, 'show_home' => 0),
+            array("id" => "3", "name" => "meeting", "full_day" => 0, "auto_renew" => 0, "can_repeat" => 1, 'show_home' => 0),
         );
         SubscriptionType::insert($subscriptions);
     }

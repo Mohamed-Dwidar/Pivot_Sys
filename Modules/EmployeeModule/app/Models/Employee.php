@@ -136,4 +136,10 @@ class Employee extends Model implements Userable
     {
         return false;
     }
+
+    // he works on his account's data (reservations, packages, ...)
+    public function ownerAccountId(): int
+    {
+        return $this->account_id;
+    }
 }

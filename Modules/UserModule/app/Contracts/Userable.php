@@ -20,4 +20,7 @@ interface Userable
 
     // Can he change his login email from "Login Details"? (false = only his password, e.g. employees)
     public function canChangeEmail(): bool;
+
+    // The account whose data he works on (the account itself, or the account of an employee).
+    public function ownerAccountId(): int;
 }

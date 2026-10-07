@@ -17,13 +17,31 @@ class Plan extends Model
     // lease_period values => labels (same as the units)
     const LEASE_PERIODS = Unit::LEASE_PERIODS;
 
-    protected $fillable = ['account_id', 'name', 'capacity', 'lease_period', 'facilities', 'amount', 'is_active'];
+    protected $fillable = ['account_id', 'name', 'capacity', 'lease_period', 'facilities', 'amount', 'is_time_based', 'is_active'];
 
     protected $casts = [
         'capacity' => 'integer',
         'amount' => 'float',
+        // the reservations have a start / end time (not only dates)
+        'is_time_based' => 'boolean',
         'is_active' => 'boolean',
     ];
+
+    // the hours of one lease period (a time based plan is paid by these periods; month = 30 days, year = 365 days)
+    const PERIOD_HOURS = ['hour' => 1, 'day' => 24, 'week' => 168, 'month' => 720, 'year' => 8760];
+
+    // how many lease periods from $start to $end (e.g. 2.5 hours), the same calculation as custom.js reservationPlanAmount()
+    public function periodsBetween($start, $end): float
+    {
+        $hours = max(0, $start->diffInMinutes($end, false)) / 60;
+        return round($hours / (self::PERIOD_HOURS[$this->lease_period] ?? 1), 2);
+    }
+
+    // the amount of a time based reservation: the plan amount x the periods
+    public function amountBetween($start, $end): float
+    {
+        return round((float) $this->amount * $this->periodsBetween($start, $end), 2);
+    }
 
     public function getLeasePeriodLabelAttribute(): ?string
     {

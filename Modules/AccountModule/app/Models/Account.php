@@ -153,4 +153,9 @@ class Account extends Model implements Userable
     {
         return true;
     }
+
+    public function ownerAccountId(): int
+    {
+        return $this->id;
+    }
 }

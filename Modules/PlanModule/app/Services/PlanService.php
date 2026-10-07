@@ -29,6 +29,18 @@ class PlanService
         return $this->planRepository->forAccount($accountId)->orderBy('name')->pluck('name', 'id')->all();
     }
 
+    // the active plans chosen for the unit, by price: [['id', 'name', 'amount', 'timeBased', 'periodHours'], ...], for the reservation form
+    public function optionsForUnit($unit): array
+    {
+        return $unit->plans()->where('plans.is_active', true)
+            // cheapest first
+            ->orderBy('amount')->orderBy('name')->get()
+            ->map(fn ($plan) => ['id' => $plan->id, 'name' => $plan->name . ' (' . number_format((float) $plan->amount, 2) . ' / ' . ($plan->lease_period_label ?? '-') . ')',
+                'amount' => (float) $plan->amount, 'timeBased' => (int) $plan->is_time_based,
+                'periodHours' => \Modules\PlanModule\app\Models\Plan::PERIOD_HOURS[$plan->lease_period] ?? 1])
+            ->all();
+    }
+
     // 404 when the plan belongs to another account
     public function findOne($accountId, $id)
     {
@@ -72,6 +84,7 @@ class PlanService
             'lease_period' => $data['lease_period'] ?? null,
             'facilities' => $data['facilities'] ?? null,
             'amount' => $data['amount'],
+            'is_time_based' => !empty($data['is_time_based']),
             'is_active' => !empty($data['is_active']),
         ];
     }

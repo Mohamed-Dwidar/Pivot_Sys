@@ -12,17 +12,18 @@ class SubscriptionType extends Model
     // yes / no options => labels (form checkboxes, list badges)
     const OPTIONS = [
         'show_home' => 'Show on Home',
-        'is_repeat' => 'Repeat',
-        'is_continue' => 'Continuous',
+        // the reservations of this type can repeat / renew automatically (continue) (the reservation form shows these options only then)
+        'can_repeat' => 'Can Repeat',
+        'auto_renew' => 'Auto Renew',
         'full_day' => 'Full Day',
     ];
 
-    protected $fillable = ['account_id', 'name', 'show_home', 'is_repeat', 'is_continue', 'full_day'];
+    protected $fillable = ['account_id', 'name', 'show_home', 'can_repeat', 'auto_renew', 'full_day'];
 
     protected $casts = [
         'show_home' => 'boolean',
-        'is_repeat' => 'boolean',
-        'is_continue' => 'boolean',
+        'can_repeat' => 'boolean',
+        'auto_renew' => 'boolean',
         'full_day' => 'boolean',
     ];
 

@@ -17,6 +17,7 @@ return new class extends Migration {
             $table->string('lease_period')->nullable();
             $table->text('facilities')->nullable();
             $table->double('amount')->nullable();
+            $table->boolean('is_time_based')->default(0);
             $table->boolean('is_active')->default(1);
             $table->timestamps();
             $table->softDeletes();

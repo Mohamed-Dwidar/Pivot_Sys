@@ -14,13 +14,13 @@
         <select name="company_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Company">
             <option value="">All Companies</option>
             @foreach ($companies as $id => $name)
-                <option value="{{ $id }}">{{ $name }}</option>
+                <option value="{{ $id }}">{{ Str::humanize($name) }}</option>
             @endforeach
         </select>
         <select name="job_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Job">
             <option value="">All Jobs</option>
             @foreach ($jobs as $id => $name)
-                <option value="{{ $id }}">{{ $name }}</option>
+                <option value="{{ $id }}">{{ Str::humanize($name) }}</option>
             @endforeach
         </select>
         @include('layoutmodule::partials.datatable-clear')

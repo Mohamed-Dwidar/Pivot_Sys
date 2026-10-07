@@ -14,7 +14,7 @@
         <select name="subscription_type_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Subscription type">
             <option value="">All Subscription Types</option>
             @foreach ($subscriptionTypes as $id => $name)
-                <option value="{{ $id }}">{{ $name }}</option>
+                <option value="{{ $id }}">{{ Str::humanize($name) }}</option>
             @endforeach
         </select>
         <select name="is_active" class="{{ config('layoutmodule.form.select') }}" aria-label="Status">

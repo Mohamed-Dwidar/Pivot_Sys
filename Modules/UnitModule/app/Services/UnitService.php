@@ -30,6 +30,22 @@ class UnitService
         return $this->unitRepository->forSpace($space->account_id, $space->id);
     }
 
+    // the active units of the space: [['id', 'name', 'capacity'], ...], for the reservation form
+    public function optionsForSpace(Space $space): array
+    {
+        return $this->unitRepository->forSpace($space->account_id, $space->id)
+            ->where('is_active', true)
+            ->orderByLocalized('name')->get()
+            ->map(fn ($unit) => ['id' => $unit->id, 'name' => $unit->name, 'capacity' => (int) $unit->capacity])
+            ->all();
+    }
+
+    // 404 when the unit is not one of the account's units (any space)
+    public function findForAccount($accountId, $id)
+    {
+        return Unit::where('account_id', $accountId)->findOrFail($id);
+    }
+
     public function countForSpace(Space $space): int
     {
         return $this->unitRepository->forSpace($space->account_id, $space->id)->count();

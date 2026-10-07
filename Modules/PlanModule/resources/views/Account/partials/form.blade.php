@@ -7,6 +7,8 @@
         'options' => ['' => '- Select -'] + \Modules\PlanModule\app\Models\Plan::LEASE_PERIODS, 'value' => $plan?->lease_period])
     @include('layoutmodule::partials.field', ['name' => 'capacity', 'label' => 'Capacity', 'type' => 'number', 'value' => $plan?->capacity,
         'attrs' => 'min="1" step="1" max="100000"', 'hint' => 'Number of persons (optional).'])
+    @include('layoutmodule::partials.checkbox', ['name' => 'is_time_based', 'label' => 'Time based', 'checked' => $plan?->is_time_based ?? false,
+        'hint' => 'The reservations choose a start / end time, not only the dates (e.g. hourly plans).'])
     @include('layoutmodule::partials.checkbox', ['name' => 'is_active', 'label' => 'Active', 'checked' => $plan?->is_active ?? true])
 </div>
 

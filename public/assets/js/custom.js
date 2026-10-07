@@ -109,6 +109,11 @@ var appModal = {
         var body = modal.querySelector(".app-modal__body");
         return fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest", Accept: "text/html" } })
             .then(function (response) {
+                // the session ended (redirected to the login page): reload, the user logs in again
+                if (response.redirected && /\/(login|admin)\/?$/.test(new URL(response.url).pathname)) {
+                    window.location.reload();
+                    throw null;
+                }
                 if (!response.ok) throw response;
                 return response.text();
             })
@@ -120,14 +125,21 @@ var appModal = {
                 var size = content && content.dataset.modalSize ? content.dataset.modalSize : "md";
                 modal.querySelector(".app-modal__dialog").dataset.size = size;
                 createIcons({ icons: icons, "stroke-width": 1.5, nameAttr: "data-lucide" });
+                initForms(body);
                 tailwind.Modal.getOrCreateInstance(modal).show();
                 setTimeout(function () {
                     var focus = body.querySelector("[autofocus]");
                     if (focus) focus.focus();
                 }, 450);
             })
-            .catch(function () {
-                toast("Could not open the page, please try again.", "error");
+            .catch(function (error) {
+                if (error === null) return;
+                // say why (server error code / script error), the details are in the browser console
+                console.error("Popup " + url, error);
+                var reason = error instanceof Response
+                    ? (error.status === 404 ? "it was not found, it may have been deleted" : error.status === 403 ? "you can not open it" : "server error " + error.status)
+                    : "script error: " + (error && error.message ? error.message : error);
+                toast("Could not open the page (" + reason + ").", "error");
             });
     },
     close: function () {
@@ -157,6 +169,7 @@ document.addEventListener("click", function (e) {
 // 422 -> the errors are shown under the fields ([data-field="name"]) or at the top of the form.
 function clearFormErrors(form) {
     form.querySelectorAll("[data-ajax-error]").forEach(function (el) { el.remove(); });
+    form.querySelectorAll(".ts-wrapper.is-invalid").forEach(function (el) { el.classList.remove("is-invalid"); });
     form.querySelectorAll("[data-error-marked]").forEach(function (el) {
         el.classList.replace("border-danger", el.dataset.errorMarked);
         delete el.dataset.errorMarked;
@@ -182,6 +195,7 @@ function showFormErrors(form, errors) {
                 }
             });
         });
+        wrapper.querySelectorAll(".ts-wrapper").forEach(function (box) { box.classList.add("is-invalid"); });
         messages.forEach(function (message) {
             var error = template.content.firstElementChild.cloneNode(true);
             error.textContent = message;
@@ -310,6 +324,315 @@ document.addEventListener("click", function (e) {
     if (remove) {
         remove.closest("[data-repeat-row]").remove();
     }
+});
+
+// ------------------------------------------------------------------
+// Dynamic forms (run on page load and when the popup content is loaded: initForms(root))
+//  - [data-show-if="checkbox name"]: shown only while the checkbox is checked
+//  - [data-disable-if="checkbox name"]: disabled (and emptied) while the checkbox is checked,
+//    data-default-from="field": its value when enabled again and empty
+//  - select[data-options-url][data-parent="field"]: its options are loaded by ajax (?field=value) when the parent changes,
+//    with a loading spinner; it is disabled while the parent is empty; the json is [{id, name, ...}], the other keys become data-*
+//  - Reservation form ([data-reservation-form]): package -> member (locked), plan -> amount, discount % / discount value / net, unit capacity -> people, subscription type -> continue / repeat options
+//  - Package price ([data-package-price]): discount % <-> after discount (from the amount)
+// ------------------------------------------------------------------
+function formField(form, name) {
+    return form.querySelector('[name="' + name + '"]:not([type=hidden])') || form.querySelector('[name="' + name + '"]');
+}
+
+function applyConditions(form) {
+    form.querySelectorAll("[data-show-if]").forEach(function (el) {
+        var checkbox = formField(form, el.dataset.showIf);
+        el.hidden = !(checkbox && checkbox.checked);
+    });
+    form.querySelectorAll("[data-disable-if]").forEach(function (el) {
+        var checkbox = formField(form, el.dataset.disableIf);
+        var off = !!(checkbox && checkbox.checked);
+        el.disabled = off;
+        if (off) {
+            el.value = "";
+        } else if (!el.value && el.dataset.defaultFrom) {
+            var from = formField(form, el.dataset.defaultFrom);
+            el.value = from ? from.value : "";
+        }
+    });
+}
+
+function loadOptions(select) {
+    var form = select.form;
+    var parent = formField(form, select.dataset.parent);
+    var wrapper = select.closest("[data-field]") || select.parentNode;
+    var placeholder = "- Select -";
+    var token = (select._request = (select._request || 0) + 1);
+    // a searchable select (Tom Select) is rebuilt after its options change
+    var searchable = !!select.tomselect;
+    if (searchable) select.tomselect.destroy();
+    var done = function () {
+        if (searchable) initSearchable(select.parentNode);
+        // the next drop menus in the chain follow
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+
+    select.innerHTML = "";
+    if (!parent || !parent.value) {
+        select.add(new Option(placeholder, ""));
+        select.disabled = true;
+        done();
+        return;
+    }
+
+    select.add(new Option("Loading...", ""));
+    select.disabled = true;
+    wrapper.classList.add("is-loading");
+
+    var url = select.dataset.optionsUrl + (select.dataset.optionsUrl.indexOf("?") < 0 ? "?" : "&") + encodeURIComponent(select.dataset.parent) + "=" + encodeURIComponent(parent.value);
+    fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" } })
+        .then(function (response) {
+            if (!response.ok) throw response;
+            return response.json();
+        })
+        .then(function (items) {
+            if (token !== select._request) return;
+            select.innerHTML = "";
+            select.add(new Option(items.length ? placeholder : select.dataset.none || "Nothing to select", ""));
+            items.forEach(function (item) {
+                var option = new Option(item.name, item.id);
+                Object.keys(item).forEach(function (key) {
+                    if (key !== "id" && key !== "name") option.dataset[key] = item[key];
+                });
+                select.add(option);
+            });
+            select.disabled = items.length === 0;
+        })
+        .catch(function () {
+            if (token !== select._request) return;
+            select.innerHTML = "";
+            select.add(new Option("Could not load, change the selection again", ""));
+            toast("Could not load the list, please try again.", "error");
+        })
+        .finally(function () {
+            if (token !== select._request) return;
+            wrapper.classList.remove("is-loading");
+            done();
+        });
+}
+
+function round2(number) {
+    return Math.round((Number(number) || 0) * 100) / 100;
+}
+
+// $source: the field the user changed (amount | percentage | value | net); discount % / discount value / net calculate each other,
+// discount_type keeps the one typed last (when the amount changes it stays and the others follow)
+function reservationCalculate(form, source) {
+    var amountEl = formField(form, "amount");
+    var percentageEl = formField(form, "discount_percentage");
+    var valueEl = formField(form, "discount_value");
+    var typeEl = form.querySelector('[name="discount_type"]');
+    var netEl = form.querySelector("[data-net]");
+    if (!amountEl || !percentageEl || !valueEl || !typeEl || !netEl) return;
+
+    if (source === "percentage" || source === "value" || source === "net") typeEl.value = source;
+    var amount = Math.max(0, Number(amountEl.value) || 0);
+    var value;
+    if (typeEl.value === "net") {
+        value = amount - Math.min(Math.max(0, Number(netEl.value) || 0), amount);
+    } else if (typeEl.value === "value") {
+        value = Math.min(Math.max(0, Number(valueEl.value) || 0), amount);
+    } else {
+        value = amount * Math.min(Math.max(0, Number(percentageEl.value) || 0), 100) / 100;
+    }
+    // the typed field is left as it is
+    if (source !== "percentage") percentageEl.value = round2(amount > 0 ? value / amount * 100 : 0);
+    if (source !== "value") valueEl.value = round2(value);
+    if (source !== "net") netEl.value = round2(amount - value);
+}
+
+// the package member is used and can not be changed
+function reservationLockMember(form) {
+    var packageEl = formField(form, "package_id");
+    var memberEl = formField(form, "member_id");
+    if (!packageEl || !memberEl) return;
+    var option = packageEl.selectedOptions[0];
+    var memberId = option && option.dataset.memberId;
+    var searchable = memberEl.tomselect;
+    if (memberId) {
+        searchable ? searchable.setValue(memberId, true) : (memberEl.value = memberId);
+    }
+    if (searchable) {
+        memberId ? searchable.disable() : searchable.enable();
+    } else {
+        memberEl.disabled = !!memberId;
+    }
+}
+
+// the end date can not be before the start date: it follows the start when needed
+function reservationEndAfterStart(form) {
+    var start = formField(form, "start_at");
+    var end = formField(form, "end_at");
+    if (start && end && !end.disabled && start.value && end.value && end.value < start.value) {
+        end.value = start.value;
+    }
+}
+
+// the continue option / the repeat section are shown only when the subscription type allows them
+// ([data-type-allows="auto-renew|can-repeat"] + the option data-auto-renew / data-can-repeat); hidden = unchecked
+function reservationTypeOptions(form) {
+    var typeEl = formField(form, "subscription_type_id");
+    if (!typeEl) return;
+    var option = typeEl.selectedOptions[0];
+    form.querySelectorAll("[data-type-allows]").forEach(function (box) {
+        var key = box.dataset.typeAllows.replace(/-([a-z])/g, function (m, c) { return c.toUpperCase(); });
+        var allowed = !!(option && option.dataset[key] === "1");
+        box.hidden = !allowed;
+        if (!allowed) {
+            box.querySelectorAll("input[type=checkbox]").forEach(function (checkbox) { checkbox.checked = false; });
+        }
+    });
+    applyConditions(form);
+}
+
+// the amount of the selected plan; a time based plan: the plan amount x the periods from the start to the end
+// (data-period-hours: the hours of one lease period, e.g. 2.5 hours x 50 = 125; the same calculation as Plan::amountBetween)
+function reservationPlanAmount(form) {
+    var planEl = formField(form, "plan_id");
+    var amountEl = formField(form, "amount");
+    var option = planEl && planEl.selectedOptions[0];
+    if (!option || option.dataset.amount === undefined || !amountEl) return;
+
+    var amount = Number(option.dataset.amount) || 0;
+    if (option.dataset.timeBased === "1") {
+        var continues = formField(form, "is_continue");
+        var at = function (date, time) {
+            var d = formField(form, date), t = formField(form, time);
+            return d && d.value && t && t.value ? new Date(d.value + "T" + t.value) : null;
+        };
+        var start = at("start_at", "start_time");
+        var end = continues && continues.checked ? null : at("end_at", "end_time");
+        if (start && end) {
+            var hours = Math.max(0, (end - start) / 3600000);
+            amount = amount * round2(hours / (Number(option.dataset.periodHours) || 1));
+        }
+    }
+    amountEl.value = round2(amount);
+    reservationCalculate(form, "amount");
+}
+
+// a time based plan (option data-time-based="1"): the start / end time inputs are shown ([data-time-fields])
+function reservationTimeBased(form) {
+    var planEl = formField(form, "plan_id");
+    if (!planEl) return;
+    var option = planEl.selectedOptions[0];
+    var timeBased = !!(option && option.dataset.timeBased === "1");
+    form.querySelectorAll("[data-time-fields]").forEach(function (box) {
+        box.hidden = !timeBased;
+    });
+}
+
+// the number of people follows the unit capacity: max = capacity, a unit for 1 person locks it to 1
+function reservationCapacity(form) {
+    var unitEl = formField(form, "unit_id");
+    var peopleEl = formField(form, "number_of_peoples");
+    if (!unitEl || !peopleEl) return;
+    var option = unitEl.selectedOptions[0];
+    var capacity = option && option.dataset.capacity ? Number(option.dataset.capacity) : 0;
+
+    peopleEl.max = capacity > 0 ? capacity : 100000;
+    peopleEl.readOnly = capacity === 1;
+    peopleEl.tabIndex = capacity === 1 ? -1 : 0;
+    if (capacity === 1) peopleEl.value = 1;
+    // the hint under the field (the div after the input, not an error)
+    var hint = peopleEl.closest("[data-field]").querySelector("input ~ div:not([data-ajax-error])");
+    if (hint) hint.textContent = capacity === 1 ? "This unit is for 1 person." : capacity > 0 ? "Up to " + capacity + " persons." : "Not more than the unit capacity.";
+}
+
+// $source: the field the user changed (amount | discount | result); the discount % and the after discount calculate each other
+function packageCalculate(box, source) {
+    var discountEl = box.querySelector('[data-calc="discount"]');
+    var resultEl = box.querySelector('[data-calc="result"]');
+    var typeEl = box.querySelector('[data-calc="type"]');
+    if (source === "discount") typeEl.value = "percentage";
+    if (source === "result") typeEl.value = "after";
+
+    var amount = Math.max(0, Number(box.querySelector('[data-calc="amount"]').value) || 0);
+    if (typeEl.value === "after") {
+        var after = Math.min(Math.max(0, Number(resultEl.value) || 0), amount);
+        discountEl.value = round2(amount > 0 ? (amount - after) / amount * 100 : 0);
+        if (source !== "result") resultEl.value = round2(after);
+    } else {
+        var discount = Math.min(Math.max(0, Number(discountEl.value) || 0), 100);
+        resultEl.value = round2(amount - amount * discount / 100);
+    }
+}
+
+// select[data-searchable]: type to search the options (e.g. members by name or mobile: the option text is "name - phone")
+function initSearchable(root) {
+    if (!window.TomSelect) return;
+    root.querySelectorAll("select[data-searchable]").forEach(function (select) {
+        if (select.tomselect) return;
+        var searchable = new TomSelect(select, {
+            plugins: { dropdown_input: {} },
+            maxOptions: null,
+            allowEmptyOption: true,
+            placeholder: select.options[0] ? select.options[0].text : "",
+            render: {
+                no_results: function () {
+                    return '<div class="no-results">Nothing found</div>';
+                },
+            },
+        });
+        // the search box in the open menu
+        if (searchable.control_input) searchable.control_input.placeholder = "Search...";
+    });
+}
+
+function initForms(root) {
+    initSearchable(root);
+    (root.tagName === "FORM" ? [root] : root.querySelectorAll("form")).forEach(function (form) {
+        applyConditions(form);
+        if (form.matches("[data-reservation-form]")) {
+            reservationLockMember(form);
+            reservationCapacity(form);
+            reservationTypeOptions(form);
+            reservationTimeBased(form);
+        }
+    });
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    initForms(document);
+});
+
+document.addEventListener("change", function (e) {
+    var form = e.target.form;
+    if (!form || !e.target.name) return;
+    var name = e.target.name;
+
+    if (form.querySelector('[data-show-if="' + name + '"], [data-disable-if="' + name + '"]')) {
+        applyConditions(form);
+    }
+    form.querySelectorAll('select[data-options-url][data-parent="' + name + '"]').forEach(loadOptions);
+
+    if (form.matches("[data-reservation-form]")) {
+        if (name === "package_id") reservationLockMember(form);
+        if (name === "unit_id") reservationCapacity(form);
+        if (name === "subscription_type_id") reservationTypeOptions(form);
+        if (name === "start_at") reservationEndAfterStart(form);
+        if (name === "plan_id") reservationTimeBased(form);
+        // the amount follows the plan (and the start / end of a time based plan)
+        if (["plan_id", "start_at", "start_time", "end_at", "end_time", "is_continue"].indexOf(name) >= 0) reservationPlanAmount(form);
+    }
+});
+
+document.addEventListener("input", function (e) {
+    var form = e.target.form;
+    if (!form) return;
+    if (form.matches("[data-reservation-form]")) {
+        var sources = { amount: "amount", discount_percentage: "percentage", discount_value: "value", net_amount: "net" };
+        if (sources[e.target.name]) reservationCalculate(form, sources[e.target.name]);
+        if (e.target.name === "start_at") reservationEndAfterStart(form);
+    }
+    var box = e.target.closest("[data-package-price]");
+    if (box && e.target.dataset.calc) packageCalculate(box, e.target.dataset.calc);
 });
 
 // Colors drop menu (unitmodule::partials.color-select): pick the clicked color and show it + its name on the button.

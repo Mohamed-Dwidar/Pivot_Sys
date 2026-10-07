@@ -10,11 +10,12 @@
     <link rel="icon" href="{{ asset('assets/images/favicon.jpg') }}" type="image/png">
     <link rel="stylesheet" href="{{ asset('assets/css/vendors/simplebar.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/vendors/zoom-vanilla.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/css/vendors/tom-select.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/themes/dagger.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/css/app.css') }}">
     {{-- page vendor styles (e.g. DataTables) before custom.css, so custom.css can override them --}}
     @stack('styles')
-    <link rel="stylesheet" href="{{ asset('assets/css/custom.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/css/custom.css') }}?v={{ filemtime(public_path('assets/css/custom.css')) }}">
     @yield('head')
 </head>
 
@@ -71,8 +72,10 @@
     <script src="{{ asset('assets/js/vendors/simplebar.js') }}"></script>
     <script src="{{ asset('assets/js/vendors/image-zoom.js') }}"></script>
     <script src="{{ asset('assets/js/vendors/modal.js') }}"></script>
+    <script src="{{ asset('assets/js/vendors/tom-select.js') }}"></script>
     <script src="{{ asset('assets/js/components/base/lucide.js') }}"></script>
-    <script src="{{ asset('assets/js/custom.js') }}"></script>
+    {{-- ?v= file time: the browser loads the new file after every change --}}
+    <script src="{{ asset('assets/js/custom.js') }}?v={{ filemtime(public_path('assets/js/custom.js')) }}"></script>
     <script src="{{ asset('assets/js/themes/dagger.js') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     @stack('scripts')

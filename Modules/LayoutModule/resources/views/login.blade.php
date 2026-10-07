@@ -9,7 +9,7 @@
 
     <link rel="icon" href="{{ asset('assets/images/favicon.png') }}" type="image/png">
     <link rel="stylesheet" href="{{ asset('assets/css/app.css') }}">
-    <link rel="stylesheet" href="{{ asset('assets/css/custom.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/css/custom.css') }}?v={{ filemtime(public_path('assets/css/custom.css')) }}">
 </head>
 
 <body>

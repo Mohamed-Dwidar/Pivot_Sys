@@ -14,13 +14,13 @@
         <select name="position_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Position">
             <option value="">All Positions</option>
             @foreach ($positions as $id => $name)
-                <option value="{{ $id }}">{{ $name }}</option>
+                <option value="{{ $id }}">{{ Str::humanize($name) }}</option>
             @endforeach
         </select>
         <select name="shift_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Shift">
             <option value="">All Shifts</option>
             @foreach ($shifts as $id => $name)
-                <option value="{{ $id }}">{{ $name }}</option>
+                <option value="{{ $id }}">{{ Str::humanize($name) }}</option>
             @endforeach
         </select>
         <select name="status" class="{{ config('layoutmodule.form.select') }}" aria-label="Status">

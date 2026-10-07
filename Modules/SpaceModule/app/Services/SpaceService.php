@@ -39,6 +39,15 @@ class SpaceService
         return $this->spaceRepository->forAccount($accountId)->orderByLocalized('name')->get()->pluck('name', 'id')->all();
     }
 
+    // [id => name] of the active spaces that have this subscription type, for the reservation form
+    public function optionsForSubscriptionType($accountId, $subscriptionTypeId): array
+    {
+        return $this->spaceRepository->forAccount($accountId)
+            ->whereHas('subscriptionTypes', fn ($query) => $query->where('subscription_types.id', $subscriptionTypeId))
+            ->where('is_active', true)
+            ->orderByLocalized('name')->get()->pluck('name', 'id')->all();
+    }
+
     public function findOne($accountId, $id)
     {
         return $this->spaceRepository->forAccount($accountId)->findOrFail($id);

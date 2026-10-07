@@ -4,8 +4,10 @@
         'name' => 'name_ar', 'label' => 'Name (Arabic)',
         'type' => 'text|email|password|tel|textarea|select|file',  (default text)
         'value' => $model->name_ar ?? null, 'required' => true,
-        'options' => [value => label] (select), 'hint' => '...', 'attrs' => 'dir=rtl autofocus',
+        'options' => [value => label] or [value => ['name' => label, 'data' => ['amount' => 10]]] (select), 'hint' => '...', 'attrs' => 'dir=rtl autofocus',
         'size' => 'lg' (login / register pages),
+        'searchable' => true (select: type to search its options, template Tom Select, see custom.js initForms),
+        'width' => 'short|medium|long|xlong|full' (instead of the width of its type), 'wrapperClass' => 'md:col-span-2' (the field box),
     ])
 --}}
 @php
@@ -20,14 +22,21 @@
         'number' => 'field-short', 'date' => 'field-short', 'time' => 'field-short', 'datetime-local' => 'field-medium',
         'select' => 'field-medium', 'file' => 'field-long',
     ][$type] ?? null;
+    if (!empty($width)) {
+        $widthClass = $width == 'full' ? null : 'field-' . $width;
+    }
     if ($widthClass) {
         $class .= ' ' . $widthClass;
+    }
+    // Tom Select builds its own box from the select, it gets only the width class
+    if ($type == 'select' && !empty($searchable)) {
+        $class = 'tom-select ' . $widthClass;
     }
     if ($errors->has($name)) {
         $class = str_replace(['border-slate-200', 'border-slate-300/80'], 'border-danger', $class);
     }
 @endphp
-<div data-field="{{ $name }}">
+<div data-field="{{ $name }}" @if (!empty($wrapperClass)) class="{{ $wrapperClass }}" @endif>
     <label for="{{ $id }}" class="{{ config('layoutmodule.form.label') }}">
         {{ $label }}
         @if (!empty($required))
@@ -38,9 +47,12 @@
     @if ($type == 'textarea')
         <textarea name="{{ $name }}" id="{{ $id }}" rows="4" class="{{ $class }}" {!! $attrs ?? '' !!}>{{ $current }}</textarea>
     @elseif ($type == 'select')
-        <select name="{{ $name }}" id="{{ $id }}" class="{{ $class }}" {!! $attrs ?? '' !!}>
+        <select name="{{ $name }}" id="{{ $id }}" class="{{ $class }}" @if (!empty($searchable)) data-searchable @endif {!! $attrs ?? '' !!}>
             @foreach ($options as $optionValue => $optionLabel)
-                <option value="{{ $optionValue }}" @selected((string) $current === (string) $optionValue)>{{ $optionLabel }}</option>
+                {{-- an option can be ['name' => ..., 'data' => ['amount' => 10]] (data-amount="10") --}}
+                <option value="{{ $optionValue }}" @selected((string) $current === (string) $optionValue)
+                    @if (is_array($optionLabel)) @foreach ($optionLabel['data'] ?? [] as $dataKey => $dataValue) data-{{ $dataKey }}="{{ $dataValue }}" @endforeach @endif
+                    >{{ Str::humanize(is_array($optionLabel) ? $optionLabel['name'] : $optionLabel) }}</option>
             @endforeach
         </select>
     @else

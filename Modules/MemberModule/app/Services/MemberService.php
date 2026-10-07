@@ -3,6 +3,7 @@
 namespace Modules\MemberModule\app\Services;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 use Modules\MemberModule\app\Repositories\MemberRepository;
 
 /**
@@ -21,6 +22,13 @@ class MemberService
     public function listQuery($accountId, array $filters = [])
     {
         return $this->memberRepository->forAccount($accountId)->filter($filters);
+    }
+
+    // [id => "name mobile"] (searchable by both), for the packages / reservations forms
+    public function options($accountId): array
+    {
+        return $this->memberRepository->forAccount($accountId)->orderBy('name')->get()
+            ->mapWithKeys(fn ($member) => [$member->id => $member->name . ' ' . $member->phone])->all();
     }
 
     // 404 when the member belongs to another account
@@ -57,7 +65,8 @@ class MemberService
     private function memberData(array $data): array
     {
         return [
-            'name' => $data['name'],
+            // saved humanized: "ahmed_ali" / "ahmed ali" => "Ahmed Ali"
+            'name' => Str::humanize($data['name']),
             'phone' => $data['phone'],
             'email' => $data['email'] ?? null,
             'national_number' => $data['national_number'] ?? null,

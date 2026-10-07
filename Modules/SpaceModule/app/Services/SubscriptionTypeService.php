@@ -33,6 +33,16 @@ class SubscriptionTypeService
         return $this->subscriptionTypeRepository->forAccount($accountId)->orderBy('name')->pluck('name', 'id')->all();
     }
 
+    // for the reservation form: [id => ['name', 'data' => ['can-repeat' => 0|1, 'auto-renew' => 0|1]]]
+    public function reservationOptions($accountId): array
+    {
+        return $this->subscriptionTypeRepository->forAccount($accountId)->orderBy('name')->get()
+            ->mapWithKeys(fn ($type) => [$type->id => [
+                'name' => $type->name,
+                'data' => ['can-repeat' => (int) $type->can_repeat, 'auto-renew' => (int) $type->auto_renew],
+            ]])->all();
+    }
+
     // 404 when the subscription type belongs to another account
     public function findOne($accountId, $id)
     {

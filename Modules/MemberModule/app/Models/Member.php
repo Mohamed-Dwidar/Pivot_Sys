@@ -4,10 +4,13 @@ namespace Modules\MemberModule\app\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Modules\AccountModule\app\Models\Account;
 use Modules\CompanyModule\app\Models\Company;
 use Modules\JobModule\app\Models\Job;
+use Modules\PackageModule\app\Models\Package;
+use Modules\ReservationModule\app\Models\Reservation;
 
 class Member extends Model
 {
@@ -33,6 +36,16 @@ class Member extends Model
     public function job(): BelongsTo
     {
         return $this->belongsTo(Job::class)->withTrashed();
+    }
+
+    public function packages(): HasMany
+    {
+        return $this->hasMany(Package::class);
+    }
+
+    public function reservations(): HasMany
+    {
+        return $this->hasMany(Reservation::class);
     }
 
     // who added the member (users / admins)

@@ -9,5 +9,7 @@
     "SpaceModule": true,
     "UnitModule": true,
     "PlanModule": true,
-    "EmployeeModule": true
+    "EmployeeModule": true,
+    "ReservationModule": true,
+    "PackageModule": true
 }

@@ -16,6 +16,7 @@ class PlanRequest extends FormRequest
             'lease_period' => ['required', Rule::in(array_keys(Plan::LEASE_PERIODS))],
             'amount' => 'required|numeric|min:0|max:99999999',
             'facilities' => 'nullable|string|max:5000',
+            'is_time_based' => 'boolean',
             'is_active' => 'boolean',
         ];
     }

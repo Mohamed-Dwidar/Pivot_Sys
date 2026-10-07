@@ -10,6 +10,30 @@
 
         ['divider' => 'Management'],
         [
+            'title' => 'Reservations',
+            'icon' => 'calendar-check',
+            'children' => [
+                [
+                    'title' => 'All Reservations',
+                    'icon' => 'list',
+                    'url' => route('account.reservations.index'),
+                    'active' => request()->routeIs('account.reservations.*'),
+                ],
+                [
+                    'title' => 'Packages',
+                    'icon' => 'package',
+                    'url' => route('account.packages.index'),
+                    'active' => request()->routeIs('account.packages.*'),
+                ],
+                [
+                    'title' => 'Statuses',
+                    'icon' => 'list-checks',
+                    'url' => route('account.reservation-statuses.index'),
+                    'active' => request()->routeIs('account.reservation-statuses.*'),
+                ],
+            ],
+        ],
+        [
             'title' => 'Members',
             'icon' => 'users',
             'url' => route('account.members.index'),

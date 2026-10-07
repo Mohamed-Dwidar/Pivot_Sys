@@ -1,0 +1,3 @@
+<?php
+
+// ReservationModule API routes
