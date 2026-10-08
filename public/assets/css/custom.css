@@ -1193,3 +1193,88 @@ input:disabled:not([type="checkbox"]):not([type="radio"]) {
     align-items: center;
     gap: 0.3rem;
 }
+
+/* tables with fixed column widths (the widths of the header cells are kept, the long texts wrap) */
+.data-table--fixed {
+    table-layout: fixed;
+}
+
+.data-table--fixed td {
+    overflow-wrap: anywhere;
+}
+
+/* package view, reservations table: the "Space / Unit" column */
+.data-table th.col-place {
+    width: 38%;
+}
+.data-table th.col-period {
+    width: 35%;
+}
+
+/* package view: the package net (green badge on the right of the member name), bigger than a normal badge */
+.badge.package-total {
+    padding: 0.35rem 1rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+/* a table that scrolls inside a fixed height (e.g. the reservations of a package), the header row stays visible */
+.table-wrap--scroll {
+    max-height: 22rem;
+    overflow-y: auto;
+    border: 1px solid rgb(226 232 240 / 0.6);
+    border-radius: 0.5rem;
+}
+
+.table-wrap--scroll .data-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+/* reservation status badges: one class per color (ReservationStatus::COLORS) */
+.badge-status-success { color: rgb(var(--color-success)); background-color: rgb(var(--color-success) / 0.1); border-color: rgb(var(--color-success) / 0.25); }
+.badge-status-primary { color: rgb(var(--color-primary)); background-color: rgb(var(--color-primary) / 0.1); border-color: rgb(var(--color-primary) / 0.25); }
+.badge-status-info { color: rgb(var(--color-info)); background-color: rgb(var(--color-info) / 0.1); border-color: rgb(var(--color-info) / 0.25); }
+.badge-status-warning { color: rgb(161 98 7); background-color: rgb(var(--color-warning) / 0.15); border-color: rgb(var(--color-warning) / 0.3); }
+.badge-status-pending { color: rgb(var(--color-pending)); background-color: rgb(var(--color-pending) / 0.1); border-color: rgb(var(--color-pending) / 0.25); }
+.badge-status-danger { color: rgb(var(--color-danger)); background-color: rgb(var(--color-danger) / 0.1); border-color: rgb(var(--color-danger) / 0.25); }
+.badge-status-slate { color: rgb(71 85 105); background-color: rgb(241 245 249); border-color: rgb(226 232 240); }
+.badge-status-dark { color: #fff; background-color: rgb(var(--color-dark)); border-color: rgb(var(--color-dark)); }
+
+/* reservation view: the status drop menu (styled like its badge) */
+.status-menu__toggle {
+    gap: 0.3rem;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.status-menu__chevron {
+    width: 0.85rem;
+    height: 0.85rem;
+}
+
+/* saving: a spinner instead of the arrow */
+.status-menu__spinner {
+    display: none;
+    width: 0.85rem;
+    height: 0.85rem;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 9999px;
+    animation: row-toggle-spin 0.7s linear infinite;
+}
+
+.status-menu__toggle.is-sending {
+    cursor: progress;
+    opacity: 0.75;
+}
+
+.status-menu__toggle.is-sending .status-menu__chevron {
+    display: none;
+}
+
+.status-menu__toggle.is-sending .status-menu__spinner {
+    display: inline-block;
+}

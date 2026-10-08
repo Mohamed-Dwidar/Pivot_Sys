@@ -635,6 +635,61 @@ document.addEventListener("input", function (e) {
     if (box && e.target.dataset.calc) packageCalculate(box, e.target.dataset.calc);
 });
 
+// Reservation status menu (reservationmodule::Reservation.partials.status-menu): the chosen status is saved by ajax,
+// the badge is locked with a spinner until the answer, then it gets the new name + color (and the list row is updated)
+document.addEventListener("click", function (e) {
+    var option = e.target.closest && e.target.closest("[data-status-option]");
+    if (!option) return;
+    var toggle = document.getElementById(option.dataset.toggle);
+    if (!toggle || toggle.classList.contains("is-sending")) return;
+
+    var data = new FormData();
+    data.append("_method", "PATCH");
+    data.append("_token", document.querySelector('meta[name="csrf-token"]').content);
+    data.append("reservation_status_id", option.dataset.statusId);
+    // the list filters: the row leaves the list when it does not match them any more
+    if (window.dataTables) {
+        var filters = window.dataTables.filters(option.dataset.row);
+        Object.keys(filters).forEach(function (name) { data.append("list[" + name + "]", filters[name]); });
+    }
+
+    toggle.classList.add("is-sending");
+    toggle.disabled = true;
+    fetch(option.dataset.url, { method: "POST", body: data, headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" } })
+        .then(function (response) {
+            return response.json().catch(function () { return {}; }).then(function (json) { return { ok: response.ok, json: json }; });
+        })
+        .then(function (result) {
+            var json = result.json;
+            if (!result.ok || !json.status) {
+                var errors = json.errors ? Object.values(json.errors)[0] : null;
+                toast((errors && errors[0]) || json.message || "Could not change the status, please try again.", "error");
+                return;
+            }
+            // the new badge
+            toggle.className = json.status.class + " status-menu__toggle";
+            toggle.querySelector("[data-status-name]").textContent = json.status.name;
+            // the check mark on the chosen status
+            document.querySelectorAll('[data-status-option][data-toggle="' + option.dataset.toggle + '"]').forEach(function (item) {
+                var check = item.querySelector("[data-lucide='check'], svg.lucide-check");
+                if (check) check.remove();
+                if (item.dataset.statusId === String(json.status.id)) {
+                    item.insertAdjacentHTML("beforeend", '<i data-lucide="check" class="ml-auto h-4 w-4 text-slate-500"></i>');
+                }
+            });
+            createIcons({ icons: icons, "stroke-width": 1.5, nameAttr: "data-lucide" });
+            if (window.dataTables && "row" in json) window.dataTables.update(option.dataset.row, json.row);
+            toast(json.message);
+        })
+        .catch(function () {
+            toast("Could not connect to the server, please try again.", "error");
+        })
+        .finally(function () {
+            toggle.classList.remove("is-sending");
+            toggle.disabled = false;
+        });
+});
+
 // Colors drop menu (unitmodule::partials.color-select): pick the clicked color and show it + its name on the button.
 function pickColorOption(option) {
     // the open menu is moved to <body> by the template, so find the button by id, not by parents

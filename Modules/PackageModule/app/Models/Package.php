@@ -10,10 +10,11 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\AccountModule\app\Models\Account;
 use Modules\MemberModule\app\Models\Member;
 use Modules\ReservationModule\app\Models\Reservation;
+use Modules\ReservationModule\app\Models\ReservationStatus;
 
 /**
- * A package of a member: amount - discount_percentage = after_discount (the package price),
- * total_amount = net amount of its reservations, remaining = after_discount - total_amount (see recalculate()).
+ * A package of a member: its price (amount) = the net amounts of its reservations,
+ * - discount_percentage = after_discount (the package net), see recalculate() (after every reservation change).
  */
 class Package extends Model
 {
@@ -72,20 +73,67 @@ class Package extends Model
     }
 
     // total_amount / remaining from its reservations (after a reservation is saved / deleted)
+    // the package price = the net amounts of its reservations, then its discount % => the package net (after_discount)
+    // (total_amount = the same sum, remaining = the net: nothing is paid yet)
     public function recalculate(): void
     {
-        $this->total_amount = round((float) $this->reservations()->sum('net_amount'), 2);
-        $this->remaining = round($this->after_discount - $this->total_amount, 2);
+        $sum = $this->reservationsTotal();
+        [, $afterDiscount] = self::calculate($sum, (float) $this->discount_percentage, null, 'percentage');
+
+        // the dates: the first start / the last end of its counted reservations (no end when one of them continues)
+        $counted = $this->reservations()->whereNotIn('reservation_status_id', ReservationStatus::notCountedIds());
+        $this->date_from = (clone $counted)->min('start_at');
+        $this->date_to = (clone $counted)->where(fn ($query) => $query->whereNull('end_at')->orWhere('is_continue', true))->exists()
+            ? null
+            : (clone $counted)->max('end_at');
+
+        $this->amount = $sum;
+        $this->total_amount = $sum;
+        $this->after_discount = $afterDiscount;
+        $this->remaining = $afterDiscount;
         $this->save();
     }
 
-    // "2026-10-01 → 2026-12-31"
+    // the total hours of its reservations (start -> end, a whole day = 24 hours);
+    // the continuous ones have no end: not counted, their number is returned as 'open'
+    public function reservationsHours(): array
+    {
+        $minutes = 0;
+        $open = 0;
+        foreach ($this->reservations as $reservation) {
+            // a not counted status (cancelled ...) is not in the hours
+            if ($reservation->status && !$reservation->status->is_counted) {
+                continue;
+            }
+            if (!$reservation->start_at || !$reservation->end_at) {
+                $open++;
+                continue;
+            }
+            // a whole day ends at 23:59:59: count the last second as a full minute
+            $minutes += (int) ceil($reservation->start_at->diffInSeconds($reservation->end_at, false) / 60);
+        }
+
+        return ['hours' => round(max(0, $minutes) / 60, 2), 'open' => $open];
+    }
+
+    // the price now: the net amounts of its counted reservations (not the cancelled like statuses), 0 for a new package
+    public function reservationsTotal(): float
+    {
+        return $this->exists
+            ? round((float) $this->reservations()->whereNotIn('reservation_status_id', ReservationStatus::notCountedIds())->sum('net_amount'), 2)
+            : 0;
+    }
+
+    // from its reservations: "01-10-2026 → 31-12-2026" / "From 01-10-2026 (continues)" / "-" (no reservations)
     public function getPeriodAttribute(): string
     {
-        if (!$this->date_from && !$this->date_to) {
+        if (!$this->date_from) {
             return '-';
         }
-        return ($this->date_from?->format('Y-m-d') ?? '...') . ' → ' . ($this->date_to?->format('Y-m-d') ?? '...');
+        $format = Reservation::DATE_FORMAT;
+        return $this->date_to
+            ? $this->date_from->format($format) . ' → ' . $this->date_to->format($format)
+            : 'From ' . $this->date_from->format($format) . ' (continues)';
     }
 
     public function scopeFilter($query, array $filters = [])

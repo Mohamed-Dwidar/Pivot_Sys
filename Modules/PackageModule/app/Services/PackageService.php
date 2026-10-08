@@ -45,7 +45,8 @@ class PackageService
     // $creator: the logged in user who adds the package
     public function create($accountId, array $data, Model $creator)
     {
-        $package = $this->packageRepository->makeModel()->newInstance($this->packageData($data) + ['account_id' => $accountId]);
+        $package = $this->packageRepository->makeModel()->newInstance(['account_id' => $accountId]);
+        $package->fill($this->packageData($package, $data));
         $package->creatable()->associate($creator);
         $package->save();
         $package->recalculate();
@@ -56,7 +57,7 @@ class PackageService
     public function update($accountId, $id, array $data)
     {
         $package = $this->findOne($accountId, $id);
-        $package->fill($this->packageData($data));
+        $package->fill($this->packageData($package, $data));
         $package->recalculate();
         return $package;
     }
@@ -85,11 +86,11 @@ class PackageService
         Package::find($packageId)?->recalculate();
     }
 
-    private function packageData(array $data): array
+    // the price is the reservations total (not typed); the discount typed as % or as the net is saved as a %
+    private function packageData(Package $package, array $data): array
     {
-        $amount = (float) $data['amount'];
-        [$discount, $afterDiscount] = Package::calculate(
-            $amount,
+        [$discount] = Package::calculate(
+            $package->reservationsTotal(),
             isset($data['discount_percentage']) ? (float) $data['discount_percentage'] : null,
             isset($data['after_discount']) ? (float) $data['after_discount'] : null,
             $data['discount_type'] ?? 'percentage'
@@ -98,11 +99,7 @@ class PackageService
         return [
             'name' => $data['name'],
             'member_id' => $data['member_id'],
-            'date_from' => $data['date_from'] ?? null,
-            'date_to' => $data['date_to'] ?? null,
-            'amount' => $amount,
             'discount_percentage' => $discount,
-            'after_discount' => $afterDiscount,
             'is_active' => !empty($data['is_active']),
             'notes' => $data['notes'] ?? null,
         ];

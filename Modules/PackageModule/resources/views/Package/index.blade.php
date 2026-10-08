@@ -34,9 +34,9 @@
                     <th data-data="name_html" data-name="name">Package</th>
                     <th data-data="member">Member</th>
                     <th data-data="period" data-name="date_from" data-class="whitespace-nowrap">Period</th>
-                    <th data-data="after_discount" data-name="after_discount">Price</th>
-                    <th data-data="total_amount" data-name="total_amount">Used</th>
-                    <th data-data="remaining" data-name="remaining">Remaining</th>
+                    <th data-data="amount" data-name="amount">Price</th>
+                    <th data-data="discount" data-name="discount_percentage">Discount</th>
+                    <th data-data="after_discount" data-name="after_discount">Net</th>
                     <th data-data="reservations_count" data-name="reservations_count">Reservations</th>
                     <th data-data="status" data-name="is_active">Status</th>
                     <th data-data="actions"></th>

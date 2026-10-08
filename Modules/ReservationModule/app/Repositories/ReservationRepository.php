@@ -15,6 +15,6 @@ class ReservationRepository extends BaseRepository
     // reservations of one account only
     public function forAccount($accountId)
     {
-        return Reservation::with('member', 'space', 'unit', 'plan', 'package', 'status', 'subscriptionType')->where('account_id', $accountId);
+        return Reservation::with('member', 'space', 'unit.color', 'plan', 'package', 'status', 'subscriptionType')->where('account_id', $accountId);
     }
 }

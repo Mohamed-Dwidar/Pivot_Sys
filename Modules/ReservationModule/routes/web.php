@@ -22,6 +22,7 @@ $reservationRoutes = function ($controller) {
     Route::get('{id}', [$controller, 'show'])->name('show');
     Route::get('{id}/edit', [$controller, 'edit'])->name('edit');
     Route::put('{id}', [$controller, 'update'])->name('update');
+    Route::patch('{id}/status', [$controller, 'changeStatus'])->name('status');
     Route::delete('{id}', [$controller, 'destroy'])->name('destroy');
 };
 

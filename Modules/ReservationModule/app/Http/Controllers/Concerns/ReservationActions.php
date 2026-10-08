@@ -117,13 +117,14 @@ trait ReservationActions
                 + Arr::only($filters, ['reservation_status_id', 'space_id', 'date_from', 'date_to'])))
             ->setRowId(fn ($reservation) => 'row-' . $reservation->id)
             ->addColumn('member_html', fn ($reservation) => view('reservationmodule::Reservation.partials.row-member', compact('reservation'))->render())
-            ->addColumn('place', fn ($reservation) => e(($reservation->space?->name ?? '-') . ' › ' . ($reservation->unit?->name ?? '-')))
+            // (the unit color) space › unit
+            ->addColumn('place', fn ($reservation) => view('reservationmodule::Reservation.partials.row-place', compact('reservation'))->render())
             ->addColumn('plan', fn ($reservation) => e($reservation->plan?->name ?? '-'))
             ->addColumn('period', fn ($reservation) => e($reservation->period))
-            ->addColumn('status', fn ($reservation) => '<span class="badge badge-inactive">' . e($reservation->status?->name ?? '-') . '</span>')
+            ->addColumn('status', fn ($reservation) => '<span class="' . ($reservation->status?->badge_class ?? 'badge badge-status-slate') . '">' . e($reservation->status?->name ?? '-') . '</span>')
             ->editColumn('net_amount', fn ($reservation) => number_format($reservation->net_amount, 2))
             ->addColumn('actions', fn ($reservation) => view('reservationmodule::Reservation.partials.row-actions', compact('reservation'))->render())
-            ->rawColumns(['member_html', 'status', 'actions'])
+            ->rawColumns(['member_html', 'place', 'status', 'actions'])
             ->only(['DT_RowId', 'member_html', 'place', 'plan', 'period', 'status', 'net_amount', 'actions']);
     }
 
@@ -173,7 +174,26 @@ trait ReservationActions
     public function show($id)
     {
         $reservation = $this->reservationService->findOne($this->accountId(), $id);
-        return view('reservationmodule::Reservation.show', compact('reservation'));
+        // the status menu (the header of the view)
+        $statuses = $this->statusService->menuOptions($this->accountId(), $reservation->reservation_status_id);
+        return view('reservationmodule::Reservation.show', compact('reservation', 'statuses'));
+    }
+
+    // the status menu of the view (ajax): the new status badge + the list row
+    public function changeStatus(Request $request, $id)
+    {
+        $request->validate([
+            'reservation_status_id' => ['required', 'integer', \Illuminate\Validation\Rule::exists('reservation_statuses', 'id')
+                ->where('account_id', $this->accountId())->where('is_active', true)->whereNull('deleted_at')],
+        ], ['reservation_status_id.exists' => 'This status is not available, choose another one.']);
+
+        $reservation = $this->reservationService->changeStatus($this->accountId(), $id, (int) $request->input('reservation_status_id'));
+
+        return response()->json([
+            'message' => 'The status has been changed to "' . $reservation->status?->name . '".',
+            'status' => ['id' => $reservation->reservation_status_id, 'name' => $reservation->status?->name, 'class' => $reservation->status?->badge_class],
+            'row' => $this->row($request, $id),
+        ]);
     }
 
     public function edit($id)

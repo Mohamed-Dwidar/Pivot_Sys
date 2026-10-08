@@ -22,6 +22,8 @@ class ReservationStatusRequest extends FormRequest
                 }
             }],
             'sort_order' => 'nullable|integer|min:0|max:65535',
+            'color' => ['required', \Illuminate\Validation\Rule::in(array_keys(ReservationStatus::COLORS))],
+            'is_counted' => 'boolean',
         ];
     }
 

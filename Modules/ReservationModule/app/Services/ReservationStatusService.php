@@ -38,6 +38,14 @@ class ReservationStatusService
         return (int) ((clone $statuses)->where('is_default', true)->value('id') ?: $statuses->ordered()->value('id'));
     }
 
+    // the status menu of a reservation: the active statuses (+ its current one) with their badge classes
+    public function menuOptions($accountId, $currentId = null)
+    {
+        return $this->statusRepository->forAccount($accountId)
+            ->where(fn ($query) => $query->where('is_active', true)->orWhere('id', (int) $currentId))
+            ->ordered()->get();
+    }
+
     // all of them, for the list filter
     public function filterOptions($accountId): array
     {
@@ -138,6 +146,8 @@ class ReservationStatusService
             'name_en' => $data['name_en'] ?? null,
             'is_active' => !empty($data['is_active']),
             'is_default' => !empty($data['is_default']),
+            'color' => $data['color'],
+            'is_counted' => !empty($data['is_counted']),
             'sort_order' => (int) ($data['sort_order'] ?? 0),
         ];
     }

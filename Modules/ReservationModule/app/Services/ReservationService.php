@@ -83,6 +83,18 @@ class ReservationService
         });
     }
 
+    // the status menu of the reservation view; the package is calculated again (a not counted status is not in its price)
+    public function changeStatus($accountId, $id, $statusId)
+    {
+        $reservation = $this->findOne($accountId, $id);
+
+        return DB::transaction(function () use ($reservation, $statusId) {
+            $reservation->update(['reservation_status_id' => $statusId]);
+            $this->packageService->recalculate($reservation->package_id);
+            return $reservation->load('status');
+        });
+    }
+
     // soft delete
     public function deleteOne($accountId, $id)
     {

@@ -51,7 +51,9 @@ class ReservationStatusAccountModuleController extends Controller
             ->setRowId(fn ($status) => 'row-' . $status->id)
             ->orderColumn('name', fn ($query, $order) => $query->orderByLocalized('name', $order))
             ->orderColumn('sort_order', fn ($query, $order) => $query->orderBy('sort_order', $order)->orderBy('id', $order))
-            ->addColumn('name_html', fn ($status) => '<a href="' . route('account.reservation-statuses.edit', $status->id) . '" data-modal class="font-medium">' . e($status->name) . '</a>')
+            // the name as its colored badge (+ "not counted")
+            ->addColumn('name_html', fn ($status) => '<a href="' . route('account.reservation-statuses.edit', $status->id) . '" data-modal class="' . $status->badge_class . '">' . e($status->name) . '</a>'
+                . ($status->is_counted ? '' : ' <span class="ml-1 text-xs text-slate-500">not counted</span>'))
             // the default status (given to the new reservations): switch on another one to change it
             ->addColumn('default', fn ($status) => view('layoutmodule::partials.row-toggle', [
                 'url' => route('account.reservation-statuses.default', $status->id), 'row' => $status->id, 'name' => 'is_default', 'checked' => $status->is_default,
