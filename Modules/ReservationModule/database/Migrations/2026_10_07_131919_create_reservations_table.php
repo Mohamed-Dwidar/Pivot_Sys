@@ -29,8 +29,8 @@ return new class extends Migration {
             $table->boolean('all_day')->default(0);
             $table->bigInteger('repeat_id')->default(0);
             $table->boolean('is_repeat')->default(0);
-            $table->enum('repeat_frequency', ['daily', 'weekly', 'monthly', 'yearly'])->default('monthly');
-            $table->unsignedSmallInteger('repeat_interval')->default(1);
+            $table->enum('repeat_frequency', ['daily', 'weekly', 'monthly', 'yearly'])->nullable();
+            $table->unsignedSmallInteger('repeat_interval')->default(0);
 
             $table->integer('number_of_peoples')->default(1);
 

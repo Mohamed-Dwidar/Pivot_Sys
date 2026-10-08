@@ -191,6 +191,19 @@ class Reservation extends Model
         return [round($value, 2), round($percentage, 2), round($amount - $value, 2)];
     }
 
+    // the counted reservations of the unit that overlap start -> end (no end = it continues): they start before the end
+    // and end after the start (or continue); the deleted ones and the not counted statuses (cancelled ...) are not counted
+    public function scopeOverlapping($query, $unitId, $start, $end = null)
+    {
+        $query->where('unit_id', $unitId)
+            ->whereNotIn('reservation_status_id', ReservationStatus::notCountedIds())
+            ->where(fn ($query) => $query->whereNull('end_at')->orWhere('end_at', '>', $start));
+        if ($end) {
+            $query->where('start_at', '<', $end);
+        }
+        return $query;
+    }
+
     public function scopeFilter($query, array $filters = [])
     {
         if (!empty($filters['search'])) {

@@ -47,7 +47,7 @@
         'attrs' => 'data-options-url="' . route($area . '.reservations.options.spaces') . '" data-parent="subscription_type_id" data-none="No spaces with this subscription type"' . (empty($spaces) ? ' disabled' : '')])
     @include('layoutmodule::partials.field', ['name' => 'unit_id', 'label' => 'Unit', 'type' => 'select', 'required' => true, 'searchable' => true,
         'options' => ['' => '- Select -'] + $unitOptions, 'value' => $reservation?->unit_id,
-        'attrs' => 'data-options-url="' . route($area . '.reservations.options.units') . '" data-parent="space_id" data-none="No active units in this space"' . (empty($unitOptions) ? ' disabled' : '')])
+        'attrs' => 'data-options-url="' . route($area . '.reservations.options.units') . '" data-parent="space_id" data-also="subscription_type_id" data-none="No active units for this space and subscription type"' . (empty($unitOptions) ? ' disabled' : '')])
     @include('layoutmodule::partials.field', ['name' => 'plan_id', 'label' => 'Plan', 'type' => 'select', 'required' => true, 'searchable' => true,
         'options' => ['' => '- Select -'] + $planOptions, 'value' => $reservation?->plan_id,
         'attrs' => 'data-options-url="' . route($area . '.reservations.options.plans') . '" data-parent="unit_id" data-none="No plans for this unit"' . (empty($planOptions) ? ' disabled' : ''),

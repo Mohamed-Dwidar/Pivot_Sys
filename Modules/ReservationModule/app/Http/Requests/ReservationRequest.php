@@ -9,6 +9,7 @@ use Illuminate\Validation\Validator;
 use Modules\ReservationModule\app\Models\Reservation;
 use Modules\PlanModule\app\Models\Plan;
 use Modules\SpaceModule\app\Models\SubscriptionType;
+use Modules\ReservationModule\app\Services\ReservationService;
 use Modules\UnitModule\app\Models\Unit;
 
 class ReservationRequest extends FormRequest
@@ -27,7 +28,8 @@ class ReservationRequest extends FormRequest
             // the chain: a space that has the subscription type, a unit of the space, a plan chosen for the unit (all active)
             'space_id' => ['required', 'integer', $ownedBy('spaces')->where('is_active', true),
                 Rule::exists('space_subscription_type', 'space_id')->where('subscription_type_id', (int) $this->input('subscription_type_id'))],
-            'unit_id' => ['required', 'integer', $ownedBy('units')->where('space_id', (int) $this->input('space_id'))->where('is_active', true)],
+            'unit_id' => ['required', 'integer', $ownedBy('units')->where('space_id', (int) $this->input('space_id'))->where('is_active', true)
+                ->where('subscription_type_id', (int) $this->input('subscription_type_id'))],
             'plan_id' => ['required', 'integer', $ownedBy('plans')->where('is_active', true),
                 Rule::exists('plan_unit', 'plan_id')->where('unit_id', (int) $this->input('unit_id'))],
             'package_id' => ['nullable', 'integer', $ownedBy('packages')],
@@ -104,6 +106,15 @@ class ReservationRequest extends FormRequest
             if ($capacity && (int) $this->input('number_of_peoples') > $capacity) {
                 $validator->errors()->add('number_of_peoples', 'The unit capacity is ' . $capacity . ' persons.');
             }
+
+            // the unit must be free in the period (+ the repeats on create); the message is shown at the top of the form,
+            // as HTML ("html_" key: the reservations are links, the texts are escaped by the service)
+            if ($validator->errors()->isEmpty()) {
+                $error = app(ReservationService::class)->availabilityError($this->all(), $this->route('id'));
+                if ($error) {
+                    $validator->errors()->add('html_availability', $error);
+                }
+            }
         });
     }
 
@@ -111,7 +122,7 @@ class ReservationRequest extends FormRequest
     {
         return [
             'space_id.exists' => 'The selected space is inactive or does not have this subscription type.',
-            'unit_id.exists' => 'The selected unit is inactive or not in this space.',
+            'unit_id.exists' => 'The selected unit is inactive, not in this space or not for this subscription type.',
             'plan_id.exists' => 'The selected plan is inactive or not available for this unit.',
             'member_id.required_without' => 'Select a member or a package.',
             'end_at.required_unless' => 'The end date is required when the reservation does not continue.',

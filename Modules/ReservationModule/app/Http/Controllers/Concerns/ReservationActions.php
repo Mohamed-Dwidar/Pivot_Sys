@@ -77,7 +77,7 @@ trait ReservationActions
         if ($reservation) {
             $options['spaces'] = $this->spaceService->optionsForSubscriptionType($accountId, $reservation->subscription_type_id);
             if ($space = $reservation->space) {
-                $options['units'] = $this->unitService->optionsForSpace($space);
+                $options['units'] = $this->unitService->optionsForSpace($space, $reservation->subscription_type_id);
             }
             if ($unit = $reservation->unit) {
                 $options['plans'] = $this->planService->optionsForUnit($unit);
@@ -144,8 +144,10 @@ trait ReservationActions
 
     public function units(Request $request)
     {
+        // the units of the space with the chosen subscription type
         $space = $this->spaceService->findOne($this->accountId(), (int) $request->input('space_id'));
-        return response()->json(collect($this->unitService->optionsForSpace($space))->map(fn ($unit) => ['name' => Str::humanize($unit['name'])] + $unit)->values());
+        $units = $this->unitService->optionsForSpace($space, (int) $request->input('subscription_type_id'));
+        return response()->json(collect($units)->map(fn ($unit) => ['name' => Str::humanize($unit['name'])] + $unit)->values());
     }
 
     public function plans(Request $request)

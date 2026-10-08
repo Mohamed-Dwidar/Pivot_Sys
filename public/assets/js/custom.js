@@ -184,7 +184,8 @@ function showFormErrors(form, errors) {
         var wrapper = form.querySelector('[data-field="' + name + '"]');
         var messages = [].concat(errors[key]);
         if (!wrapper) {
-            summary = summary.concat(messages);
+            // "html_" errors are built (escaped) by the server with links, shown as HTML; the others as text
+            messages.forEach(function (message) { summary.push({ text: message, html: key.indexOf("html_") === 0 }); });
             return;
         }
         wrapper.querySelectorAll("input:not([type=hidden]):not([type=checkbox]):not([type=radio]), select, textarea, button[data-tw-toggle]").forEach(function (input) {
@@ -207,7 +208,11 @@ function showFormErrors(form, errors) {
         box.setAttribute("role", "alert");
         box.dataset.ajaxError = "";
         box.className = "alert relative border rounded-md px-5 py-4 bg-danger border-danger bg-opacity-20 border-opacity-5 text-danger mb-5";
-        box.textContent = summary.join(" ");
+        summary.forEach(function (item) {
+            var line = document.createElement("div");
+            item.html ? (line.innerHTML = item.text) : (line.textContent = item.text);
+            box.appendChild(line);
+        });
         form.prepend(box);
     }
     var first = form.querySelector("[data-ajax-error]");
@@ -331,7 +336,8 @@ document.addEventListener("click", function (e) {
 //  - [data-show-if="checkbox name"]: shown only while the checkbox is checked
 //  - [data-disable-if="checkbox name"]: disabled (and emptied) while the checkbox is checked,
 //    data-default-from="field": its value when enabled again and empty
-//  - select[data-options-url][data-parent="field"]: its options are loaded by ajax (?field=value) when the parent changes,
+//  - select[data-options-url][data-parent="field"]: its options are loaded by ajax (?field=value) when the parent changes
+//    (data-also="other_field ...": their values are sent too),
 //    with a loading spinner; it is disabled while the parent is empty; the json is [{id, name, ...}], the other keys become data-*
 //  - Reservation form ([data-reservation-form]): package -> member (locked), plan -> amount, discount % / discount value / net, unit capacity -> people, subscription type -> continue / repeat options
 //  - Package price ([data-package-price]): discount % <-> after discount (from the amount)
@@ -386,6 +392,11 @@ function loadOptions(select) {
     wrapper.classList.add("is-loading");
 
     var url = select.dataset.optionsUrl + (select.dataset.optionsUrl.indexOf("?") < 0 ? "?" : "&") + encodeURIComponent(select.dataset.parent) + "=" + encodeURIComponent(parent.value);
+    // data-also="field another_field": their values are sent too (e.g. the units of the space AND the subscription type)
+    (select.dataset.also || "").split(" ").filter(Boolean).forEach(function (name) {
+        var field = formField(form, name);
+        url += "&" + encodeURIComponent(name) + "=" + encodeURIComponent(field ? field.value : "");
+    });
     fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" } })
         .then(function (response) {
             if (!response.ok) throw response;
