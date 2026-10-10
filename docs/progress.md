@@ -6,12 +6,16 @@
 ---
 
 ## Current status
-- **Working on:** Payments Phase 1 (`docs/payments-plan.md`) — steps 1–3 done (tables, methods / categories CRUD + account sidebar "Settings", `PaymentService` + `payments:refresh`).
-- **Next up:** user runs the methods / categories import SQL (`to_run`, part 1 of the old data import); step 4 (payments list + add form + receipt PDF); run the package recalculation (`to_run`).
-- **Waiting for the user:** (1) migrations rule vs practice (edit `create_*` + manual DB, see CLAUDE.md Conventions); (2) are Vite / Tailwind 4 in package.json used or removable; (3) accountant: rounding strategy + T4 on invoices (don't block Phase 1).
+- **Working on:** Payments Phase 1 (`docs/payments-plan.md`) — steps 1–4 done (step 4 not committed yet); old payment methods + income categories imported (user ran the SQL 2026-10-11, checks OK).
+- **Next up:** user runs `php artisan payments:refresh` + the package recalculation (`to_run`); then step 5 (payments block + "Add payment" in reservation / package views — link to `{area}.payments.create?payable=…&payable_id=…`, paid / remaining columns + filter).
+- **Waiting for the user:** (0) sidebar "Payments" item (account + employee sidebars = shared layout, not added; pages reachable at `/account/payments`, `/employee/payments`); `public/assets/css/pdf.css` for PDF views (mpdf can't read custom.css) — OK?; payment numbers vs the old data import (see Known issues); (1) migrations rule vs practice (edit `create_*` + manual DB, see CLAUDE.md Conventions); (2) are Vite / Tailwind 4 in package.json used or removable; (3) accountant: rounding strategy + T4 on invoices (don't block Phase 1).
 - **Known issues:**
-  - DB columns added by hand must exist: `reservation_statuses.color`, `is_counted`, `is_default`, `sort_order`; `plans.is_time_based`; `subscription_types.can_repeat`, `auto_renew`; `reservations.paid_amount`, `remaining`; `packages.paid_amount` (+ money columns decimal(12,2)).
-  - Packages keep old values until recalculated (`to_run` command).
+  - DB columns added by hand must exist: `reservation_statuses.color`, `is_counted`, `is_default`, `sort_order`; `plans.is_time_based`; `subscription_types.can_repeat`, `auto_renew`; `reservations.paid_amount`, `remaining`; `packages.paid_amount`; money columns of reservations / packages = decimal(12,2) (all run 2026-10-11).
+  - `reservations.paid_amount` / `remaining` are 0 until `php artisan payments:refresh` runs; packages keep old values until recalculated (`to_run`).
+  - **Old payments import clash:** the import SQL keeps old ids and `payment_no` = old id (1–5189, incomes 5189 + id). Payments added in the app before the import take id / `payment_no` 1, 2, … → duplicate keys. Add no real payments until the import runs (or run the import first / change its numbering).
+  - Cairo fonts of `config/pdf.php` (`public/assets/fonts/Cairo/`) are missing: the receipt falls back to DejaVu Sans (Arabic OK).
+  - A reservation's `remaining` isn't refreshed when its net amount changes (reservation hook = step 9; packages are done).
+  - Table `creatable_backup` (old creator values of 220 packages + 2,887 members) — keep until the user confirms, then drop.
   - Legacy, unused: `AdminModuleController`, `Admin/UserModuleController`, AdminModule `admin/*` + UserModule `change_password` / `forgotPassword` views, nwidart `components/layouts/master` stubs.
 
 ---
@@ -30,12 +34,14 @@
 - **Pending:** —
 
 ### LayoutModule (layouts, shared UI, JS/CSS)
-- **Last updated:** 2026-10-09
-- **Files:** `views/{main,modal,account/*,admin/*,employee/*}`, `views/partials/*`, `config/config.php`, `public/assets/{css/custom.css, js/custom.js, js/datatables.js}`
+- **Last updated:** 2026-10-11
+- **Files:** `views/{main,modal,account/*,admin/*,employee/*}`, `views/partials/*`, `config/config.php`, `public/assets/{css/custom.css, css/pdf.css, js/custom.js, js/datatables.js}`
+  - `pdf.css`: PDF views only (mpdf, CSS 2, linked by `public_path()`), e.g. the payment receipt
   - Shell: `main` (page frame, `@yield('header'|'sidebar'|'title'|'actions'|'content')`, `@stack('styles'|'scripts')`), `header` (top bar + brand), `sidebar` (frame, `@include($menu)`), `partials/menu` (renders `$items`), `flash`, `footer`, `login` (guest shell for the login / register pages)
   - Per area: `{admin,account,employee}/main` (extends `main`, fills header vars + picks `{area}/sidebar`), `{area}/sidebar` (the `$items` array), `{area}/dashboard`
+  - Account sidebar groups: Reservations, Employees, Spaces, Settings (Payment Methods, Income Categories — added 2026-10-11, user approved)
   - Brand: `public/assets/images/{logo.png, favicon.png|jpg}`
-- **How it works:** popup CRUD (`data-modal`), ajax forms (`data-ajax`, SweetAlert confirm, 422 errors under fields, `html_` errors rendered as HTML), DataTables row update/remove, row toggles, dependent selects (`data-options-url`, `data-parent`, `data-also`), `data-show-if` / `data-disable-if`, Tom Select (`searchable`), `Str::humanize()` option texts.
+- **How it works:** popup CRUD (`data-modal`), ajax forms (`data-ajax`, SweetAlert confirm, 422 errors under fields, `html_` errors rendered as HTML), DataTables row update/remove, row toggles, dependent selects (`data-options-url`, `data-parent`, `data-also`), `data-show-if` (checkbox name, or `field=value other` for a select; `field=` = empty) / `data-disable-if`, Tom Select (`searchable`), `Str::humanize()` option texts.
   - Page → `@extends('layoutmodule::{area}.main')` → `main`. The area layout passes `header` its variables (`$homeUrl`, `$userName`, `$userSubtitle`, `$menuLinks`, `$logoutUrl`) and gives `sidebar` its `$menu` view. Menu items: `divider` / link (`title, icon, url, active, badge, counter`) / `children` drop list.
   - Sidebar: open by default, the arrow next to the logo collapses it to icons and remembers the choice (`localStorage.compactMenu`). Collapsed = `favicon` icon, open = `logo.png` (`.brand-logo` / `.brand-icon` in custom.css). Below 1280px: ☰ opens it as an overlay.
   - `custom.js` loads BEFORE `themes/dagger.js`: it sets the default (open), blocks dagger's hover-to-expand, and replaces dagger's resize handler (it forced compact below 1600px).
@@ -65,7 +71,7 @@
 - **Pending:** —
 
 ### ReservationModule
-- **Last updated:** 2026-10-09
+- **Last updated:** 2026-10-11
 - **Files:** `app/Http/Controllers/Concerns/ReservationActions.php`, `Account|Employee/Reservation*ModuleController`, `Account/ReservationStatusAccountModuleController`, `app/Services/{ReservationService,ReservationStatusService}`, `app/Models/{Reservation,ReservationStatus}`, `app/Http/Requests/ReservationRequest.php`, `views/Reservation/*`, `views/Status/*`
 - **How it works:** account + employees manage reservations. Form chain: subscription type → spaces → units (space + type) → plans (ajax). Package locks member. Status not in the form (new = default status; changed from the view header menu by ajax). Repeat on create only (frequency, every, until; copies with `repeat_id`). Availability check: overlapping counted reservations vs unit `concurrent_usage` (busiest moment), repeats included; error links to the clashing reservations.
 - **Depends on:** Space/Unit/Plan, PackageModule (recalculate), MemberModule
@@ -74,23 +80,43 @@
   - `is_counted` status flag (off = cancelled-like) excluded from package totals, hours, availability
   - One default + active status per account; default can't be switched off / deleted
   - Server recalculates amounts, period, subscription day (`ReservationService::period()`)
+  - `Reservation` implements `Payable` (payable only when `package_id = 0`), uses `HasPayments` + `SafeMorphHelper`; columns `paid_amount`, `remaining`
+  - Imported creators: all reservations → User 1 (fixed by hand, old class names); `SafeMorphHelper` makes unknown / empty morph types load as null
 - **Pending:** repeat for edits not supported by design; payments block / paid & remaining columns (Payments phase 1 step 5)
 
 ### PackageModule
-- **Last updated:** 2026-10-09
+- **Last updated:** 2026-10-11 (step 4)
 - **Files:** `app/Http/Controllers/Concerns/PackageActions.php`, `app/Models/Package.php`, `app/Services/PackageService.php`, `views/Package/*`
 - **How it works:** a member's package; price (`amount`) = sum of its counted reservations' net, discount % → net (`after_discount`), `date_from/to` from the reservations, total hours shown in the view. Recalculated on every reservation change (`recalculate()`).
 - **Depends on:** ReservationModule, MemberModule
 - **Decisions:**
   - Discount typed as % or net, stored as % — price changes keep the %
-  - `remaining` = net (no payments yet)
-- **Pending:** payments (see Payments section); recalc existing packages (`to_run`)
+  - `Package` implements `Payable` (due = `after_discount`), uses `HasPayments` + `SafeMorphHelper`; column `paid_amount`
+  - `recalculate()` ends with `PaymentService::refresh($this)` (paid / remaining from the payments; it no longer sets `remaining` itself) — Payments step 4
+- **Pending:** payments block in the view (step 5); recalc existing packages (`to_run`)
 
-### Payments / Invoices / ETA (PaymentModule, InvoiceModule, ReportModule — not built)
+### Payments / Invoices / ETA (PaymentModule — phase 1 in progress; InvoiceModule, ReportModule — not built)
 - **Last updated:** 2026-10-11
 - **Spec: `docs/payments-plan.md` — read before any payments/invoice work**
-- **Status:** Phase 1 — steps 1–3 done (`9dd28e0`, `a7170e8`, `a02f1fa`), DB migrated + ALTERs run 2026-10-11
+- **Status:** Phase 1 — steps 1–4 done (`9dd28e0`, `a7170e8`, `a02f1fa`, step 4 uncommitted); DB migrated + ALTERs run; methods / categories imported
 - **Phases:** (1) payments + withholding certificates + day closing + old data import · (2) tax rates + invoices / receipts + ETA entry view · (3) reports
+- **Files (PaymentModule):**
+  - `app/Contracts/Payable`, `app/Models/Concerns/HasPayments` (payments(), `paymentsTotal()`, `payment_status` unpaid / partial / paid / credit)
+  - `app/Models/{Payment, PaymentMethod, IncomeCategory, WithholdingCertificate, DayClosing}`, `database/Migrations/2026_10_11_10000{0-4}_*`
+  - `app/Services/{PaymentService, PaymentMethodService, IncomeCategoryService}`, `app/Repositories/{PaymentMethod, IncomeCategory}Repository`
+  - `app/Http/Controllers/Account/{PaymentMethod, IncomeCategory}AccountModuleController`, `app/Http/Requests/{PaymentMethod, IncomeCategory}Request`, `views/{Method, Category}/*`
+  - Payments: `app/Http/Controllers/Concerns/PaymentActions` + `Account|Employee/Payment*ModuleController`, `app/Http/Requests/PaymentRequest`, `app/Repositories/PaymentRepository`, `views/Payment/{index, create, show, receipt-pdf, partials/{form, row-source, row-actions}}`
+  - `app/Console/RefreshPaymentsCommand` (`payments:refresh {--account=}`, registered in `Providers/PaymentModuleServiceProvider::$commands`)
+  - `routes/web.php`: `{account|employee}.payments.{index, data, options.payables, create, store, show, receipt}`; `account.payment-methods.*`, `account.income-categories.*` (account only)
+- **How it works:**
+  - Methods / categories: popup CRUD like reservation statuses (list, add / edit, active toggle, sort order); delete refused while used by payments
+  - `PaymentService::create($accountId, $data, $creator)`: payable `reservation | package` (+ `payable_id`) or other income (`income_category_id`); type payment | withholding (refund = step 6); refuses a reservation inside a package, amount ≤ 0, no method (withholding → method 0), a closed day (`assertDayOpen`); `payment_no` = MAX + 1 per account under `lockForUpdate`; then `refresh(payable)`
+  - `refresh()`: paid = Σ `Payment::PAID_SQL` (payments + withholding − refunds), remaining = due − paid (due 0 inside a package); `refreshAll()` one grouped query per payable type, ~7 s for all rows
+  - `isOwner($user)` = userable is Account (edit / delete / refund rights, steps 6+)
+  - Payments list (account + employees): search (number, reference, member), filters for (reservation / package / other income `source`), type, method, category, dates; view + receipt in the row menu
+  - Add form: For (reservation / package / other income) → member (searchable) → the member's reservations (not in a package) / packages by ajax (`options.payables`, owed first, "Remaining x" in the name) or income category; type payment / withholding (no method); `create?payable=reservation|package&payable_id=X` pre-fills it (amount = remaining) for step 5
+  - Receipt: `receipt()` = mpdf A5 PDF (inline response from `output()`, not the package's `stream()` which echoes itself); Cairo font if its files exist, else DejaVu Sans
+  - Ownership: `PaymentRequest` (exists + account + active) and `PaymentService::create()` (method / category / member of the account, active not checked: imports bring old ones)
 - **Depends on:** ReservationModule, PackageModule (`Payable`, `recalculate()` → `PaymentService::refresh()`), MemberModule, PlanModule / CompanyModule (phase 2 fields), LayoutModule sidebars
 - **Decisions:**
   - One `payments` table: morph `payable` → Reservation | Package | null (other income); `type` = payment | refund | withholding; amount `decimal(12,2)` always positive
@@ -101,12 +127,15 @@
   - Payment methods per account; expenses = separate table later (no `direction`)
   - Old data: 5,042 payments + 227 incomes from `dwidar_pivot_res`, ids kept; old method 5 "إشعار خصم" = withholding (confirmed): NOT imported as a method, no `is_cash` column (re-confirmed 2026-10-11)
   - Service rule errors = `ValidationException` (422 under the fields), so the service is safe for imports / commands too
+  - Ownership (method, category, member, payable of the account) checked in the Form Request AND in `PaymentService` — the service is also called by imports / invoices (user, 2026-10-11)
+  - Old methods / categories imported with old ids: methods 1–4, 6 (Cash, Visa, InstaPay, Vodafone Cash, Bank Transfer - CIB; 5 skipped), categories 1–5; AUTO_INCREMENT 7 / 6
+  - `refresh()` writes only `paid_amount` / `remaining` (query update: no `updated_at`, no events)
   - Invoices ETA-ready, no API now: invoices + receipts in one table, created on demand, issued = read-only, corrections by credit / debit note; manual ETA entry view + paste UUID (pending / registered); one ETA service layer (`EtaGateway`, manual now, API later)
   - Taxes: `tax_rates` (T1 VAT, T2 / T3 table tax, …), several per plan / income category (`taxables` pivot), several per line (`invoice_item_taxes`); ETA order = VAT on (net + table tax + taxable fees); ONE `TaxCalculator`
   - Prices VAT-inclusive by default (`prices_include_tax`); the calculator reverse-calculates through all taxes
   - Rounding to the exact price isolated in `RoundingStrategy` (setting `rounding_strategy`); extra-discount option waiting for the accountant
   - T4 (withholding) on invoices: setting `withholding_on_invoices`, default off (accountant confirming)
-- **Pending:** Phase 1 steps 4–10; import of old payments / incomes (step 10 — methods / categories imported early, ids 1–4, 6 / 1–5) (build order in the spec); `Package::recalculate()` still sets `remaining = after_discount` until step 9
+- **Pending:** sidebar items (confirm); steps 5–10 (build order in the spec); import of old payments / incomes in step 10 (before any real payment, see Known issues)
 
 ### Member / Company / Job modules
 - **Last updated:** 2026-10-07
@@ -119,12 +148,19 @@
 
 ## Session log
 
-### 2026-10-11 — reservation 500 fix + Payments phase 1 step 1
-- **Changed:** `App\Helpers\SafeMorphHelper` + `App\Models\Relations\SafeMorphTo` (morphTo → null for unknown / empty types, lazy + eager) on Reservation, Package, Member; data fix: 220 packages + 2,887 members `creatable` → User 1 (old values in table `creatable_backup`, SQL + revert in `to_run`); PaymentModule skeleton aligned; 5 migrations, 5 models, `Payable` / `HasPayments`; Reservation / Package implement `Payable`
-- **Why:** plan decision 6 (fix both ways before Phase 1); Phase 1 build order step 1
-- **Affects:** every model using `SafeMorphHelper`; Reservation / Package models + create migrations
-- **Found:** reservations were already fixed by hand (all → User 1); packages / members still had old classes or `''`; `to_run` is gitignored
-- **Commit:** `a0be704` (guard), `4395657` (skeleton), `9dd28e0` (step 1), `a7170e8` (step 2: payment methods + income categories CRUD, account only, delete refused while used), `77731d8` (account sidebar Settings group, user approved), `a02f1fa` (step 3: `PaymentService`, `payments:refresh`)
+### 2026-10-11 — Payments phase 1 step 4
+- **Changed:** payments list / add form / view / receipt PDF for account + employees (`PaymentActions`, 2 controllers, `PaymentRequest`, `PaymentRepository`, routes `{area}.payments.*`); `PaymentService` ownership checks + `listQuery` / `findOne` / `payableOptions`; `Payment` `source` filter + type badge, `HasPayments` status badge; `Package::recalculate()` → `PaymentService::refresh()`; custom.js `data-show-if="field=value"` + payment form reload; `public/assets/css/pdf.css`
+- **Why:** Phase 1 build order step 4 + the two items the user moved into it
+- **Affects:** PackageModule (remaining now follows payments); every `data-show-if` (checkbox use unchanged); LayoutModule sidebars still without Payments
+- **Found:** `members` has no `deleted_at`; Cairo PDF fonts missing; the package's `stream()` echoes outside Laravel; app payments before the import would clash with the kept old ids / numbers
+- **Commit:** see suggested commit
+
+### 2026-10-11 — reservation 500 fix + Payments phase 1 steps 1–3
+- **Changed:** `App\Helpers\SafeMorphHelper` + `App\Models\Relations\SafeMorphTo` on Reservation, Package, Member, Payment, WithholdingCertificate; creator data fix (220 packages + 2,887 members → User 1, backup table `creatable_backup`, SQL + revert in `to_run`); PaymentModule skeleton aligned; step 1 (5 tables, 5 models, `Payable` / `HasPayments`, reservation / package money columns decimal + `paid_amount` / `remaining`); step 2 (methods / categories CRUD); account sidebar "Settings"; old methods / categories import SQL (user ran it); step 3 (`PaymentService`, `payments:refresh`)
+- **Why:** plan decision 6 (fix before Phase 1); Phase 1 build order; user moved the sidebar + the methods / categories import earlier
+- **Affects:** Reservation / Package / Member models + create migrations; LayoutModule account sidebar; every future payment caller (service rules)
+- **Found:** reservations' creators were already fixed by hand; `to_run` is gitignored; old method 6 "Bank Transfer - CIB" exists (missing from the plan); old category 2 has an Arabic English name
+- **Commit:** `a0be704`, `4395657`, `9dd28e0`, `a7170e8`, `77731d8`, `a02f1fa` (+ docs commits)
 
 ### 2026-10-10 — payments, invoices & ETA plan
 - **Changed:** wrote `docs/payments-plan.md` (3 phases: files, DB columns, import SQL, build order, ETA tax formula + worked example); Payments section in this file

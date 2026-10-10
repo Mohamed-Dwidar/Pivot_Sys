@@ -7,10 +7,14 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Modules\AccountModule\app\Models\Account;
+use Modules\MemberModule\app\Models\Member;
 use Modules\PackageModule\app\Models\Package;
 use Modules\PaymentModule\app\Contracts\Payable;
 use Modules\PaymentModule\app\Models\DayClosing;
+use Modules\PaymentModule\app\Models\IncomeCategory;
 use Modules\PaymentModule\app\Models\Payment;
+use Modules\PaymentModule\app\Models\PaymentMethod;
+use Modules\PaymentModule\app\Repositories\PaymentRepository;
 use Modules\ReservationModule\app\Models\Reservation;
 
 /**
@@ -19,14 +23,64 @@ use Modules\ReservationModule\app\Models\Reservation;
  * - a payment dated on a closed day can't be added (assertDayOpen())
  * - payment_no: per account, MAX + 1 inside the transaction (locked)
  * The rules errors are thrown as ValidationException (422, shown under the fields by custom.js).
+ * The service checks the account ownership itself (method, category, member, payable): it is also called by imports / invoices.
  */
 class PaymentService
 {
     // the payable kinds of the payment form => their models
-    const PAYABLES = [
-        'reservation' => Reservation::class,
-        'package' => Package::class,
-    ];
+    const PAYABLES = Payment::SOURCES;
+
+    private $paymentRepository;
+
+    public function __construct(PaymentRepository $paymentRepository)
+    {
+        $this->paymentRepository = $paymentRepository;
+    }
+
+    // list query (paged / ordered by DataTables)
+    public function listQuery($accountId, array $filters = [])
+    {
+        return $this->paymentRepository->forAccount($accountId)->filter($filters);
+    }
+
+    // 404 when the payment belongs to another account
+    public function findOne($accountId, $id): Payment
+    {
+        return $this->paymentRepository->forAccount($accountId)->with('creatable.userable')->findOrFail($id);
+    }
+
+    // the member's reservations (not inside a package) / packages for the payment form:
+    // [{id, name}] the ones still owed first, the name with what is left to pay
+    public function payableOptions($accountId, string $kind, $memberId): array
+    {
+        $class = self::PAYABLES[$kind] ?? abort(404);
+        $query = $class::where('account_id', $accountId)->where('member_id', (int) $memberId)
+            ->orderByRaw('remaining > 0 DESC');
+
+        if ($kind === 'reservation') {
+            $query->where('package_id', 0)->with('space', 'unit', 'plan')->orderByDesc('start_at');
+        } else {
+            $query->orderByDesc('id');
+        }
+
+        return $query->get()->map(fn ($payable) => [
+            'id' => $payable->id,
+            'name' => $this->payableName($payable) . ' — Remaining ' . number_format($payable->remaining, 2),
+        ])->all();
+    }
+
+    // "#12 Space › Unit · 21-10-2026" / "#5 Package name · 01-10-2026 → 31-12-2026"
+    public function payableName(?Model $payable): string
+    {
+        if ($payable instanceof Reservation) {
+            return '#' . $payable->id . ' ' . ($payable->space?->name ?? '-') . ' › ' . ($payable->unit?->name ?? '-') . ' · ' . $payable->period;
+        }
+        if ($payable instanceof Package) {
+            return '#' . $payable->id . ' ' . $payable->name . ' · ' . $payable->period;
+        }
+
+        return '-';
+    }
 
     // the account owner (edit / delete / refund); employees only add payments
     public function isOwner(Model $user): bool
@@ -60,6 +114,12 @@ class PaymentService
         if (!$payable && empty($data['income_category_id'])) {
             throw ValidationException::withMessages(['income_category_id' => 'Choose the income category of this payment.']);
         }
+        if (!$payable && !IncomeCategory::where('account_id', $accountId)->whereKey((int) $data['income_category_id'])->exists()) {
+            throw ValidationException::withMessages(['income_category_id' => 'This income category is not one of yours.']);
+        }
+        if (!$payable && !empty($data['member_id']) && !Member::where('account_id', $accountId)->whereKey((int) $data['member_id'])->exists()) {
+            throw ValidationException::withMessages(['member_id' => 'This member is not one of yours.']);
+        }
 
         $amount = round((float) ($data['amount'] ?? 0), 2);
         if ($amount <= 0) {
@@ -67,6 +127,9 @@ class PaymentService
         }
         if ($type === 'payment' && empty($data['payment_method_id'])) {
             throw ValidationException::withMessages(['payment_method_id' => 'Choose the payment method.']);
+        }
+        if ($type === 'payment' && !PaymentMethod::where('account_id', $accountId)->whereKey((int) $data['payment_method_id'])->exists()) {
+            throw ValidationException::withMessages(['payment_method_id' => 'This payment method is not one of yours.']);
         }
 
         $paidAt = Carbon::parse($data['paid_at'] ?? today())->startOfDay();

@@ -1,0 +1,29 @@
+/*
+ * PDF documents (mpdf): the payment receipt (paymentmodule::Payment.receipt-pdf).
+ * mpdf can't read custom.css (CSS variables, flex / grid), so the PDF views link this file by its path.
+ * Plain CSS 2 only: tables for the layout, no variables.
+ */
+body { font-size: 10pt; color: #1e293b; }
+table { width: 100%; border-collapse: collapse; }
+
+.receipt-head td { vertical-align: top; }
+.receipt-logo { height: 40px; margin-bottom: 4px; }
+.receipt-account { font-size: 13pt; font-weight: bold; }
+.receipt-muted { color: #64748b; font-size: 9pt; }
+.receipt-title-cell { text-align: right; }
+.receipt-title { font-size: 15pt; font-weight: bold; color: #164e63; }
+.receipt-no { font-size: 11pt; font-weight: bold; margin-top: 2px; }
+
+.receipt-table { margin-top: 18px; }
+.receipt-table th, .receipt-table td { padding: 6px 8px; border-bottom: 1px solid #e2e8f0; text-align: left; vertical-align: top; }
+.receipt-table th { width: 35%; color: #64748b; font-weight: normal; }
+
+.receipt-amount { margin-top: 14px; background-color: #f1f5f9; }
+.receipt-amount td { padding: 10px 8px; font-size: 12pt; font-weight: bold; }
+.receipt-amount-value { text-align: right; color: #166534; }
+
+.receipt-summary th, .receipt-summary td { padding: 4px 8px; font-size: 9pt; }
+
+.receipt-foot { margin-top: 40px; }
+.receipt-foot td { vertical-align: bottom; }
+.receipt-sign { text-align: right; width: 40%; border-top: 1px solid #94a3b8; padding-top: 4px; color: #64748b; }

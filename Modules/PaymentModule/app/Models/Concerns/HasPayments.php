@@ -47,4 +47,10 @@ trait HasPayments
     {
         return self::PAYMENT_STATUSES[$this->payment_status];
     }
+
+    // the payment status badge (theme palette, custom.css badge-status-*)
+    public function getPaymentStatusBadgeClassAttribute(): string
+    {
+        return ['unpaid' => 'badge-status-danger', 'partial' => 'badge-status-warning', 'paid' => 'badge-status-success', 'credit' => 'badge-status-info'][$this->payment_status];
+    }
 }

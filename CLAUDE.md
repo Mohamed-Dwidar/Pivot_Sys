@@ -15,7 +15,7 @@ When a task is finished, or when I say "update progress" or run /checkpoint, upd
 Then suggest a commit message.
 
 ## Stack
-- Framework: Laravel 12, PHP ^8.2 (local CLI 8.4), modular with `nwidart/laravel-modules` (13 modules in `Modules/`)
+- Framework: Laravel 12, PHP ^8.2 (local CLI 8.4), modular with `nwidart/laravel-modules` (14 modules in `Modules/`)
 - Database: MySQL `dwidar_res_portal` (timezone Africa/Cairo, locale en; `name_ar` / `name_en` fields ready for ar)
 - Frontend: Blade + Tailwise "dagger" template (compiled `public/assets/css/app.css`, theme class `theme-6` on `<html>`), vanilla JS in `public/assets/js/custom.js`; jQuery only for DataTables (`jQuery.noConflict`). Vite/Tailwind 4 in package.json is NOT used by the pages.
 - Auth: custom, 2 guards — `admin` (table `admins`, login `/admin`) and `web` (table `users`, morph `userable` → Account | Employee, login `/login`)
@@ -32,7 +32,7 @@ Then suggest a commit message.
 ## Project structure
 - `Modules/{Name}Module/` — one module per feature: `app/{Http/Controllers/{Account|Admin|Employee|Guest|Auth}, Http/Requests, Models, Repositories, Services}`, `database/Migrations`, `resources/views`, `routes/web.php`
 - `Modules/LayoutModule/` — layouts (`main`, `admin/*`, `account/*`, `employee/*`, `modal`), sidebars, shared partials (`partials/field`, `checkbox`, `row-menu`, `row-toggle`, `form-actions`, `datatable-*`, `gallery`, `images-input`), `config/config.php` (template form / menu class strings)
-- `app/Helpers/` — traits: `LocalizedHelper` (name_ar/name_en → `->name`, `orderByLocalized`), `UploaderHelper`, others legacy
+- `app/Helpers/` — traits: `LocalizedHelper` (name_ar/name_en → `->name`, `orderByLocalized`), `SafeMorphHelper` (morphTo → null for unknown / empty types, imported data; uses `app/Models/Relations/SafeMorphTo`), `UploaderHelper`, others legacy
 - `app/Providers/AppServiceProvider.php` — `Str::humanize()` macro (drop-menu option texts)
 - `public/assets/css/custom.css` — ALL custom CSS; `public/assets/js/custom.js` — modal, ajax forms, dynamic forms, toggles; `public/assets/js/datatables.js` — DataTables + `window.dataTables` row API
 - `Template_Source/` — the purchased template HTML (reference for markup/classes)
@@ -43,6 +43,8 @@ Then suggest a commit message.
 - Route names: `{area}.{resource}.{action}` (`account.reservations.show`, `employee.packages.index`, `admin.accounts.status`); always named routes
 - Data scope: `Auth::user()->userable->ownerAccountId()` (Account → id, Employee → account_id)
 - Validation: Form Requests; business logic: Services (+ Prettus repositories `forAccount()`); controllers stay thin
+- Services called outside forms (imports, commands, invoices) re-check their rules + account ownership themselves and throw `ValidationException` (422 under the fields)
+- Models with a `creatable` / `payable` morph use `SafeMorphHelper`
 - Lists: DataTables server side; controller `table($filters, $id)` builds the columns once (also used to re-render one row), `setRowId('row-'.id)`, no `#` column
 - CRUD UI: view/add/edit open in the popup (`<a data-modal>`, views `@extends(request()->ajax() ? 'layoutmodule::modal' : layout)`); forms `data-ajax` + `data-confirm*`; JSON answers `{message, row|reload, redirect, counts}`; rows update in place
 - Forms: `layoutmodule::partials.field` with template classes from `config('layoutmodule.form.*')`; `searchable`, `width`, `wrapperClass` options; no inline CSS
@@ -69,6 +71,7 @@ Then suggest a commit message.
 - **ReservationModule** ↔ PackageModule: saving / deleting / status change of a reservation calls `PackageService::recalculate()` (price, net, dates); `ReservationStatus::is_counted` excludes cancelled-like reservations from package totals, hours and availability
 - **MemberModule** ↔ PackageModule, ReservationModule: member options "name mobile" (searchable), package locks the reservation member
 - **EmployeeModule** ↔ ReservationModule, PackageModule: employees manage the account's reservations / packages (`employee.*` routes)
+- **PaymentModule** ↔ ReservationModule, PackageModule, MemberModule: Reservation / Package implement `Payable` + `HasPayments` (`paid_amount`, `remaining`); `PaymentService::refresh()` after every payment change and (from step 4) at the end of `Package::recalculate()`; a reservation inside a package is paid through the package; spec `docs/payments-plan.md`
 
 ## Rules
 - Before renaming anything shared (routes, components, config keys), search the whole project for references and update them all.

@@ -12,6 +12,7 @@ use Modules\AccountModule\app\Models\Account;
 use Modules\MemberModule\app\Models\Member;
 use Modules\PaymentModule\app\Contracts\Payable;
 use Modules\PaymentModule\app\Models\Concerns\HasPayments;
+use Modules\PaymentModule\app\Services\PaymentService;
 use Modules\ReservationModule\app\Models\Reservation;
 use Modules\ReservationModule\app\Models\ReservationStatus;
 
@@ -92,9 +93,9 @@ class Package extends Model implements Payable
         return [round($percentage, 2), round($afterDiscount, 2)];
     }
 
-    // total_amount / remaining from its reservations (after a reservation is saved / deleted)
+    // total_amount / after_discount from its reservations (after a reservation is saved / deleted)
     // the package price = the net amounts of its reservations, then its discount % => the package net (after_discount)
-    // (total_amount = the same sum, remaining = the net: nothing is paid yet)
+    // (total_amount = the same sum); then paid_amount / remaining from its payments (PaymentService::refresh())
     public function recalculate(): void
     {
         $sum = $this->reservationsTotal();
@@ -110,8 +111,9 @@ class Package extends Model implements Payable
         $this->amount = $sum;
         $this->total_amount = $sum;
         $this->after_discount = $afterDiscount;
-        $this->remaining = $afterDiscount;
         $this->save();
+
+        app(PaymentService::class)->refresh($this);
     }
 
     // the total hours of its reservations (start -> end, a whole day = 24 hours);

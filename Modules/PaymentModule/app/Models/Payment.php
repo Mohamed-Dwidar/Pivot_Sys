@@ -10,6 +10,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
 use Modules\AccountModule\app\Models\Account;
 use Modules\MemberModule\app\Models\Member;
+use Modules\PackageModule\app\Models\Package;
+use Modules\ReservationModule\app\Models\Reservation;
 use Modules\UserModule\app\Models\User;
 
 /**
@@ -24,6 +26,12 @@ class Payment extends Model
         'payment' => 'Payment',
         'refund' => 'Refund',
         'withholding' => 'Withholding',
+    ];
+
+    // the list filter "for": the payable models (+ income = no payable)
+    const SOURCES = [
+        'reservation' => Reservation::class,
+        'package' => Package::class,
     ];
 
     // the signed amount in SQL: payments + withholding - refunds (paid totals)
@@ -94,6 +102,12 @@ class Payment extends Model
         return self::TYPES[$this->type] ?? $this->type;
     }
 
+    // the type badge (theme palette, custom.css badge-status-*)
+    public function getTypeBadgeClassAttribute(): string
+    {
+        return ['payment' => 'badge-status-success', 'refund' => 'badge-status-danger', 'withholding' => 'badge-status-info'][$this->type] ?? 'badge-status-slate';
+    }
+
     // paid in total by the payments of a query: payments + withholding - refunds
     public static function paidTotal($query): float
     {
@@ -115,6 +129,13 @@ class Payment extends Model
                     ->orWhere('reference', 'like', $search)
                     ->orWhereHas('member', fn ($query) => $query->where('name', 'like', $search)->orWhere('phone', 'like', str_replace(' ', '', $search)));
             });
+        }
+
+        // what is paid: reservation | package | income (other income)
+        if (($filters['source'] ?? '') === 'income') {
+            $query->income();
+        } elseif (isset(self::SOURCES[$filters['source'] ?? ''])) {
+            $query->where('payable_type', (new (self::SOURCES[$filters['source']]))->getMorphClass());
         }
 
         foreach (['type', 'payment_method_id', 'income_category_id', 'member_id'] as $field) {

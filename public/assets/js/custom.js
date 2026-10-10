@@ -334,6 +334,7 @@ document.addEventListener("click", function (e) {
 // ------------------------------------------------------------------
 // Dynamic forms (run on page load and when the popup content is loaded: initForms(root))
 //  - [data-show-if="checkbox name"]: shown only while the checkbox is checked
+//    [data-show-if="field=value other"]: shown only while the field (a select) has one of the values ("field=" = empty)
 //  - [data-disable-if="checkbox name"]: disabled (and emptied) while the checkbox is checked,
 //    data-default-from="field": its value when enabled again and empty
 //  - select[data-options-url][data-parent="field"]: its options are loaded by ajax (?field=value) when the parent changes
@@ -341,6 +342,7 @@ document.addEventListener("click", function (e) {
 //    with a loading spinner; it is disabled while the parent is empty; the json is [{id, name, ...}], the other keys become data-*
 //  - Reservation form ([data-reservation-form]): package -> member (locked), plan -> amount, discount % / discount value / net, unit capacity -> people, subscription type -> continue / repeat options
 //  - Package price ([data-package-price]): discount % <-> after discount (from the amount)
+//  - Payment form ([data-payment-form]): "for" (reservation / package) -> the member's list is loaded again
 // ------------------------------------------------------------------
 function formField(form, name) {
     return form.querySelector('[name="' + name + '"]:not([type=hidden])') || form.querySelector('[name="' + name + '"]');
@@ -348,8 +350,11 @@ function formField(form, name) {
 
 function applyConditions(form) {
     form.querySelectorAll("[data-show-if]").forEach(function (el) {
-        var checkbox = formField(form, el.dataset.showIf);
-        el.hidden = !(checkbox && checkbox.checked);
+        var rule = el.dataset.showIf.split("=");
+        var field = formField(form, rule[0]);
+        el.hidden = rule.length > 1
+            ? !(field && rule[1].split(" ").indexOf(field.value) >= 0)
+            : !(field && field.checked);
     });
     form.querySelectorAll("[data-disable-if]").forEach(function (el) {
         var checkbox = formField(form, el.dataset.disableIf);
@@ -618,10 +623,15 @@ document.addEventListener("change", function (e) {
     if (!form || !e.target.name) return;
     var name = e.target.name;
 
-    if (form.querySelector('[data-show-if="' + name + '"], [data-disable-if="' + name + '"]')) {
+    if (form.querySelector('[data-show-if="' + name + '"], [data-show-if^="' + name + '="], [data-disable-if="' + name + '"]')) {
         applyConditions(form);
     }
     form.querySelectorAll('select[data-options-url][data-parent="' + name + '"]').forEach(loadOptions);
+
+    // the member's reservations / packages follow "for" too (the member is the data-parent)
+    if (form.matches("[data-payment-form]") && name === "payable") {
+        form.querySelectorAll('select[data-options-url][data-also~="payable"]').forEach(loadOptions);
+    }
 
     if (form.matches("[data-reservation-form]")) {
         if (name === "package_id") reservationLockMember(form);

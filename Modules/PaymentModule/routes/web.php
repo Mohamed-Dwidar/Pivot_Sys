@@ -2,8 +2,32 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\AccountModule\app\Models\Account;
+use Modules\EmployeeModule\app\Models\Employee;
 use Modules\PaymentModule\app\Http\Controllers\Account\IncomeCategoryAccountModuleController;
+use Modules\PaymentModule\app\Http\Controllers\Account\PaymentAccountModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Account\PaymentMethodAccountModuleController;
+use Modules\PaymentModule\app\Http\Controllers\Employee\PaymentEmployeeModuleController;
+
+/**
+ *  Payments: added and viewed by the account and by its employees (same actions, see Concerns\PaymentActions);
+ *  edit / delete / refund = the account only (step 6)
+ */
+$paymentRoutes = function ($controller) {
+    Route::get('/', [$controller, 'index'])->name('index');
+    Route::get('data', [$controller, 'data'])->name('data');
+    // the member's reservations / packages drop menu of the form
+    Route::get('options/payables', [$controller, 'payables'])->name('options.payables');
+    Route::get('create', [$controller, 'create'])->name('create');
+    Route::post('/', [$controller, 'store'])->name('store');
+    Route::get('{id}', [$controller, 'show'])->name('show');
+    Route::get('{id}/receipt', [$controller, 'receipt'])->name('receipt');
+};
+
+Route::prefix('account/payments')->name('account.payments.')->middleware(['auth', 'user.active:' . Account::class])
+    ->group(fn () => $paymentRoutes(PaymentAccountModuleController::class));
+
+Route::prefix('employee/payments')->name('employee.payments.')->middleware(['auth', 'user.active:' . Employee::class])
+    ->group(fn () => $paymentRoutes(PaymentEmployeeModuleController::class));
 
 /**
  *  Payment settings (payment methods, income categories): only the account manages them
