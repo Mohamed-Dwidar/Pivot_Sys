@@ -6,8 +6,9 @@
 ---
 
 ## Current status
-- **Working on:** Payments Phase 1 (`docs/payments-plan.md`) — step 1 code done (tables, models, `Payable` / `HasPayments`), waiting for the user's DB changes.
-- **Next up:** user runs the step 1 ALTERs + `php artisan migrate`; then step 2 (payment methods + income categories CRUD); run the package recalculation (`to_run`).
+- **Working on:** Payments Phase 1 (`docs/payments-plan.md`) — steps 1–2 done (tables migrated, methods / categories CRUD).
+- **Next up:** step 3 (`PaymentService` + `payments:refresh`); run the package recalculation (`to_run`).
+- **Not in the sidebar yet:** `account.payment-methods.index`, `account.income-categories.index` (sidebar = step 10, shared layout, needs the user's OK).
 - **Waiting for the user:** (1) migrations rule vs practice (edit `create_*` + manual DB, see CLAUDE.md Conventions); (2) are Vite / Tailwind 4 in package.json used or removable; (3) accountant: rounding strategy + T4 on invoices (don't block Phase 1).
 - **Known issues:**
   - DB columns added by hand must exist: `reservation_statuses.color`, `is_counted`, `is_default`, `sort_order`; `plans.is_time_based`; `subscription_types.can_repeat`, `auto_renew`; `reservations.paid_amount`, `remaining`; `packages.paid_amount` (+ money columns decimal(12,2)).
@@ -89,7 +90,7 @@
 ### Payments / Invoices / ETA (PaymentModule, InvoiceModule, ReportModule — not built)
 - **Last updated:** 2026-10-11
 - **Spec: `docs/payments-plan.md` — read before any payments/invoice work**
-- **Status:** Phase 1 — step 1 code done (commit `9dd28e0`), DB not migrated yet
+- **Status:** Phase 1 — steps 1–2 done (`9dd28e0`, `a7170e8`), DB migrated + ALTERs run 2026-10-11
 - **Phases:** (1) payments + withholding certificates + day closing + old data import · (2) tax rates + invoices / receipts + ETA entry view · (3) reports
 - **Depends on:** ReservationModule, PackageModule (`Payable`, `recalculate()` → `PaymentService::refresh()`), MemberModule, PlanModule / CompanyModule (phase 2 fields), LayoutModule sidebars
 - **Decisions:**
@@ -105,7 +106,7 @@
   - Prices VAT-inclusive by default (`prices_include_tax`); the calculator reverse-calculates through all taxes
   - Rounding to the exact price isolated in `RoundingStrategy` (setting `rounding_strategy`); extra-discount option waiting for the accountant
   - T4 (withholding) on invoices: setting `withholding_on_invoices`, default off (accountant confirming)
-- **Pending:** Phase 1 steps 2–10 (build order in the spec); `Package::recalculate()` still sets `remaining = after_discount` until step 9
+- **Pending:** Phase 1 steps 3–10 (build order in the spec); `Package::recalculate()` still sets `remaining = after_discount` until step 9
 
 ### Member / Company / Job modules
 - **Last updated:** 2026-10-07
@@ -123,7 +124,7 @@
 - **Why:** plan decision 6 (fix both ways before Phase 1); Phase 1 build order step 1
 - **Affects:** every model using `SafeMorphHelper`; Reservation / Package models + create migrations
 - **Found:** reservations were already fixed by hand (all → User 1); packages / members still had old classes or `''`; `to_run` is gitignored
-- **Commit:** `a0be704` (guard), `4395657` (skeleton), `9dd28e0` (step 1)
+- **Commit:** `a0be704` (guard), `4395657` (skeleton), `9dd28e0` (step 1), `a7170e8` (step 2: payment methods + income categories CRUD, account only, delete refused while used)
 
 ### 2026-10-10 — payments, invoices & ETA plan
 - **Changed:** wrote `docs/payments-plan.md` (3 phases: files, DB columns, import SQL, build order, ETA tax formula + worked example); Payments section in this file
