@@ -117,10 +117,10 @@ class Reservation extends Model implements Payable
         return $this->morphTo();
     }
 
-    // Payable: its net amount; inside a package it is paid through the package
+    // Payable: its net amount, 0 with a not counted status (cancelled ...); inside a package it is paid through the package
     public function payableAmount(): float
     {
-        return (float) $this->net_amount;
+        return $this->status && !$this->status->is_counted ? 0 : (float) $this->net_amount;
     }
 
     public function payableMemberId(): int

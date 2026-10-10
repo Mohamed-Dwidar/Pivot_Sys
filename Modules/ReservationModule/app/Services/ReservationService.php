@@ -8,6 +8,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Modules\PackageModule\app\Models\Package;
 use Modules\PackageModule\app\Services\PackageService;
+use Modules\PaymentModule\app\Services\PaymentService;
 use Modules\ReservationModule\app\Models\Reservation;
 use Modules\ReservationModule\app\Repositories\ReservationRepository;
 use Modules\PlanModule\app\Models\Plan;
@@ -16,19 +17,22 @@ use Modules\UnitModule\app\Models\Unit;
 
 /**
  * Every method takes the owner account id (the account, or the account of the logged in employee).
- * The amounts are calculated here again (the form calculates them while typing), and the package totals are kept up to date.
+ * The amounts are calculated here again (the form calculates them while typing), and the package totals are kept up to date,
+ * so is the reservation's paid / remaining (PaymentService::refresh(): its net, or 0 inside a package / with a not counted status).
  */
 class ReservationService
 {
     private $reservationRepository;
     private $packageService;
     private $statusService;
+    private $paymentService;
 
-    public function __construct(ReservationRepository $reservationRepository, PackageService $packageService, ReservationStatusService $statusService)
+    public function __construct(ReservationRepository $reservationRepository, PackageService $packageService, ReservationStatusService $statusService, PaymentService $paymentService)
     {
         $this->reservationRepository = $reservationRepository;
         $this->packageService = $packageService;
         $this->statusService = $statusService;
+        $this->paymentService = $paymentService;
     }
 
     // list query (paged / ordered by DataTables)
@@ -61,6 +65,10 @@ class ReservationService
             }
 
             $this->packageService->recalculate($reservation->package_id);
+            // remaining = its net (the copies too)
+            foreach ($reservation->repeats()->get()->prepend($reservation) as $saved) {
+                $this->paymentService->refresh($saved);
+            }
             return $reservation;
         });
     }
@@ -79,6 +87,8 @@ class ReservationService
             if ($reservation->package_id != $oldPackageId) {
                 $this->packageService->recalculate($reservation->package_id);
             }
+            // the net / status / package may have changed
+            $this->paymentService->refresh($reservation->load('status'));
             return $reservation;
         });
     }
@@ -91,7 +101,9 @@ class ReservationService
         return DB::transaction(function () use ($reservation, $statusId) {
             $reservation->update(['reservation_status_id' => $statusId]);
             $this->packageService->recalculate($reservation->package_id);
-            return $reservation->load('status');
+            // a not counted status (cancelled ...): nothing is due
+            $this->paymentService->refresh($reservation->load('status'));
+            return $reservation;
         });
     }
 

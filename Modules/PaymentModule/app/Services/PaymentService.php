@@ -197,6 +197,8 @@ class PaymentService
                 ->pluck('paid', 'payable_id');
 
             $class::query()->when($accountId, fn ($query) => $query->where('account_id', $accountId))
+                // the reservation status gives its due (payableAmount())
+                ->when($class === Reservation::class, fn ($query) => $query->with('status'))
                 ->chunkById(500, function ($payables) use ($paid, &$changed) {
                     foreach ($payables as $payable) {
                         $before = [$payable->paid_amount, $payable->remaining];

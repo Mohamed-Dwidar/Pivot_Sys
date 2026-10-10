@@ -7,14 +7,14 @@
 
 ## Current status
 - **Working on:** Payments Phase 1 (`docs/payments-plan.md`) — steps 1–4 done (`a2b6075`); old payment methods + income categories imported; old payments + incomes import moved up from step 10 (SQL = `to_run` "part 2", dry-run checked, user runs it).
-- **Next up:** user runs `to_run` part 2 → package recalculation → `payments:refresh`; user decides the 8,823 unpaid reservations (below); then step 5 (payments block + "Add payment" in reservation / package views — link to `{area}.payments.create?payable=…&payable_id=…`, paid / remaining columns + filter).
-- **Waiting for the user:** (0) unpaid old reservations: 8,823 outside packages with no payment (4,736,268.44; 1,475 of them Cancelled = 691,486.00) → opening balance / mark as settled / leave as owed; cancelled ones show as owed because `Reservation::payableAmount()` ignores `is_counted`; Cairo font files; (1) migrations rule vs practice (edit `create_*` + manual DB, see CLAUDE.md Conventions); (2) are Vite / Tailwind 4 in package.json used or removable; (3) accountant: rounding strategy + T4 on invoices (don't block Phase 1).
+- **Next up:** user runs `to_run` part 2 (import) now; package recalculation + `payments:refresh` ON HOLD until the user decides the cutoff + unpaid reservations (`to_run` "RUN ORDER"); then step 5 (payments block + "Add payment" in reservation / package views — link to `{area}.payments.create?payable=…&payable_id=…`, paid / remaining columns + filter).
+- **Waiting for the user:** (0) cutoff 2024-04-24 (recommended: config `paymentmodule.opening_date`, `refresh()` writes remaining 0 for a payable dated before it — not built; it only touches 18 reservations, all fully paid) and the 7,348 unpaid counted reservations outside packages (4,044,782.44): 6,796 of them (3.85M) are repeat copies created from 2025-03-16 that are NOT in `dwidar_pivot_res` (11,916 reservations of this DB aren't there), old payments end 2025-02-14; overpaid list `storage/app/payments-review/overpaid-reservations.csv` (163, don't touch); Cairo font files; (1) migrations rule vs practice (edit `create_*` + manual DB, see CLAUDE.md Conventions); (2) are Vite / Tailwind 4 in package.json used or removable; (3) accountant: rounding strategy + T4 on invoices (don't block Phase 1).
 - **Known issues:**
   - DB columns added by hand must exist: `reservation_statuses.color`, `is_counted`, `is_default`, `sort_order`; `plans.is_time_based`; `subscription_types.can_repeat`, `auto_renew`; `reservations.paid_amount`, `remaining`; `packages.paid_amount`; money columns of reservations / packages = decimal(12,2) (all run 2026-10-11).
   - `reservations.paid_amount` / `remaining` are 0 until `php artisan payments:refresh` runs; packages keep old values until recalculated (`to_run`).
   - **Run the payments import before any real payment:** it keeps old ids / `payment_no` (2–5189, incomes 5190–5424) and needs an empty `payments` table; then new ones start at 5425.
   - Cairo fonts of `config/pdf.php` (`public/assets/fonts/Cairo/`) are missing: the receipt falls back to DejaVu Sans (Arabic OK).
-  - A reservation's `remaining` isn't refreshed when its net amount changes (reservation hook = step 9; packages are done).
+  - Changing a status's `is_counted` doesn't recalculate packages or refresh reservations (old gap) → run `payments:refresh` / package recalculation after such a change.
   - Table `creatable_backup` (old creator values of 220 packages + 2,887 members) — keep until the user confirms, then drop.
   - Legacy, unused: `AdminModuleController`, `Admin/UserModuleController`, AdminModule `admin/*` + UserModule `change_password` / `forgotPassword` views, nwidart `components/layouts/master` stubs.
 
@@ -80,7 +80,8 @@
   - `is_counted` status flag (off = cancelled-like) excluded from package totals, hours, availability
   - One default + active status per account; default can't be switched off / deleted
   - Server recalculates amounts, period, subscription day (`ReservationService::period()`)
-  - `Reservation` implements `Payable` (payable only when `package_id = 0`), uses `HasPayments` + `SafeMorphHelper`; columns `paid_amount`, `remaining`
+  - `Reservation` implements `Payable` (payable only when `package_id = 0`; due = net, 0 with a not counted status — user 2026-10-11), uses `HasPayments` + `SafeMorphHelper`; columns `paid_amount`, `remaining`
+  - `ReservationService` create (+ repeat copies) / update / changeStatus → `PaymentService::refresh()` (delete / `movePayments` = step 9)
   - Imported creators: all reservations → User 1 (fixed by hand, old class names); `SafeMorphHelper` makes unknown / empty morph types load as null
 - **Pending:** repeat for edits not supported by design; payments block / paid & remaining columns (Payments phase 1 step 5)
 
@@ -156,12 +157,19 @@
 - **Found:** `members` has no `deleted_at`; Cairo PDF fonts missing; the package's `stream()` echoes outside Laravel; app payments before the import would clash with the kept old ids / numbers
 - **Commit:** `a2b6075`
 
+### 2026-10-11 — cancelled due 0, cutoff analysis, overpaid list
+- **Changed:** `Reservation::payableAmount()` 0 for a not counted status; `ReservationService` refreshes paid / remaining on create / update / status change; `refreshAll()` eager loads the status; `to_run` RUN ORDER (import now, recalculation + refresh on hold); `storage/app/payments-review/{overpaid-reservations.csv, monthly.md}`
+- **Why:** user decisions (cancelled = nothing due, cutoff 2024-04-24 under review, overpaid not touched)
+- **Affects:** reservation remaining / payment status everywhere; 4 paid cancelled reservations become credit (915.00)
+- **Found:** "2022-04" = payment date / start date of 18 back-dated rows (all created 2024-09, all fully paid), nothing created before 2024-06-01; old system's manual entry ends 2025-02-14; 11,916 reservations here aren't in the old DB (repeat copies from 2025-03-16)
+- **Commit:** see suggested commit
+
 ### 2026-10-11 — old payments import SQL, sidebars, pdf.css rule
 - **Changed:** `to_run` part 2 (old payments + incomes import, AUTO_INCREMENT, checks; dry-run in a rolled back transaction = all equal); Payments in account + employee sidebars; CLAUDE.md + memory: `pdf.css` = the one exception to the custom-CSS rule
 - **Why:** user moved the import before any real payment (id / number clash); user approved the sidebar + pdf.css
 - **Affects:** LayoutModule sidebars; every reservation / package paid / remaining after `payments:refresh`
 - **Found:** 8,823 reservations outside packages have no payment (4.74M; 1,475 cancelled); old DB has no other paid marker; 22 partly paid (3,485 owed), 163 overpaid (19,030.50 credit); my rolled back tests moved `payments` AUTO_INCREMENT to 18 (the SQL sets it)
-- **Commit:** see suggested commit
+- **Commit:** `55a4dcd`
 
 ### 2026-10-11 — reservation 500 fix + Payments phase 1 steps 1–3
 - **Changed:** `App\Helpers\SafeMorphHelper` + `App\Models\Relations\SafeMorphTo` on Reservation, Package, Member, Payment, WithholdingCertificate; creator data fix (220 packages + 2,887 members → User 1, backup table `creatable_backup`, SQL + revert in `to_run`); PaymentModule skeleton aligned; step 1 (5 tables, 5 models, `Payable` / `HasPayments`, reservation / package money columns decimal + `paid_amount` / `remaining`); step 2 (methods / categories CRUD); account sidebar "Settings"; old methods / categories import SQL (user ran it); step 3 (`PaymentService`, `payments:refresh`)
