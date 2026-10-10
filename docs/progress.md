@@ -6,9 +6,8 @@
 ---
 
 ## Current status
-- **Working on:** Payments Phase 1 (`docs/payments-plan.md`) — steps 1–2 done (tables migrated, methods / categories CRUD).
-- **Next up:** step 3 (`PaymentService` + `payments:refresh`); run the package recalculation (`to_run`).
-- **Not in the sidebar yet:** `account.payment-methods.index`, `account.income-categories.index` (sidebar = step 10, shared layout, needs the user's OK).
+- **Working on:** Payments Phase 1 (`docs/payments-plan.md`) — steps 1–3 done (tables, methods / categories CRUD + account sidebar "Settings", `PaymentService` + `payments:refresh`).
+- **Next up:** user runs the methods / categories import SQL (`to_run`, part 1 of the old data import); step 4 (payments list + add form + receipt PDF); run the package recalculation (`to_run`).
 - **Waiting for the user:** (1) migrations rule vs practice (edit `create_*` + manual DB, see CLAUDE.md Conventions); (2) are Vite / Tailwind 4 in package.json used or removable; (3) accountant: rounding strategy + T4 on invoices (don't block Phase 1).
 - **Known issues:**
   - DB columns added by hand must exist: `reservation_statuses.color`, `is_counted`, `is_default`, `sort_order`; `plans.is_time_based`; `subscription_types.can_repeat`, `auto_renew`; `reservations.paid_amount`, `remaining`; `packages.paid_amount` (+ money columns decimal(12,2)).
@@ -90,7 +89,7 @@
 ### Payments / Invoices / ETA (PaymentModule, InvoiceModule, ReportModule — not built)
 - **Last updated:** 2026-10-11
 - **Spec: `docs/payments-plan.md` — read before any payments/invoice work**
-- **Status:** Phase 1 — steps 1–2 done (`9dd28e0`, `a7170e8`), DB migrated + ALTERs run 2026-10-11
+- **Status:** Phase 1 — steps 1–3 done (`9dd28e0`, `a7170e8`, `a02f1fa`), DB migrated + ALTERs run 2026-10-11
 - **Phases:** (1) payments + withholding certificates + day closing + old data import · (2) tax rates + invoices / receipts + ETA entry view · (3) reports
 - **Depends on:** ReservationModule, PackageModule (`Payable`, `recalculate()` → `PaymentService::refresh()`), MemberModule, PlanModule / CompanyModule (phase 2 fields), LayoutModule sidebars
 - **Decisions:**
@@ -100,13 +99,14 @@
   - Employees only add payments; edit / delete / refund = account owner; delete = soft delete + reason
   - Day closing: one per account per day, locks that date; totals by employee × payment method (cash handover), withholding excluded from cash; reopen = owner + reason
   - Payment methods per account; expenses = separate table later (no `direction`)
-  - Old data: 5,042 payments + 227 incomes from `dwidar_pivot_res`, ids kept; old method 5 "إشعار خصم" = withholding (confirmed)
+  - Old data: 5,042 payments + 227 incomes from `dwidar_pivot_res`, ids kept; old method 5 "إشعار خصم" = withholding (confirmed): NOT imported as a method, no `is_cash` column (re-confirmed 2026-10-11)
+  - Service rule errors = `ValidationException` (422 under the fields), so the service is safe for imports / commands too
   - Invoices ETA-ready, no API now: invoices + receipts in one table, created on demand, issued = read-only, corrections by credit / debit note; manual ETA entry view + paste UUID (pending / registered); one ETA service layer (`EtaGateway`, manual now, API later)
   - Taxes: `tax_rates` (T1 VAT, T2 / T3 table tax, …), several per plan / income category (`taxables` pivot), several per line (`invoice_item_taxes`); ETA order = VAT on (net + table tax + taxable fees); ONE `TaxCalculator`
   - Prices VAT-inclusive by default (`prices_include_tax`); the calculator reverse-calculates through all taxes
   - Rounding to the exact price isolated in `RoundingStrategy` (setting `rounding_strategy`); extra-discount option waiting for the accountant
   - T4 (withholding) on invoices: setting `withholding_on_invoices`, default off (accountant confirming)
-- **Pending:** Phase 1 steps 3–10 (build order in the spec); `Package::recalculate()` still sets `remaining = after_discount` until step 9
+- **Pending:** Phase 1 steps 4–10; import of old payments / incomes (step 10 — methods / categories imported early, ids 1–4, 6 / 1–5) (build order in the spec); `Package::recalculate()` still sets `remaining = after_discount` until step 9
 
 ### Member / Company / Job modules
 - **Last updated:** 2026-10-07
@@ -124,7 +124,7 @@
 - **Why:** plan decision 6 (fix both ways before Phase 1); Phase 1 build order step 1
 - **Affects:** every model using `SafeMorphHelper`; Reservation / Package models + create migrations
 - **Found:** reservations were already fixed by hand (all → User 1); packages / members still had old classes or `''`; `to_run` is gitignored
-- **Commit:** `a0be704` (guard), `4395657` (skeleton), `9dd28e0` (step 1), `a7170e8` (step 2: payment methods + income categories CRUD, account only, delete refused while used)
+- **Commit:** `a0be704` (guard), `4395657` (skeleton), `9dd28e0` (step 1), `a7170e8` (step 2: payment methods + income categories CRUD, account only, delete refused while used), `77731d8` (account sidebar Settings group, user approved), `a02f1fa` (step 3: `PaymentService`, `payments:refresh`)
 
 ### 2026-10-10 — payments, invoices & ETA plan
 - **Changed:** wrote `docs/payments-plan.md` (3 phases: files, DB columns, import SQL, build order, ETA tax formula + worked example); Payments section in this file
