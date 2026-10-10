@@ -34,7 +34,7 @@ Then suggest a commit message.
 - `Modules/LayoutModule/` — layouts (`main`, `admin/*`, `account/*`, `employee/*`, `modal`), sidebars, shared partials (`partials/field`, `checkbox`, `row-menu`, `row-toggle`, `form-actions`, `datatable-*`, `gallery`, `images-input`), `config/config.php` (template form / menu class strings)
 - `app/Helpers/` — traits: `LocalizedHelper` (name_ar/name_en → `->name`, `orderByLocalized`), `SafeMorphHelper` (morphTo → null for unknown / empty types, imported data; uses `app/Models/Relations/SafeMorphTo`), `UploaderHelper`, others legacy
 - `app/Providers/AppServiceProvider.php` — `Str::humanize()` macro (drop-menu option texts)
-- `public/assets/css/custom.css` — ALL custom CSS; `public/assets/js/custom.js` — modal, ajax forms, dynamic forms, toggles; `public/assets/js/datatables.js` — DataTables + `window.dataTables` row API
+- `public/assets/css/custom.css` — ALL custom CSS (except PDF views: `pdf.css`); `public/assets/js/custom.js` — modal, ajax forms, dynamic forms, toggles; `public/assets/js/datatables.js` — DataTables + `window.dataTables` row API
 - `Template_Source/` — the purchased template HTML (reference for markup/classes)
 - `to_run` — user's notes: manual SQL / commands to run on the DB
 
@@ -54,6 +54,7 @@ Then suggest a commit message.
 - Language: UI English now; Arabic names stored, RTL not done yet
 - Layout: pages `@extends` their area layout (`layoutmodule::admin.main` / `account.main` / `employee.main`), never `main` directly; fill `title`, `actions`, `content`; page JS/CSS via `@push('scripts')` / `@push('styles')`
 - Layout: template markup + classes copied from `Template_Source/dagger-*.html`; custom styles = named classes in `custom.css` (no `style=""`, no `<style>`); template overrides in `custom.js`, never edit template files (`app.css`, `themes/dagger.js`, `vendors/*`)
+- PDF views (mpdf, e.g. `paymentmodule::Payment.receipt-pdf`): the ONE exception to the custom-CSS rule — styles in `public/assets/css/pdf.css`, linked with `public_path()` (mpdf can't read `custom.css`: CSS variables, flex / grid); still no `style=""` / `<style>`; plain CSS 2, tables for layout
 - Layout: icons = Lucide (`data-lucide="name"`); images in `public/assets/images` (only logo / favicon — template demo images not copied)
 - Layout: sidebar open by default, collapse toggle remembered (`localStorage.compactMenu`), no hover-expand; content full width (no `.container`)
 

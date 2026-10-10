@@ -6,13 +6,13 @@
 ---
 
 ## Current status
-- **Working on:** Payments Phase 1 (`docs/payments-plan.md`) — steps 1–4 done (step 4 not committed yet); old payment methods + income categories imported (user ran the SQL 2026-10-11, checks OK).
-- **Next up:** user runs `php artisan payments:refresh` + the package recalculation (`to_run`); then step 5 (payments block + "Add payment" in reservation / package views — link to `{area}.payments.create?payable=…&payable_id=…`, paid / remaining columns + filter).
-- **Waiting for the user:** (0) sidebar "Payments" item (account + employee sidebars = shared layout, not added; pages reachable at `/account/payments`, `/employee/payments`); `public/assets/css/pdf.css` for PDF views (mpdf can't read custom.css) — OK?; payment numbers vs the old data import (see Known issues); (1) migrations rule vs practice (edit `create_*` + manual DB, see CLAUDE.md Conventions); (2) are Vite / Tailwind 4 in package.json used or removable; (3) accountant: rounding strategy + T4 on invoices (don't block Phase 1).
+- **Working on:** Payments Phase 1 (`docs/payments-plan.md`) — steps 1–4 done (`a2b6075`); old payment methods + income categories imported; old payments + incomes import moved up from step 10 (SQL = `to_run` "part 2", dry-run checked, user runs it).
+- **Next up:** user runs `to_run` part 2 → package recalculation → `payments:refresh`; user decides the 8,823 unpaid reservations (below); then step 5 (payments block + "Add payment" in reservation / package views — link to `{area}.payments.create?payable=…&payable_id=…`, paid / remaining columns + filter).
+- **Waiting for the user:** (0) unpaid old reservations: 8,823 outside packages with no payment (4,736,268.44; 1,475 of them Cancelled = 691,486.00) → opening balance / mark as settled / leave as owed; cancelled ones show as owed because `Reservation::payableAmount()` ignores `is_counted`; Cairo font files; (1) migrations rule vs practice (edit `create_*` + manual DB, see CLAUDE.md Conventions); (2) are Vite / Tailwind 4 in package.json used or removable; (3) accountant: rounding strategy + T4 on invoices (don't block Phase 1).
 - **Known issues:**
   - DB columns added by hand must exist: `reservation_statuses.color`, `is_counted`, `is_default`, `sort_order`; `plans.is_time_based`; `subscription_types.can_repeat`, `auto_renew`; `reservations.paid_amount`, `remaining`; `packages.paid_amount`; money columns of reservations / packages = decimal(12,2) (all run 2026-10-11).
   - `reservations.paid_amount` / `remaining` are 0 until `php artisan payments:refresh` runs; packages keep old values until recalculated (`to_run`).
-  - **Old payments import clash:** the import SQL keeps old ids and `payment_no` = old id (1–5189, incomes 5189 + id). Payments added in the app before the import take id / `payment_no` 1, 2, … → duplicate keys. Add no real payments until the import runs (or run the import first / change its numbering).
+  - **Run the payments import before any real payment:** it keeps old ids / `payment_no` (2–5189, incomes 5190–5424) and needs an empty `payments` table; then new ones start at 5425.
   - Cairo fonts of `config/pdf.php` (`public/assets/fonts/Cairo/`) are missing: the receipt falls back to DejaVu Sans (Arabic OK).
   - A reservation's `remaining` isn't refreshed when its net amount changes (reservation hook = step 9; packages are done).
   - Table `creatable_backup` (old creator values of 220 packages + 2,887 members) — keep until the user confirms, then drop.
@@ -39,7 +39,7 @@
   - `pdf.css`: PDF views only (mpdf, CSS 2, linked by `public_path()`), e.g. the payment receipt
   - Shell: `main` (page frame, `@yield('header'|'sidebar'|'title'|'actions'|'content')`, `@stack('styles'|'scripts')`), `header` (top bar + brand), `sidebar` (frame, `@include($menu)`), `partials/menu` (renders `$items`), `flash`, `footer`, `login` (guest shell for the login / register pages)
   - Per area: `{admin,account,employee}/main` (extends `main`, fills header vars + picks `{area}/sidebar`), `{area}/sidebar` (the `$items` array), `{area}/dashboard`
-  - Account sidebar groups: Reservations, Employees, Spaces, Settings (Payment Methods, Income Categories — added 2026-10-11, user approved)
+  - Account sidebar groups: Reservations, Payments, Employees, Spaces, Settings (Payment Methods, Income Categories — added 2026-10-11, user approved); employee sidebar: Reservations, Packages, Payments
   - Brand: `public/assets/images/{logo.png, favicon.png|jpg}`
 - **How it works:** popup CRUD (`data-modal`), ajax forms (`data-ajax`, SweetAlert confirm, 422 errors under fields, `html_` errors rendered as HTML), DataTables row update/remove, row toggles, dependent selects (`data-options-url`, `data-parent`, `data-also`), `data-show-if` (checkbox name, or `field=value other` for a select; `field=` = empty) / `data-disable-if`, Tom Select (`searchable`), `Str::humanize()` option texts.
   - Page → `@extends('layoutmodule::{area}.main')` → `main`. The area layout passes `header` its variables (`$homeUrl`, `$userName`, `$userSubtitle`, `$menuLinks`, `$logoutUrl`) and gives `sidebar` its `$menu` view. Menu items: `divider` / link (`title, icon, url, active, badge, counter`) / `children` drop list.
@@ -128,6 +128,7 @@
   - Old data: 5,042 payments + 227 incomes from `dwidar_pivot_res`, ids kept; old method 5 "إشعار خصم" = withholding (confirmed): NOT imported as a method, no `is_cash` column (re-confirmed 2026-10-11)
   - Service rule errors = `ValidationException` (422 under the fields), so the service is safe for imports / commands too
   - Ownership (method, category, member, payable of the account) checked in the Form Request AND in `PaymentService` — the service is also called by imports / invoices (user, 2026-10-11)
+  - Old payments / incomes import moved before step 5 (user, 2026-10-11): payments id = `payment_no` = old id, incomes id = `payment_no` = 5189 + old id; old payment 35 (reservation 106 in package 3) → package 3; old 0.00 payment 42 kept; checks: counts, signed totals, per method / type / payable / category all equal the old DB
   - Old methods / categories imported with old ids: methods 1–4, 6 (Cash, Visa, InstaPay, Vodafone Cash, Bank Transfer - CIB; 5 skipped), categories 1–5; AUTO_INCREMENT 7 / 6
   - `refresh()` writes only `paid_amount` / `remaining` (query update: no `updated_at`, no events)
   - Invoices ETA-ready, no API now: invoices + receipts in one table, created on demand, issued = read-only, corrections by credit / debit note; manual ETA entry view + paste UUID (pending / registered); one ETA service layer (`EtaGateway`, manual now, API later)
@@ -135,7 +136,7 @@
   - Prices VAT-inclusive by default (`prices_include_tax`); the calculator reverse-calculates through all taxes
   - Rounding to the exact price isolated in `RoundingStrategy` (setting `rounding_strategy`); extra-discount option waiting for the accountant
   - T4 (withholding) on invoices: setting `withholding_on_invoices`, default off (accountant confirming)
-- **Pending:** sidebar items (confirm); steps 5–10 (build order in the spec); import of old payments / incomes in step 10 (before any real payment, see Known issues)
+- **Pending:** steps 5–10 (build order in the spec); import of old payments / incomes in step 10 (before any real payment, see Known issues)
 
 ### Member / Company / Job modules
 - **Last updated:** 2026-10-07
@@ -153,6 +154,13 @@
 - **Why:** Phase 1 build order step 4 + the two items the user moved into it
 - **Affects:** PackageModule (remaining now follows payments); every `data-show-if` (checkbox use unchanged); LayoutModule sidebars still without Payments
 - **Found:** `members` has no `deleted_at`; Cairo PDF fonts missing; the package's `stream()` echoes outside Laravel; app payments before the import would clash with the kept old ids / numbers
+- **Commit:** `a2b6075`
+
+### 2026-10-11 — old payments import SQL, sidebars, pdf.css rule
+- **Changed:** `to_run` part 2 (old payments + incomes import, AUTO_INCREMENT, checks; dry-run in a rolled back transaction = all equal); Payments in account + employee sidebars; CLAUDE.md + memory: `pdf.css` = the one exception to the custom-CSS rule
+- **Why:** user moved the import before any real payment (id / number clash); user approved the sidebar + pdf.css
+- **Affects:** LayoutModule sidebars; every reservation / package paid / remaining after `payments:refresh`
+- **Found:** 8,823 reservations outside packages have no payment (4.74M; 1,475 cancelled); old DB has no other paid marker; 22 partly paid (3,485 owed), 163 overpaid (19,030.50 credit); my rolled back tests moved `payments` AUTO_INCREMENT to 18 (the SQL sets it)
 - **Commit:** see suggested commit
 
 ### 2026-10-11 — reservation 500 fix + Payments phase 1 steps 1–3

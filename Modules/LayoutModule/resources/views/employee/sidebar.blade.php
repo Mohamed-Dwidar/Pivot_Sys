@@ -21,6 +21,12 @@
             'url' => route('employee.packages.index'),
             'active' => request()->routeIs('employee.packages.*'),
         ],
+        [
+            'title' => 'Payments',
+            'icon' => 'wallet',
+            'url' => route('employee.payments.index'),
+            'active' => request()->routeIs('employee.payments.*'),
+        ],
 
         ['divider' => 'Settings'],
         [

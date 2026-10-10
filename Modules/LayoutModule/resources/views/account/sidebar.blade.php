@@ -34,6 +34,12 @@
             ],
         ],
         [
+            'title' => 'Payments',
+            'icon' => 'wallet',
+            'url' => route('account.payments.index'),
+            'active' => request()->routeIs('account.payments.*'),
+        ],
+        [
             'title' => 'Members',
             'icon' => 'users',
             'url' => route('account.members.index'),
