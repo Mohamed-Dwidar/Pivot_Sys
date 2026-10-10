@@ -2,6 +2,7 @@
 
 namespace Modules\MemberModule\app\Models;
 
+use App\Helpers\SafeMorphHelper;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -14,6 +15,8 @@ use Modules\ReservationModule\app\Models\Reservation;
 
 class Member extends Model
 {
+    use SafeMorphHelper;
+
     protected $fillable = [
         'account_id', 'name', 'company_id', 'job_id', 'phone', 'email', 'national_number', 'notes', 'from_where', 'created_by',
     ];

@@ -2,6 +2,7 @@
 
 namespace Modules\PackageModule\app\Models;
 
+use App\Helpers\SafeMorphHelper;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -18,7 +19,7 @@ use Modules\ReservationModule\app\Models\ReservationStatus;
  */
 class Package extends Model
 {
-    use SoftDeletes;
+    use SafeMorphHelper, SoftDeletes;
 
     protected $fillable = [
         'account_id', 'member_id', 'name', 'date_from', 'date_to', 'is_active',

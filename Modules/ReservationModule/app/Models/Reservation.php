@@ -2,6 +2,7 @@
 
 namespace Modules\ReservationModule\app\Models;
 
+use App\Helpers\SafeMorphHelper;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -23,7 +24,7 @@ use Modules\UnitModule\app\Models\Unit;
  */
 class Reservation extends Model
 {
-    use SoftDeletes;
+    use SafeMorphHelper, SoftDeletes;
 
     // the most copies one "repeat until" can create
     const MAX_REPEATS = 365;
