@@ -6,11 +6,11 @@
 ---
 
 ## Current status
-- **Working on:** ReservationModule on the imported old-system data (`reservations from old db`).
-- **Next up:** fix the reservation view 500 (old `creatable_type` values), then run the package recalculation (`to_run`).
-- **Waiting for the user:** (1) 500 fix option — code guard / SQL update / both; (2) migrations rule vs practice (edit `create_*` + manual DB, see CLAUDE.md Conventions); (3) are Vite / Tailwind 4 in package.json used or removable.
+- **Working on:** payments / invoices / ETA — plan approved (`docs/payments-plan.md`), Phase 1 not started.
+- **Next up:** (1) fix the reservation view 500 — SQL data fix + code guard (decided: both); (2) run the package recalculation (`to_run`); (3) Payments Phase 1.
+- **Waiting for the user:** (1) migrations rule vs practice (edit `create_*` + manual DB, see CLAUDE.md Conventions); (2) are Vite / Tailwind 4 in package.json used or removable; (3) accountant: rounding strategy + T4 on invoices (don't block Phase 1).
 - **Known issues:**
-  - Reservation view → 500: ~17,800 imported reservations have `creatable_type` = `Modules\UserModule\Entities\User` / `Modules\AdminModule\Entities\Admin` (old classes, don't exist); only 3 of 13 old user ids exist in `users`. Options given: guard in code (recommended) / SQL update (in `to_run`) / both — waiting for the user's choice.
+  - Reservation view → 500: ~17,800 imported reservations have `creatable_type` = `Modules\UserModule\Entities\User` / `Modules\AdminModule\Entities\Admin` (old classes, don't exist); only 3 of 13 old user ids exist in `users`. Decided: SQL data fix + code guard, not done yet.
   - DB columns added by hand must exist: `reservation_statuses.color`, `is_counted`, `is_default`, `sort_order`; `plans.is_time_based`; `subscription_types.can_repeat`, `auto_renew`.
   - Packages keep old values until recalculated (`to_run` command).
   - Legacy, unused: `AdminModuleController`, `Admin/UserModuleController`, AdminModule `admin/*` + UserModule `change_password` / `forgotPassword` views, nwidart `components/layouts/master` stubs.
@@ -85,7 +85,28 @@
 - **Decisions:**
   - Discount typed as % or net, stored as % — price changes keep the %
   - `remaining` = net (no payments yet)
-- **Pending:** payments; recalc existing packages (`to_run`)
+- **Pending:** payments (see Payments section); recalc existing packages (`to_run`)
+
+### Payments / Invoices / ETA (PaymentModule, InvoiceModule, ReportModule — not built)
+- **Last updated:** 2026-10-10
+- **Spec: `docs/payments-plan.md` — read before any payments/invoice work**
+- **Status:** Plan approved, Phase 1 not started
+- **Phases:** (1) payments + withholding certificates + day closing + old data import · (2) tax rates + invoices / receipts + ETA entry view · (3) reports
+- **Depends on:** ReservationModule, PackageModule (`Payable`, `recalculate()` → `PaymentService::refresh()`), MemberModule, PlanModule / CompanyModule (phase 2 fields), LayoutModule sidebars
+- **Decisions:**
+  - One `payments` table: morph `payable` → Reservation | Package | null (other income); `type` = payment | refund | withholding; amount `decimal(12,2)` always positive
+  - A reservation inside a package is paid through the package; a paid reservation moved into a package → its payments move with it
+  - Negative `remaining` = member credit, shown clearly; wallet later. Refunds = refund records only
+  - Employees only add payments; edit / delete / refund = account owner; delete = soft delete + reason
+  - Day closing: one per account per day, locks that date; totals by employee × payment method (cash handover), withholding excluded from cash; reopen = owner + reason
+  - Payment methods per account; expenses = separate table later (no `direction`)
+  - Old data: 5,042 payments + 227 incomes from `dwidar_pivot_res`, ids kept; old method 5 "إشعار خصم" = withholding (confirmed)
+  - Invoices ETA-ready, no API now: invoices + receipts in one table, created on demand, issued = read-only, corrections by credit / debit note; manual ETA entry view + paste UUID (pending / registered); one ETA service layer (`EtaGateway`, manual now, API later)
+  - Taxes: `tax_rates` (T1 VAT, T2 / T3 table tax, …), several per plan / income category (`taxables` pivot), several per line (`invoice_item_taxes`); ETA order = VAT on (net + table tax + taxable fees); ONE `TaxCalculator`
+  - Prices VAT-inclusive by default (`prices_include_tax`); the calculator reverse-calculates through all taxes
+  - Rounding to the exact price isolated in `RoundingStrategy` (setting `rounding_strategy`); extra-discount option waiting for the accountant
+  - T4 (withholding) on invoices: setting `withholding_on_invoices`, default off (accountant confirming)
+- **Pending:** reservation 500 fix first; then Phase 1 (build order in the spec)
 
 ### Member / Company / Job modules
 - **Last updated:** 2026-10-07
@@ -97,6 +118,13 @@
 ---
 
 ## Session log
+
+### 2026-10-10 — payments, invoices & ETA plan
+- **Changed:** wrote `docs/payments-plan.md` (3 phases: files, DB columns, import SQL, build order, ETA tax formula + worked example); Payments section in this file
+- **Why:** user wants payments for reservations, packages, other income + VAT invoices / e-receipts ready for ETA
+- **Affects:** Reservation, Package, Member, Plan, Company modules; LayoutModule sidebars (when built)
+- **Found:** old DB `dwidar_pivot_res` has payments / incomes / methods / income types (all link to existing rows); ETA rule: VAT base includes table tax; 5-decimal rounding can miss an inclusive price by ≤ 0.00001
+- **Commit:** "docs: payments, invoices & ETA module plan"
 
 ### 2026-10-09 — layout notes added to memory (work done 2026-10-05)
 - **Changed:** documented the dagger layout set up on 2026-10-05: Bootstrap layout → Tailwise dagger (main, header, sidebar, flash, footer, login + AdminModule login form), old CSS/JS and commented code removed, full-width content, sidebar open by default + collapse toggle (no hover-expand), logo / favicon, `custom.css` / `custom.js` created
