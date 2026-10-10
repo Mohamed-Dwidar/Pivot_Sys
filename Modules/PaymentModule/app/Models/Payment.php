@@ -26,6 +26,9 @@ class Payment extends Model
         'withholding' => 'Withholding',
     ];
 
+    // the signed amount in SQL: payments + withholding - refunds (paid totals)
+    const PAID_SQL = "IF(type = 'refund', -amount, amount)";
+
     protected $fillable = [
         'account_id', 'payment_no', 'payable_type', 'payable_id', 'income_category_id', 'member_id',
         'type', 'amount', 'payment_method_id', 'withholding_certificate_id', 'paid_at', 'reference', 'notes',
@@ -94,7 +97,7 @@ class Payment extends Model
     // paid in total by the payments of a query: payments + withholding - refunds
     public static function paidTotal($query): float
     {
-        return round((float) (clone $query)->sum(DB::raw("IF(type = 'refund', -amount, amount)")), 2);
+        return round((float) (clone $query)->sum(DB::raw(self::PAID_SQL)), 2);
     }
 
     // other income (no reservation / package)

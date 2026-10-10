@@ -22,7 +22,9 @@ class PaymentModuleServiceProvider extends ModuleServiceProvider
      *
      * @var string[]
      */
-    // protected array $commands = [];
+    protected array $commands = [
+        \Modules\PaymentModule\app\Console\RefreshPaymentsCommand::class,
+    ];
 
     /**
      * Provider classes to register.
