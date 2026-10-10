@@ -11,5 +11,6 @@
     "PlanModule": true,
     "EmployeeModule": true,
     "ReservationModule": true,
-    "PackageModule": true
+    "PackageModule": true,
+    "PaymentModule": true
 }
