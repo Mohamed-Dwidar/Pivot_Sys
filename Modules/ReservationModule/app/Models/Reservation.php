@@ -12,6 +12,8 @@ use Illuminate\Support\Carbon;
 use Modules\AccountModule\app\Models\Account;
 use Modules\MemberModule\app\Models\Member;
 use Modules\PackageModule\app\Models\Package;
+use Modules\PaymentModule\app\Contracts\Payable;
+use Modules\PaymentModule\app\Models\Concerns\HasPayments;
 use Modules\PlanModule\app\Models\Plan;
 use Modules\SpaceModule\app\Models\Space;
 use Modules\SpaceModule\app\Models\SubscriptionType;
@@ -22,9 +24,9 @@ use Modules\UnitModule\app\Models\Unit;
  * net_amount = amount - discount_value (discount_percentage is the same discount in %).
  * repeat_id: the reservation this one repeats (repeat()), repeats(): the reservations made from this one.
  */
-class Reservation extends Model
+class Reservation extends Model implements Payable
 {
-    use SafeMorphHelper, SoftDeletes;
+    use HasPayments, SafeMorphHelper, SoftDeletes;
 
     // the most copies one "repeat until" can create
     const MAX_REPEATS = 365;
@@ -39,7 +41,7 @@ class Reservation extends Model
     protected $fillable = [
         'account_id', 'member_id', 'space_id', 'unit_id', 'plan_id', 'package_id', 'subscription_type_id', 'reservation_status_id',
         'start_at', 'end_at', 'subscription_day', 'is_continue', 'all_day', 'repeat_id', 'is_repeat', 'repeat_frequency', 'repeat_interval',
-        'number_of_peoples', 'amount', 'discount_percentage', 'discount_value', 'net_amount', 'notes',
+        'number_of_peoples', 'amount', 'discount_percentage', 'discount_value', 'net_amount', 'paid_amount', 'remaining', 'notes',
     ];
 
     protected $casts = [
@@ -52,6 +54,8 @@ class Reservation extends Model
         'discount_percentage' => 'float',
         'discount_value' => 'float',
         'net_amount' => 'float',
+        'paid_amount' => 'float',
+        'remaining' => 'float',
     ];
 
     public function account(): BelongsTo
@@ -111,6 +115,22 @@ class Reservation extends Model
     public function creatable(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    // Payable: its net amount; inside a package it is paid through the package
+    public function payableAmount(): float
+    {
+        return (float) $this->net_amount;
+    }
+
+    public function payableMemberId(): int
+    {
+        return (int) $this->member_id;
+    }
+
+    public function canTakePayments(): bool
+    {
+        return (int) $this->package_id === 0;
     }
 
     public function getRepeatFrequencyLabelAttribute(): ?string

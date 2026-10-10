@@ -34,10 +34,13 @@ return new class extends Migration {
 
             $table->integer('number_of_peoples')->default(1);
 
-            $table->double('amount')->default(0);
+            $table->decimal('amount', 12, 2)->default(0);
             $table->double('discount_percentage')->default(0);
-            $table->double('discount_value')->default(0);
-            $table->double('net_amount')->default(0);
+            $table->decimal('discount_value', 12, 2)->default(0);
+            $table->decimal('net_amount', 12, 2)->default(0);
+            // PaymentService::refresh(): payments + withholding - refunds; remaining = net_amount - paid_amount (< 0 = credit)
+            $table->decimal('paid_amount', 12, 2)->default(0);
+            $table->decimal('remaining', 12, 2)->default(0);
 
             $table->text('notes')->nullable();
 

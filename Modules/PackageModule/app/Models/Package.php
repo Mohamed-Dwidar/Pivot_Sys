@@ -10,6 +10,8 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\AccountModule\app\Models\Account;
 use Modules\MemberModule\app\Models\Member;
+use Modules\PaymentModule\app\Contracts\Payable;
+use Modules\PaymentModule\app\Models\Concerns\HasPayments;
 use Modules\ReservationModule\app\Models\Reservation;
 use Modules\ReservationModule\app\Models\ReservationStatus;
 
@@ -17,13 +19,13 @@ use Modules\ReservationModule\app\Models\ReservationStatus;
  * A package of a member: its price (amount) = the net amounts of its reservations,
  * - discount_percentage = after_discount (the package net), see recalculate() (after every reservation change).
  */
-class Package extends Model
+class Package extends Model implements Payable
 {
-    use SafeMorphHelper, SoftDeletes;
+    use HasPayments, SafeMorphHelper, SoftDeletes;
 
     protected $fillable = [
         'account_id', 'member_id', 'name', 'date_from', 'date_to', 'is_active',
-        'discount_percentage', 'total_amount', 'amount', 'after_discount', 'remaining', 'notes',
+        'discount_percentage', 'total_amount', 'amount', 'after_discount', 'paid_amount', 'remaining', 'notes',
     ];
 
     protected $casts = [
@@ -34,6 +36,7 @@ class Package extends Model
         'total_amount' => 'float',
         'amount' => 'float',
         'after_discount' => 'float',
+        'paid_amount' => 'float',
         'remaining' => 'float',
     ];
 
@@ -56,6 +59,22 @@ class Package extends Model
     public function creatable(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    // Payable: the package net (after its discount)
+    public function payableAmount(): float
+    {
+        return (float) $this->after_discount;
+    }
+
+    public function payableMemberId(): int
+    {
+        return (int) $this->member_id;
+    }
+
+    public function canTakePayments(): bool
+    {
+        return true;
     }
 
     // [discount_percentage, after_discount] from the amount and the one typed ($type: percentage | after)
