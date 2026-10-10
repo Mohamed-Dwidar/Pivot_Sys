@@ -99,6 +99,24 @@
             'url' => route('account.plans.index'),
             'active' => request()->routeIs('account.plans.*'),
         ],
+        [
+            'title' => 'Settings',
+            'icon' => 'settings',
+            'children' => [
+                [
+                    'title' => 'Payment Methods',
+                    'icon' => 'credit-card',
+                    'url' => route('account.payment-methods.index'),
+                    'active' => request()->routeIs('account.payment-methods.*'),
+                ],
+                [
+                    'title' => 'Income Categories',
+                    'icon' => 'tags',
+                    'url' => route('account.income-categories.index'),
+                    'active' => request()->routeIs('account.income-categories.*'),
+                ],
+            ],
+        ],
     ];
 @endphp
 
