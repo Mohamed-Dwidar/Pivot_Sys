@@ -24,6 +24,7 @@
                 <option value="{{ $id }}">{{ Str::humanize($name) }}</option>
             @endforeach
         </select>
+        @include('paymentmodule::Payment.partials.status-filter', ['statuses' => \Modules\ReservationModule\app\Models\Reservation::PAYMENT_STATUSES])
         <input type="date" name="date_from" class="{{ config('layoutmodule.form.input') }} field-short" aria-label="Start from" title="Start from">
         <input type="date" name="date_to" class="{{ config('layoutmodule.form.input') }} field-short" aria-label="Start to" title="Start to">
         @include('layoutmodule::partials.datatable-clear')
@@ -40,6 +41,8 @@
                     <th data-data="period" data-name="start_at" data-class="whitespace-nowrap">Period</th>
                     <th data-data="status">Status</th>
                     <th data-data="net_amount" data-name="net_amount">Net Amount</th>
+                    <th data-data="paid_amount" data-name="paid_amount">Paid</th>
+                    <th data-data="remaining_html" data-name="remaining">Remaining</th>
                     <th data-data="actions"></th>
                 </tr>
             </thead>

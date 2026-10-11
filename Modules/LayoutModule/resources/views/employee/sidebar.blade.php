@@ -27,6 +27,12 @@
             'url' => route('employee.payments.index'),
             'active' => request()->routeIs('employee.payments.*'),
         ],
+        [
+            'title' => 'Day Closing',
+            'icon' => 'lock',
+            'url' => route('employee.day-closings.index'),
+            'active' => request()->routeIs('employee.day-closings.*'),
+        ],
 
         ['divider' => 'Settings'],
         [

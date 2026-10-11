@@ -6,6 +6,10 @@
 @endsection
 
 @section('actions')
+    <a href="{{ route($area . '.day-closings.index') }}" class="btn btn-secondary"><i data-lucide="lock"></i> Day Closing</a>
+    @if ($area === 'account')
+        <a href="{{ route('account.withholding-certificates.index') }}" class="btn btn-secondary"><i data-lucide="file-badge"></i> Withholding Certificates</a>
+    @endif
     <a href="{{ route($area . '.payments.create') }}" data-modal class="btn btn-primary"><i data-lucide="plus"></i> Add Payment</a>
 @endsection
 

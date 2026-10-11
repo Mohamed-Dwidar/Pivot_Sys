@@ -37,6 +37,8 @@ class PaymentRequest extends FormRequest
             'paid_at' => 'required|date',
             'reference' => 'nullable|string|max:255',
             'notes' => 'nullable|string|max:5000',
+            // the form was opened from a reservation / package view (the answer goes back to it)
+            'back_to_payable' => 'boolean',
         ];
     }
 

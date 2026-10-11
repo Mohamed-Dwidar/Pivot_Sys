@@ -23,6 +23,8 @@
             <option value="1">Active</option>
             <option value="0">Inactive</option>
         </select>
+        {{-- a package is always paid on its own: no "In package" --}}
+        @include('paymentmodule::Payment.partials.status-filter', ['statuses' => \Illuminate\Support\Arr::except(\Modules\PackageModule\app\Models\Package::PAYMENT_STATUSES, 'elsewhere')])
         @include('layoutmodule::partials.datatable-clear')
     </form>
 
@@ -37,6 +39,8 @@
                     <th data-data="amount" data-name="amount">Price</th>
                     <th data-data="discount" data-name="discount_percentage">Discount</th>
                     <th data-data="after_discount" data-name="after_discount">Net</th>
+                    <th data-data="paid_amount" data-name="paid_amount">Paid</th>
+                    <th data-data="remaining_html" data-name="remaining">Remaining</th>
                     <th data-data="reservations_count" data-name="reservations_count">Reservations</th>
                     <th data-data="status" data-name="is_active">Status</th>
                     <th data-data="actions"></th>

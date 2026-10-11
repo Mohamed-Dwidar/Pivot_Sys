@@ -62,7 +62,7 @@ trait PackageActions
 
         return DataTables::eloquent($query)
             // inside filter() so "of N total" counts all the packages
-            ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['member_id', 'is_active'])))
+            ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['member_id', 'is_active', 'payment_status'])))
             ->setRowId(fn ($package) => 'row-' . $package->id)
             ->addColumn('name_html', fn ($package) => '<a href="' . $this->route('show', $package->id) . '" data-modal class="font-medium">' . e($package->name) . '</a>')
             ->addColumn('member', fn ($package) => e($package->member?->name ?? '-'))
@@ -71,12 +71,14 @@ trait PackageActions
             ->editColumn('amount', fn ($package) => number_format($package->amount, 2))
             ->addColumn('discount', fn ($package) => rtrim(rtrim(number_format($package->discount_percentage, 2), '0'), '.') . '%')
             ->editColumn('after_discount', fn ($package) => '<span class="font-medium text-success">' . number_format($package->after_discount, 2) . '</span>')
+            ->editColumn('paid_amount', fn ($package) => number_format($package->paid_amount, 2))
+            ->addColumn('remaining_html', fn ($package) => view('paymentmodule::Payment.partials.row-remaining', ['payable' => $package])->render())
             ->addColumn('status', fn ($package) => view('layoutmodule::partials.row-toggle', [
                 'url' => $this->route('active', $package->id), 'row' => $package->id, 'name' => 'is_active', 'checked' => $package->is_active,
             ])->render())
             ->addColumn('actions', fn ($package) => view('packagemodule::Package.partials.row-actions', compact('package'))->render())
-            ->rawColumns(['name_html', 'after_discount', 'status', 'actions'])
-            ->only(['DT_RowId', 'name_html', 'member', 'period', 'amount', 'discount', 'after_discount', 'reservations_count', 'status', 'actions']);
+            ->rawColumns(['name_html', 'after_discount', 'remaining_html', 'status', 'actions'])
+            ->only(['DT_RowId', 'name_html', 'member', 'period', 'amount', 'discount', 'after_discount', 'paid_amount', 'remaining_html', 'reservations_count', 'status', 'actions']);
     }
 
     // the updated row with the list filters (list[...]), null when it does not match them any more
@@ -142,8 +144,8 @@ trait PackageActions
 
     public function destroy($id)
     {
-        if (!$this->packageService->deleteOne($this->accountId(), $id)) {
-            return response()->json(['message' => 'This package has reservations, it can not be deleted. You can deactivate it.'], 422);
+        if ($error = $this->packageService->deleteOne($this->accountId(), $id)) {
+            return response()->json(['message' => $error], 422);
         }
 
         return response()->json([

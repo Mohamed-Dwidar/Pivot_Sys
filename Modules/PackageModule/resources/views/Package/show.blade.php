@@ -70,6 +70,10 @@
         </div>
     </dl>
 
+    {{-- sales / adjustments added to what it owes, then its payments --}}
+    @include('paymentmodule::Extra.partials.package-extras', ['package' => $package])
+    @include('paymentmodule::Payment.partials.payable-payments', ['payable' => $package, 'kind' => 'package'])
+
     <div class="form-section mt-8">Reservations ({{ $package->reservations->count() }})</div>
     @if ($package->reservations->isNotEmpty())
         {{-- scrolls when there are many reservations, the header stays visible (custom.css .table-wrap--scroll) --}}

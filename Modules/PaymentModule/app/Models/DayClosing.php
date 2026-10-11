@@ -4,6 +4,7 @@ namespace Modules\PaymentModule\app\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\AccountModule\app\Models\Account;
 use Modules\UserModule\app\Models\User;
 
@@ -45,6 +46,12 @@ class DayClosing extends Model
     public function reopenedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reopened_by');
+    }
+
+    // every close / reopen, newest first (the reopened_* columns = the last reopen only)
+    public function logs(): HasMany
+    {
+        return $this->hasMany(DayClosingLog::class)->latest('id');
     }
 
     // the closings that lock their day

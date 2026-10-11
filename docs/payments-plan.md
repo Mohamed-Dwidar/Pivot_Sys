@@ -145,6 +145,11 @@ Modules/PaymentModule/
 ### Changes in other modules
 - **ReservationModule:** the `Reservation` model implements `Payable` (payable only when `package_id = 0`). The view shows the payments block (`_list`) + "Add payment". Row menu: "Add payment". List: paid / remaining columns + a payment status filter. `ReservationService`: when `package_id` changes → `PaymentService::movePayments()`.
 - **PackageModule:** the `Package` model implements `Payable`. `PackageService::recalculate()` ends with `PaymentService::refresh($package)`, because the price changes the remaining. The view shows the payments block.
+- **Extras (added 2026-10-11, user decision):** table `extras` (morph `extrable`: Package now, Reservation later) — `type` extra | adjustment, `income_category_id` (extra only), `item`, `quantity`, `unit_price`, `amount` (= quantity × unit_price, signed), `date`, `notes`, creatable, soft deletes. **Package due = net (after discount) + Σ extras.**
+  - extra = a real sale (copies, buffet, extra hours …): revenue, has an income category, invoiceable in phase 2 (its ETA item / taxes come from the income category).
+  - adjustment = a balance move (carry-overs between packages, close-outs, discounts, reimbursements): not revenue, never invoiced, can be negative.
+  - Files: `PaymentModule` `Models/Extra`, `Models/Concerns/HasExtras` (on Package), `Services/ExtraService`, `Requests/ExtraRequest`, `Account/ExtraAccountModuleController`, routes `account.extras.*`, views `Extra/*` (block `Extra.partials.package-extras` in the package view). The account adds / edits / deletes; employees see them.
+  - Old data: the 180 old package extras (`dwidar_pivot_api.extras`) are imported by item: 61 adjustments, 119 extras (categories 1 Prints, 2, 3, 5 Other, 7 Buffet, 8 Break Hours, 9 Extra Hours); the rule is in `to_run`.
 - **MemberModule:** the member view shows a balance (owed / paid / credit). Full statement in phase 3.
 - **LayoutModule** (shared — confirm before editing): account sidebar: Payments, Withholding certificates, Day closing, Settings → Payment methods, Income categories. Employee sidebar: Payments, Day closing.
 

@@ -33,12 +33,32 @@
                 ],
             ],
         ],
+
         [
             'title' => 'Payments',
             'icon' => 'wallet',
-            'url' => route('account.payments.index'),
-            'active' => request()->routeIs('account.payments.*'),
+            'children' => [
+                [
+                    'title' => 'All Payments',
+                    'icon' => 'list',
+                    'url' => route('account.payments.index'),
+                    'active' => request()->routeIs('account.payments.*'),
+                ],
+                [
+                    'title' => 'Withholding Certificates',
+                    'icon' => 'file-badge',
+                    'url' => route('account.withholding-certificates.index'),
+                    'active' => request()->routeIs('account.withholding-certificates.*'),
+                ],
+                [
+                    'title' => 'Day Closing',
+                    'icon' => 'lock',
+                    'url' => route('account.day-closings.index'),
+                    'active' => request()->routeIs('account.day-closings.*'),
+                ],
+            ],
         ],
+
         [
             'title' => 'Members',
             'icon' => 'users',

@@ -46,7 +46,7 @@ Then suggest a commit message.
 - Services called outside forms (imports, commands, invoices) re-check their rules + account ownership themselves and throw `ValidationException` (422 under the fields)
 - Models with a `creatable` / `payable` morph use `SafeMorphHelper`
 - Lists: DataTables server side; controller `table($filters, $id)` builds the columns once (also used to re-render one row), `setRowId('row-'.id)`, no `#` column
-- CRUD UI: view/add/edit open in the popup (`<a data-modal>`, views `@extends(request()->ajax() ? 'layoutmodule::modal' : layout)`); forms `data-ajax` + `data-confirm*`; JSON answers `{message, row|reload, redirect, counts}`; rows update in place
+- CRUD UI: view/add/edit open in the popup (`<a data-modal>`, views `@extends(request()->ajax() ? 'layoutmodule::modal' : layout)`); forms `data-ajax` + `data-confirm*`; JSON answers `{message, row|reload, redirect, counts, modal}` (`modal` = a popup form opens that page after saving); rows update in place
 - Forms: `layoutmodule::partials.field` with template classes from `config('layoutmodule.form.*')`; `searchable`, `width`, `wrapperClass` options; no inline CSS
 - Display formats: dates `d-m-Y`, times `h:i A` (`Reservation::DATE_FORMAT/TIME_FORMAT`); date/time INPUT values must stay `Y-m-d` / `H:i`
 - DB columns: snake_case, `{x}_ar/{x}_en` for translated text, `account_id` on every account-owned table, `0` = none for non-nullable foreign ids, soft deletes on most tables
@@ -70,13 +70,15 @@ Then suggest a commit message.
 - **UnitModule** ↔ ReservationModule: unit `subscription_type_id`, `capacity`, `concurrent_usage`, `color` used by the reservation form + availability check
 - **PlanModule** ↔ ReservationModule: `is_time_based`, `lease_period`, `amount` → reservation times + amount (`Plan::amountBetween`, same formula in custom.js)
 - **ReservationModule** ↔ PackageModule: saving / deleting / status change of a reservation calls `PackageService::recalculate()` (price, net, dates); `ReservationStatus::is_counted` excludes cancelled-like reservations from package totals, hours and availability
+- **PackageModule** ↔ PaymentModule extras: `Package` uses `HasExtras`; due (`payableAmount()`) = `after_discount` + Σ `extras` (extra = sale with income category, adjustment = balance move); every extra change → `PaymentService::refresh()`
 - **MemberModule** ↔ PackageModule, ReservationModule: member options "name mobile" (searchable), package locks the reservation member
 - **EmployeeModule** ↔ ReservationModule, PackageModule: employees manage the account's reservations / packages (`employee.*` routes)
-- **PaymentModule** ↔ ReservationModule, PackageModule, MemberModule: Reservation / Package implement `Payable` + `HasPayments` (`paid_amount`, `remaining`); `PaymentService::refresh()` after every payment change and (from step 4) at the end of `Package::recalculate()`; a reservation inside a package is paid through the package; spec `docs/payments-plan.md`
+- **PaymentModule** ↔ ReservationModule, PackageModule, MemberModule: Reservation / Package implement `Payable` + `HasPayments` (`paid_amount`, `remaining`, payment status, `scopePaymentStatus`); `PaymentService::refresh()` after every payment change, at the end of `Package::recalculate()` and in `ReservationService` create / update / changeStatus; due = 0 inside a package or with a not counted status; moved into a package → `movePayments()`; a reservation / package with payments can't be deleted; their views include `paymentmodule::Payment.partials.payable-payments`, lists `row-remaining` / `status-filter`; payment ids / numbers from `paymentmodule.number_start` (100001, old import below it); spec `docs/payments-plan.md`
 
 ## Rules
 - Before renaming anything shared (routes, components, config keys), search the whole project for references and update them all.
 - Never edit migrations that already ran — create a new migration.
 - Ask before deleting files or changing shared layouts.
 - Keep changes minimal and scoped to the task.
+- Don't commit — the user commits; suggest the commit message only.
  

@@ -10,6 +10,14 @@
 
 @section('actions')
     <a href="{{ route($area . '.payments.receipt', $payment->id) }}" target="_blank" class="btn btn-secondary"><i data-lucide="printer"></i> Receipt</a>
+    {{-- the account owner only (employees add payments) --}}
+    @if ($area === 'account')
+        <a href="{{ route('account.payments.edit', $payment->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
+        @if ($payment->type === 'payment')
+            <a href="{{ route('account.payments.refund', $payment->id) }}" data-modal class="btn btn-secondary"><i data-lucide="undo-2"></i> Refund</a>
+        @endif
+        <a href="{{ route('account.payments.delete', $payment->id) }}" data-modal class="btn btn-danger"><i data-lucide="trash-2"></i> Delete</a>
+    @endif
 @endsection
 
 @section('content')
@@ -18,6 +26,19 @@
         <div><dt>Amount</dt><dd class="font-medium {{ $payment->type === 'refund' ? 'text-danger' : 'text-success' }}">{{ number_format($payment->signed_amount, 2) }}</dd></div>
         <div><dt>Payment Method</dt><dd>{{ $payment->paymentMethod?->name ?? '-' }}</dd></div>
         <div><dt>Reference</dt><dd>{{ $payment->reference ?: '-' }}</dd></div>
+        @if ($payment->type === 'withholding')
+            <div><dt>Certificate</dt><dd>
+                @if ($payment->withholdingCertificate)
+                    @if ($area === 'account')
+                        <a href="{{ route('account.withholding-certificates.show', $payment->withholding_certificate_id) }}" data-modal class="font-medium">{{ $payment->withholdingCertificate->certificate_no }}</a>
+                    @else
+                        {{ $payment->withholdingCertificate->certificate_no }}
+                    @endif
+                @else
+                    <span class="badge badge-status-warning">No certificate yet</span>
+                @endif
+            </dd></div>
+        @endif
     </dl>
 
     <div class="form-section">&nbsp;</div>

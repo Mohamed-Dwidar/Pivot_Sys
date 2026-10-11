@@ -21,7 +21,7 @@ use Modules\ReservationModule\app\Models\Reservation;
  * Payments of an account: every method takes the owner account id, so an account can only reach its own payments.
  * - amount always positive, type gives the sign (Payment::PAID_SQL); paid_amount / remaining of the payable kept by refresh()
  * - a payment dated on a closed day can't be added (assertDayOpen())
- * - payment_no: per account, MAX + 1 inside the transaction (locked)
+ * - payment_no: per account, MAX + 1 inside the transaction (locked), from config paymentmodule.number_start
  * The rules errors are thrown as ValidationException (422, shown under the fields by custom.js).
  * The service checks the account ownership itself (method, category, member, payable): it is also called by imports / invoices.
  */
@@ -111,25 +111,16 @@ class PaymentService
         if ($payable && !$payable->canTakePayments()) {
             throw ValidationException::withMessages(['payable_id' => 'This reservation is inside a package, add the payment to the package.']);
         }
-        if (!$payable && empty($data['income_category_id'])) {
-            throw ValidationException::withMessages(['income_category_id' => 'Choose the income category of this payment.']);
-        }
-        if (!$payable && !IncomeCategory::where('account_id', $accountId)->whereKey((int) $data['income_category_id'])->exists()) {
-            throw ValidationException::withMessages(['income_category_id' => 'This income category is not one of yours.']);
+        if (!$payable) {
+            $this->assertCategory($accountId, $data['income_category_id'] ?? 0);
         }
         if (!$payable && !empty($data['member_id']) && !Member::where('account_id', $accountId)->whereKey((int) $data['member_id'])->exists()) {
             throw ValidationException::withMessages(['member_id' => 'This member is not one of yours.']);
         }
 
-        $amount = round((float) ($data['amount'] ?? 0), 2);
-        if ($amount <= 0) {
-            throw ValidationException::withMessages(['amount' => 'The amount must be more than 0.']);
-        }
-        if ($type === 'payment' && empty($data['payment_method_id'])) {
-            throw ValidationException::withMessages(['payment_method_id' => 'Choose the payment method.']);
-        }
-        if ($type === 'payment' && !PaymentMethod::where('account_id', $accountId)->whereKey((int) $data['payment_method_id'])->exists()) {
-            throw ValidationException::withMessages(['payment_method_id' => 'This payment method is not one of yours.']);
+        $amount = $this->assertAmount($data['amount'] ?? 0);
+        if ($type === 'payment') {
+            $this->assertMethod($accountId, $data['payment_method_id'] ?? 0);
         }
 
         $paidAt = Carbon::parse($data['paid_at'] ?? today())->startOfDay();
@@ -161,6 +152,138 @@ class PaymentService
 
             return $payment;
         });
+    }
+
+    /**
+     * The owner's edit: amount, date, method, income category (other income), reference, notes.
+     * The payable / member / type are kept (a payment for another reservation = delete it and add a new one).
+     * Both the old and the new date must be open days.
+     */
+    public function update($accountId, $id, array $data, Model $user): Payment
+    {
+        $this->assertOwner($user);
+        $payment = $this->findOne($accountId, $id);
+
+        $amount = $this->assertAmount($data['amount'] ?? 0);
+        // withholding: no money received, no method
+        if ($payment->type !== 'withholding') {
+            $this->assertMethod($accountId, $data['payment_method_id'] ?? 0);
+        }
+        if (!$payment->payable_type) {
+            $this->assertCategory($accountId, $data['income_category_id'] ?? 0);
+        }
+        $paidAt = Carbon::parse($data['paid_at'] ?? $payment->paid_at)->startOfDay();
+        $this->assertDayOpen($accountId, $payment->paid_at);
+        $this->assertDayOpen($accountId, $paidAt);
+        // a refund of a reservation / package: still not more than the money received (other income refunds are not linked)
+        if ($payment->type === 'refund' && $payment->payable_type) {
+            $this->assertRefundable($payment, $amount, $payment);
+        }
+
+        return DB::transaction(function () use ($payment, $data, $amount, $paidAt) {
+            $payment->update([
+                'amount' => $amount,
+                'paid_at' => $paidAt,
+                'payment_method_id' => $payment->type === 'withholding' ? 0 : (int) $data['payment_method_id'],
+                'income_category_id' => $payment->payable_type ? 0 : (int) $data['income_category_id'],
+                'reference' => $data['reference'] ?? null,
+                'notes' => $data['notes'] ?? null,
+            ]);
+            $this->refreshPayableOf($payment);
+
+            return $payment;
+        });
+    }
+
+    // the owner's delete: soft delete with the reason and who deleted it (kept for the audit report)
+    public function delete($accountId, $id, string $reason, Model $user): Payment
+    {
+        $this->assertOwner($user);
+        $payment = $this->findOne($accountId, $id);
+        $this->assertDayOpen($accountId, $payment->paid_at, 'delete_reason');
+        if (trim($reason) === '') {
+            throw ValidationException::withMessages(['delete_reason' => 'Write why this payment is deleted.']);
+        }
+
+        return DB::transaction(function () use ($payment, $reason, $user) {
+            $payment->update(['delete_reason' => trim($reason), 'deleted_by' => $user->getKey()]);
+            $payment->delete();
+            $this->refreshPayableOf($payment);
+
+            return $payment;
+        });
+    }
+
+    /**
+     * The owner's refund of a payment: a new refund record (positive amount, type refund) for the same payable / income,
+     * paid back with a method. Not more than the money received: a reservation / package = its payments - its refunds
+     * (withholding is not money received); other income = this payment - nothing (refunds of income are not linked).
+     * $data: amount, payment_method_id, paid_at, reference, notes
+     */
+    public function refund($accountId, $id, array $data, Model $user): Payment
+    {
+        $this->assertOwner($user);
+        $payment = $this->findOne($accountId, $id);
+        if ($payment->type !== 'payment') {
+            throw ValidationException::withMessages(['amount' => 'Only a payment can be refunded (not a refund or a withholding).']);
+        }
+
+        $amount = $this->assertAmount($data['amount'] ?? 0);
+        $this->assertMethod($accountId, $data['payment_method_id'] ?? 0);
+        $this->assertRefundable($payment, $amount);
+        $paidAt = Carbon::parse($data['paid_at'] ?? today())->startOfDay();
+        $this->assertDayOpen($accountId, $paidAt);
+
+        return DB::transaction(function () use ($accountId, $payment, $data, $user, $amount, $paidAt) {
+            $refund = new Payment([
+                'account_id' => $accountId,
+                'payment_no' => $this->nextNumber($accountId),
+                'payable_type' => $payment->payable_type,
+                'payable_id' => $payment->payable_id,
+                'income_category_id' => $payment->income_category_id,
+                'member_id' => $payment->member_id,
+                'type' => 'refund',
+                'amount' => $amount,
+                'payment_method_id' => (int) $data['payment_method_id'],
+                'paid_at' => $paidAt,
+                'reference' => ($data['reference'] ?? null) ?: 'Refund of #' . $payment->payment_no,
+                'notes' => $data['notes'] ?? null,
+            ]);
+            $refund->creatable()->associate($user);
+            $refund->save();
+            $this->refreshPayableOf($refund);
+
+            return $refund;
+        });
+    }
+
+    // the most that can be refunded now (the refund form); $except: a refund being edited (its amount is not counted)
+    public function refundable(Payment $payment, ?Payment $except = null): float
+    {
+        $query = Payment::where('account_id', $payment->account_id)->whereIn('type', ['payment', 'refund'])
+            ->when($except, fn ($query) => $query->whereKeyNot($except->getKey()));
+        $query = $payment->payable_type
+            ? $query->where('payable_type', $payment->payable_type)->where('payable_id', $payment->payable_id)
+            : null;
+
+        // other income: the payment amount (its refunds are not linked to it)
+        return round($query ? Payment::paidTotal($query) : $payment->amount, 2);
+    }
+
+    /**
+     * A reservation moved into a package is paid through the package: its payments (all types, the deleted ones too)
+     * move to the package; their amount, date, method and number don't change, so a closed day's totals stay right.
+     * Both are refreshed. Returns the number of payments moved.
+     */
+    public function movePayments(Payable $from, Payable $to): int
+    {
+        $moved = Payment::withTrashed()->where('payable_type', $from->getMorphClass())->where('payable_id', $from->getKey())
+            ->update(['payable_type' => $to->getMorphClass(), 'payable_id' => $to->getKey()]);
+
+        $this->refresh($from instanceof Reservation ? $from->load('status') : $from);
+        $this->refresh($to);
+
+        return $moved;
     }
 
     /**
@@ -197,8 +320,9 @@ class PaymentService
                 ->pluck('paid', 'payable_id');
 
             $class::query()->when($accountId, fn ($query) => $query->where('account_id', $accountId))
-                // the reservation status gives its due (payableAmount())
+                // the reservation status / the package extras give their due (payableAmount())
                 ->when($class === Reservation::class, fn ($query) => $query->with('status'))
+                ->when($class === Package::class, fn ($query) => $query->withSum('extras', 'amount'))
                 ->chunkById(500, function ($payables) use ($paid, &$changed) {
                     foreach ($payables as $payable) {
                         $before = [$payable->paid_amount, $payable->remaining];
@@ -209,6 +333,60 @@ class PaymentService
         }
 
         return $changed;
+    }
+
+    private function assertOwner(Model $user): void
+    {
+        if (!$this->isOwner($user)) {
+            abort(403, 'Only the account owner can change, delete or refund payments.');
+        }
+    }
+
+    // the amount (> 0, 2 decimals)
+    private function assertAmount($amount): float
+    {
+        $amount = round((float) $amount, 2);
+        if ($amount <= 0) {
+            throw ValidationException::withMessages(['amount' => 'The amount must be more than 0.']);
+        }
+        return $amount;
+    }
+
+    private function assertMethod($accountId, $methodId): void
+    {
+        if (empty($methodId)) {
+            throw ValidationException::withMessages(['payment_method_id' => 'Choose the payment method.']);
+        }
+        if (!PaymentMethod::where('account_id', $accountId)->whereKey((int) $methodId)->exists()) {
+            throw ValidationException::withMessages(['payment_method_id' => 'This payment method is not one of yours.']);
+        }
+    }
+
+    private function assertCategory($accountId, $categoryId): void
+    {
+        if (empty($categoryId)) {
+            throw ValidationException::withMessages(['income_category_id' => 'Choose the income category of this payment.']);
+        }
+        if (!IncomeCategory::where('account_id', $accountId)->whereKey((int) $categoryId)->exists()) {
+            throw ValidationException::withMessages(['income_category_id' => 'This income category is not one of yours.']);
+        }
+    }
+
+    private function assertRefundable(Payment $payment, float $amount, ?Payment $except = null): void
+    {
+        $max = $this->refundable($payment, $except);
+        if ($amount > $max) {
+            throw ValidationException::withMessages(['amount' => 'Not more than ' . number_format(max(0, $max), 2) . ' can be refunded (the money received).']);
+        }
+    }
+
+    // the reservation / package of a payment after it changed (other income: nothing)
+    private function refreshPayableOf(Payment $payment): void
+    {
+        $payable = $payment->load('payable')->payable;
+        if ($payable instanceof Payable) {
+            $this->refresh($payable instanceof Reservation ? $payable->load('status') : $payable);
+        }
     }
 
     // a closed day locks its payments: no add / edit / delete dated on it
@@ -222,9 +400,11 @@ class PaymentService
         }
     }
 
-    // the next payment number of the account (call inside a transaction: the rows read are locked until it ends)
+    // the next payment number of the account (call inside a transaction: the rows read are locked until it ends);
+    // never below config paymentmodule.number_start (the numbers below it are the old imported payments)
     public function nextNumber($accountId): int
     {
-        return (int) Payment::withTrashed()->where('account_id', $accountId)->lockForUpdate()->max('payment_no') + 1;
+        $last = (int) Payment::withTrashed()->where('account_id', $accountId)->lockForUpdate()->max('payment_no');
+        return max($last + 1, (int) config('paymentmodule.number_start', 1));
     }
 }

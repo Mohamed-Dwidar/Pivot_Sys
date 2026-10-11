@@ -97,6 +97,12 @@ class Payment extends Model
         return $this->type === 'refund' ? -$this->amount : $this->amount;
     }
 
+    // reservation | package (the SOURCES key of payable_type), null for other income
+    public function getPayableKindAttribute(): ?string
+    {
+        return array_search($this->payable_type, self::SOURCES, true) ?: null;
+    }
+
     public function getTypeLabelAttribute(): string
     {
         return self::TYPES[$this->type] ?? $this->type;

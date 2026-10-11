@@ -70,14 +70,19 @@ class PackageService
         return $package;
     }
 
-    // soft delete, false when it has reservations
-    public function deleteOne($accountId, $id)
+    // soft delete; the reason when it can not be deleted (it has reservations / payments), null when deleted
+    public function deleteOne($accountId, $id): ?string
     {
         $package = $this->findOne($accountId, $id);
         if ($package->reservations_count > 0) {
-            return false;
+            return 'This package has reservations, it can not be deleted. You can deactivate it.';
         }
-        return $package->delete();
+        // its money must not be lost
+        if ($package->payments()->exists()) {
+            return 'This package has payments, it can not be deleted. Refund or delete its payments first.';
+        }
+        $package->delete();
+        return null;
     }
 
     // after a reservation of the package is saved / deleted

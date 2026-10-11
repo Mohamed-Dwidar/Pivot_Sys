@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\AccountModule\app\Models\Account;
 use Modules\MemberModule\app\Models\Member;
 use Modules\PaymentModule\app\Contracts\Payable;
+use Modules\PaymentModule\app\Models\Concerns\HasExtras;
 use Modules\PaymentModule\app\Models\Concerns\HasPayments;
 use Modules\PaymentModule\app\Services\PaymentService;
 use Modules\ReservationModule\app\Models\Reservation;
@@ -22,7 +23,7 @@ use Modules\ReservationModule\app\Models\ReservationStatus;
  */
 class Package extends Model implements Payable
 {
-    use HasPayments, SafeMorphHelper, SoftDeletes;
+    use HasExtras, HasPayments, SafeMorphHelper, SoftDeletes;
 
     protected $fillable = [
         'account_id', 'member_id', 'name', 'date_from', 'date_to', 'is_active',
@@ -62,10 +63,10 @@ class Package extends Model implements Payable
         return $this->morphTo();
     }
 
-    // Payable: the package net (after its discount)
+    // Payable: the package net (after its discount) + its extras (sales and balance adjustments, see HasExtras)
     public function payableAmount(): float
     {
-        return (float) $this->after_discount;
+        return round((float) $this->after_discount + $this->extrasTotal(), 2);
     }
 
     public function payableMemberId(): int
@@ -174,6 +175,11 @@ class Package extends Model implements Payable
 
         if (isset($filters['is_active']) && $filters['is_active'] !== '') {
             $query->where('is_active', (bool) $filters['is_active']);
+        }
+
+        // unpaid / partial / paid / credit / nothing_due
+        if (!empty($filters['payment_status'])) {
+            $query->paymentStatus($filters['payment_status']);
         }
 
         return $query;

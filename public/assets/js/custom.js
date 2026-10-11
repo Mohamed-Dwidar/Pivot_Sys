@@ -165,6 +165,7 @@ document.addEventListener("click", function (e) {
 //   { message, reload: true } -> reload the lists of the page (added)
 //   { message, redirect }     -> where to go when the row / list is not on this page (full page forms)
 //   { counts: { name: n } }   -> new numbers for [data-counter="name"] (tabs, titles, sidebar badges with data-hide-zero)
+//   { modal: url }            -> a form in the popup: the popup shows this page after saving (e.g. back to the reservation view)
 // data-row="{id}" = the list row of the record (row-{id}), its list filters are sent as list[...].
 // 422 -> the errors are shown under the fields ([data-field="name"]) or at the top of the form.
 function clearFormErrors(form) {
@@ -292,7 +293,11 @@ function ajaxSubmit(form) {
                 return;
             }
             toast(json.message);
-            if (inModal) appModal.close();
+            if (inModal && json.modal) {
+                appModal.open(json.modal);
+            } else if (inModal) {
+                appModal.close();
+            }
         })
         .catch(function () {
             failed();

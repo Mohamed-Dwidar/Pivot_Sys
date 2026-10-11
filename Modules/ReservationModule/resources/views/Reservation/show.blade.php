@@ -61,6 +61,8 @@
         <div><dt>Net Amount</dt><dd class="font-medium text-success">{{ number_format($reservation->net_amount, 2) }}</dd></div>
     </dl>
 
+    @include('paymentmodule::Payment.partials.payable-payments', ['payable' => $reservation, 'kind' => 'reservation'])
+
     <div class="form-section">&nbsp;</div>
 
     <dl class="detail-list">

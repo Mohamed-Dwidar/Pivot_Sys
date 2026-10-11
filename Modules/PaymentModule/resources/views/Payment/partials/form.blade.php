@@ -10,6 +10,11 @@
     $kind = old('payable', $payableKind);
 @endphp
 
+{{-- opened from a reservation / package view: the popup goes back to it after saving --}}
+@if (request()->filled('payable_id'))
+    <input type="hidden" name="back_to_payable" value="1">
+@endif
+
 <div class="form-section">Payment For</div>
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
     @include('layoutmodule::partials.field', ['name' => 'payable', 'label' => 'For', 'type' => 'select', 'required' => true,

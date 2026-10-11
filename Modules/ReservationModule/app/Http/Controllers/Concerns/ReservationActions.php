@@ -114,7 +114,7 @@ trait ReservationActions
         return DataTables::eloquent($query)
             // inside filter() so "of N total" counts all the reservations
             ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))]
-                + Arr::only($filters, ['reservation_status_id', 'space_id', 'date_from', 'date_to'])))
+                + Arr::only($filters, ['reservation_status_id', 'space_id', 'date_from', 'date_to', 'payment_status'])))
             ->setRowId(fn ($reservation) => 'row-' . $reservation->id)
             ->addColumn('member_html', fn ($reservation) => view('reservationmodule::Reservation.partials.row-member', compact('reservation'))->render())
             // (the unit color) space › unit
@@ -123,9 +123,12 @@ trait ReservationActions
             ->addColumn('period', fn ($reservation) => e($reservation->period))
             ->addColumn('status', fn ($reservation) => '<span class="' . ($reservation->status?->badge_class ?? 'badge badge-status-slate') . '">' . e($reservation->status?->name ?? '-') . '</span>')
             ->editColumn('net_amount', fn ($reservation) => number_format($reservation->net_amount, 2))
+            ->editColumn('paid_amount', fn ($reservation) => number_format($reservation->paid_amount, 2))
+            // the remaining + the payment status badge (in a package: paid through the package)
+            ->addColumn('remaining_html', fn ($reservation) => view('paymentmodule::Payment.partials.row-remaining', ['payable' => $reservation])->render())
             ->addColumn('actions', fn ($reservation) => view('reservationmodule::Reservation.partials.row-actions', compact('reservation'))->render())
-            ->rawColumns(['member_html', 'place', 'status', 'actions'])
-            ->only(['DT_RowId', 'member_html', 'place', 'plan', 'period', 'status', 'net_amount', 'actions']);
+            ->rawColumns(['member_html', 'place', 'status', 'remaining_html', 'actions'])
+            ->only(['DT_RowId', 'member_html', 'place', 'plan', 'period', 'status', 'net_amount', 'paid_amount', 'remaining_html', 'actions']);
     }
 
     // the updated row with the list filters (list[...]), null when it does not match them any more
@@ -217,7 +220,9 @@ trait ReservationActions
 
     public function destroy($id)
     {
-        $this->reservationService->deleteOne($this->accountId(), $id);
+        if ($error = $this->reservationService->deleteOne($this->accountId(), $id)) {
+            return response()->json(['message' => $error], 422);
+        }
 
         return response()->json([
             'message' => 'The reservation has been deleted successfully.',

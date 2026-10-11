@@ -92,6 +92,12 @@ trait PaymentActions
             ->only(['DT_RowId', 'number_html', 'paid_at', 'member', 'source', 'type_html', 'method', 'amount', 'actions']);
     }
 
+    // the updated row with the list filters (list[...]), null when it does not match them any more (or deleted)
+    private function row(Request $request, $id)
+    {
+        return $this->table((array) $request->input('list', []), $id)->toArray()['data'][0] ?? null;
+    }
+
     // the member's reservations / packages (json [{id, name}]) for the form: ?member_id=&payable=reservation|package
     public function payables(Request $request)
     {
@@ -135,11 +141,14 @@ trait PaymentActions
     public function store(PaymentRequest $request)
     {
         $payment = $this->paymentService->create($this->accountId(), $request->validated(), Auth::user());
+        // a reservation / package payment: back to its view (popup or full page), with the new payment in its block
+        $payableUrl = $request->validated('payable') ? route($this->area() . '.' . $request->validated('payable') . 's.show', $payment->payable_id) : null;
 
         return response()->json([
             'message' => 'Payment #' . $payment->payment_no . ' has been added successfully.',
             'reload' => true,
-            'redirect' => $this->route('show', $payment->id),
+            'modal' => $request->boolean('back_to_payable') ? $payableUrl : null,
+            'redirect' => $payableUrl ?? $this->route('show', $payment->id),
         ]);
     }
 

@@ -133,6 +133,17 @@ class Reservation extends Model implements Payable
         return (int) $this->package_id === 0;
     }
 
+    // HasPayments::scopePaymentStatus(): paid on its own / through its package
+    public function scopePayableAlone($query)
+    {
+        return $query->where('reservations.package_id', 0);
+    }
+
+    public function scopeNotPayableAlone($query)
+    {
+        return $query->where('reservations.package_id', '>', 0);
+    }
+
     public function getRepeatFrequencyLabelAttribute(): ?string
     {
         return self::REPEAT_FREQUENCIES[$this->repeat_frequency] ?? null;
@@ -243,6 +254,11 @@ class Reservation extends Model implements Payable
         }
         if (!empty($filters['date_to'])) {
             $query->whereDate('start_at', '<=', $filters['date_to']);
+        }
+
+        // unpaid / partial / paid / credit / nothing_due / elsewhere (in a package)
+        if (!empty($filters['payment_status'])) {
+            $query->paymentStatus($filters['payment_status']);
         }
 
         return $query;

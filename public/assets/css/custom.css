@@ -1278,3 +1278,11 @@ input:disabled:not([type="checkbox"]):not([type="radio"]) {
 .status-menu__toggle.is-sending .status-menu__spinner {
     display: inline-block;
 }
+
+/* Payments block of a reservation / package view (paymentmodule::Payment.partials.payable-payments): the title + "Add Payment" */
+.payments-block__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}

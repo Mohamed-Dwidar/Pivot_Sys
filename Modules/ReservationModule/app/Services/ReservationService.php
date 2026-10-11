@@ -82,6 +82,11 @@ class ReservationService
             // the repeat is chosen on create only, it is kept as it is
             $reservation->update(Arr::except($this->reservationData($accountId, $data), ['is_repeat', 'repeat_frequency', 'repeat_interval']));
 
+            // moved into a package (it was paid on its own): its payments go to the package (paid through it now)
+            if (!$oldPackageId && $reservation->package_id && ($package = $reservation->load('package')->package)) {
+                $this->paymentService->movePayments($reservation, $package);
+            }
+
             // the old and the new package (it can be changed)
             $this->packageService->recalculate($oldPackageId);
             if ($reservation->package_id != $oldPackageId) {
@@ -107,16 +112,19 @@ class ReservationService
         });
     }
 
-    // soft delete
-    public function deleteOne($accountId, $id)
+    // soft delete; the reason when it can not be deleted (it has payments: their money must not be lost), null when deleted
+    public function deleteOne($accountId, $id): ?string
     {
         $reservation = $this->findOne($accountId, $id);
+        if ($reservation->payments()->exists()) {
+            return 'This reservation has payments, it can not be deleted. Refund or delete its payments first, or move it into a package (its payments move with it).';
+        }
 
-        return DB::transaction(function () use ($reservation) {
-            $deleted = $reservation->delete();
+        DB::transaction(function () use ($reservation) {
+            $reservation->delete();
             $this->packageService->recalculate($reservation->package_id);
-            return $deleted;
         });
+        return null;
     }
 
     // the copies of a repeated reservation: same data, moved to each repeat start (same duration), repeat_id = the original
