@@ -45,10 +45,13 @@ class Account extends Model implements Userable
 
     protected $fillable = [
         'name_ar', 'name_en', 'phone', 'address', 'description_ar', 'description_en', 'logo', 'status', 'approved_at',
+        'shift_reminder_hours', 'shift_snooze_hours',
     ];
 
     protected $casts = [
         'approved_at' => 'datetime',
+        'shift_reminder_hours' => 'integer',
+        'shift_snooze_hours' => 'integer',
     ];
 
     // the account login (email, password)

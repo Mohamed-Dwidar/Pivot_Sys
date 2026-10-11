@@ -47,6 +47,7 @@ class Payment extends Model
         'payment_no' => 'integer',
         'amount' => 'float',
         'paid_at' => 'date',
+        'shift_closing_id' => 'integer',
     ];
 
     public function account(): BelongsTo
@@ -78,6 +79,12 @@ class Payment extends Model
     public function withholdingCertificate(): BelongsTo
     {
         return $this->belongsTo(WithholdingCertificate::class);
+    }
+
+    // the employee's shift closing (not fillable: set by ShiftClosingService only; 0 = open period / the account's own payment)
+    public function shiftClosing(): BelongsTo
+    {
+        return $this->belongsTo(ShiftClosing::class);
     }
 
     // who added the payment (users: the account or an employee)
@@ -118,6 +125,12 @@ class Payment extends Model
     public static function paidTotal($query): float
     {
         return round((float) (clone $query)->sum(DB::raw(self::PAID_SQL)), 2);
+    }
+
+    // the payments added by one login (an employee sees only theirs in lists / totals, docs/payments-plan.md §2b)
+    public function scopeCollectedBy($query, $userId)
+    {
+        return $query->where('creatable_type', (new User)->getMorphClass())->where('creatable_id', $userId);
     }
 
     // other income (no reservation / package)

@@ -2,6 +2,7 @@
     The payments block of a reservation / package view.
     @include('paymentmodule::Payment.partials.payable-payments', ['payable' => $reservation, 'kind' => 'reservation'])
     $kind: reservation | package (PaymentService::PAYABLES). A reservation inside a package is paid through the package (link to it).
+    Employees see ALL the payments of the item with the collector (to answer a customer / ask the colleague), payments-plan.md §2b.
     "Add payment" opens the payment form for it in the popup; after saving, the popup shows this view again (json "modal").
 --}}
 @php
@@ -46,6 +47,7 @@
                         <th>Type</th>
                         <th>Method</th>
                         <th>Amount</th>
+                        <th>Collected by</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -57,6 +59,7 @@
                             <td><span class="badge {{ $payment->type_badge_class }}">{{ $payment->type_label }}</span></td>
                             <td>{{ $payment->paymentMethod?->name ?? '-' }}</td>
                             <td class="{{ $payment->type === 'refund' ? 'text-danger' : '' }}">{{ number_format($payment->signed_amount, 2) }}</td>
+                            <td>{{ $payment->creatable?->userable?->displayName() ?? $payment->creatable?->email ?? '-' }}</td>
                             <td><a href="{{ route($area . '.payments.receipt', $payment->id) }}" target="_blank" title="Receipt"><i data-lucide="printer" class="h-4 w-4"></i></a></td>
                         </tr>
                     @endforeach

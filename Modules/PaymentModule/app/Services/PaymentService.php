@@ -14,13 +14,15 @@ use Modules\PaymentModule\app\Models\DayClosing;
 use Modules\PaymentModule\app\Models\IncomeCategory;
 use Modules\PaymentModule\app\Models\Payment;
 use Modules\PaymentModule\app\Models\PaymentMethod;
+use Modules\PaymentModule\app\Models\ShiftClosing;
 use Modules\PaymentModule\app\Repositories\PaymentRepository;
 use Modules\ReservationModule\app\Models\Reservation;
 
 /**
  * Payments of an account: every method takes the owner account id, so an account can only reach its own payments.
  * - amount always positive, type gives the sign (Payment::PAID_SQL); paid_amount / remaining of the payable kept by refresh()
- * - a payment dated on a closed day can't be added (assertDayOpen())
+ * - a payment dated on a closed day can't be added (assertDayOpen()); a payment in a closed shift or on a closed day
+ *   can't be changed / deleted (assertPaymentOpen()) — two levels, docs/payments-plan.md §2b
  * - payment_no: per account, MAX + 1 inside the transaction (locked), from config paymentmodule.number_start
  * The rules errors are thrown as ValidationException (422, shown under the fields by custom.js).
  * The service checks the account ownership itself (method, category, member, payable): it is also called by imports / invoices.
@@ -173,7 +175,7 @@ class PaymentService
             $this->assertCategory($accountId, $data['income_category_id'] ?? 0);
         }
         $paidAt = Carbon::parse($data['paid_at'] ?? $payment->paid_at)->startOfDay();
-        $this->assertDayOpen($accountId, $payment->paid_at);
+        $this->assertPaymentOpen($payment);
         $this->assertDayOpen($accountId, $paidAt);
         // a refund of a reservation / package: still not more than the money received (other income refunds are not linked)
         if ($payment->type === 'refund' && $payment->payable_type) {
@@ -200,7 +202,7 @@ class PaymentService
     {
         $this->assertOwner($user);
         $payment = $this->findOne($accountId, $id);
-        $this->assertDayOpen($accountId, $payment->paid_at, 'delete_reason');
+        $this->assertPaymentOpen($payment, 'delete_reason');
         if (trim($reason) === '') {
             throw ValidationException::withMessages(['delete_reason' => 'Write why this payment is deleted.']);
         }
@@ -387,6 +389,19 @@ class PaymentService
         if ($payable instanceof Payable) {
             $this->refresh($payable instanceof Reservation ? $payable->load('status') : $payable);
         }
+    }
+
+    // a payment can be changed / deleted: not in a closed shift (the account reopens the shift), not on a closed day
+    public function assertPaymentOpen(Payment $payment, string $field = 'paid_at'): void
+    {
+        if ($payment->shift_closing_id && ShiftClosing::closed()->whereKey($payment->shift_closing_id)->exists()) {
+            $closing = ShiftClosing::with('user.userable')->find($payment->shift_closing_id);
+            throw ValidationException::withMessages([
+                $field => 'This payment is in a closed shift of ' . ($closing->user?->userable?->displayName() ?? 'an employee')
+                    . ' (closed ' . $closing->closed_at->format(Reservation::DATE_FORMAT . ' ' . Reservation::TIME_FORMAT) . '). Reopen the shift first.',
+            ]);
+        }
+        $this->assertDayOpen($payment->account_id, $payment->paid_at, $field);
     }
 
     // a closed day locks its payments: no add / edit / delete dated on it

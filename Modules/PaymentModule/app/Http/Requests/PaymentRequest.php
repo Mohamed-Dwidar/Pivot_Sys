@@ -39,6 +39,8 @@ class PaymentRequest extends FormRequest
             'notes' => 'nullable|string|max:5000',
             // the form was opened from a reservation / package view (the answer goes back to it)
             'back_to_payable' => 'boolean',
+            // the form was opened from the employee's "My Shift" page
+            'back_to_shift' => 'boolean',
         ];
     }
 

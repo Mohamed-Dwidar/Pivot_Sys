@@ -6,7 +6,11 @@
 @endsection
 
 @section('actions')
-    <a href="{{ route($area . '.day-closings.index') }}" class="btn btn-secondary"><i data-lucide="lock"></i> Day Closing</a>
+    @if ($area === 'employee')
+        <a href="{{ route('employee.shift.index') }}" class="btn btn-secondary"><i data-lucide="lock"></i> My Shift</a>
+    @else
+        <a href="{{ route('account.day-closings.index') }}" class="btn btn-secondary"><i data-lucide="lock"></i> Day Closing</a>
+    @endif
     @if ($area === 'account')
         <a href="{{ route('account.withholding-certificates.index') }}" class="btn btn-secondary"><i data-lucide="file-badge"></i> Withholding Certificates</a>
     @endif

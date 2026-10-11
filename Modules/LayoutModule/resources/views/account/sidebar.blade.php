@@ -141,6 +141,12 @@
                     'url' => route('account.income-categories.index'),
                     'active' => request()->routeIs('account.income-categories.*'),
                 ],
+                [
+                    'title' => 'Shift Reminders',
+                    'icon' => 'alarm-clock',
+                    'url' => route('account.shift-settings.edit'),
+                    'active' => request()->routeIs('account.shift-settings.*'),
+                ],
             ],
         ],
     ];

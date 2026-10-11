@@ -166,6 +166,8 @@ document.addEventListener("click", function (e) {
 //   { message, redirect }     -> where to go when the row / list is not on this page (full page forms)
 //   { counts: { name: n } }   -> new numbers for [data-counter="name"] (tabs, titles, sidebar badges with data-hide-zero)
 //   { modal: url }            -> a form in the popup: the popup shows this page after saving (e.g. back to the reservation view)
+//   { logout: true }          -> log out now (the employee's shift popups: closed / still working at logout)
+// The X-Shift-Reminder header (PaymentModule ShiftReminder middleware) -> the "close your shift" popup after the action.
 // data-row="{id}" = the list row of the record (row-{id}), its list filters are sent as list[...].
 // 422 -> the errors are shown under the fields ([data-field="name"]) or at the top of the form.
 function clearFormErrors(form) {
@@ -246,7 +248,7 @@ function ajaxSubmit(form) {
     })
         .then(function (response) {
             return response.json().catch(function () { return {}; }).then(function (json) {
-                return { status: response.status, json: json };
+                return { status: response.status, json: json, reminder: response.headers.get("X-Shift-Reminder") };
             });
         })
         .then(function (result) {
@@ -278,6 +280,12 @@ function ajaxSubmit(form) {
                 });
             });
 
+            if (json.logout) {
+                toastAfterRedirect(json.message);
+                logoutNow();
+                return;
+            }
+
             var inModal = form.closest("#app-modal");
             var tables = window.dataTables;
             var done = false;
@@ -295,6 +303,8 @@ function ajaxSubmit(form) {
             toast(json.message);
             if (inModal && json.modal) {
                 appModal.open(json.modal);
+            } else if (result.reminder) {
+                appModal.open(result.reminder);
             } else if (inModal) {
                 appModal.close();
             }
@@ -308,6 +318,31 @@ function ajaxSubmit(form) {
             form.classList.remove("is-sending");
         });
 }
+
+// Employee shift (PaymentModule, docs/payments-plan.md §2b): never a block, popups only.
+// - logout form with data-logout-prompt (payments not closed): the popup "Close my shift and log out" / "Log out, I'm still working"
+// - [data-shift-reminder] on the page (the shift is open too long): the "close your shift" popup when the page opens
+function logoutNow() {
+    var form = document.querySelector("form[data-logout-prompt]") || document.querySelector('form[action$="/logout"]');
+    if (form) {
+        form.submit();   // submit() skips the submit listeners (no prompt again)
+    } else {
+        window.location.reload();
+    }
+}
+
+document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (form.dataset && form.dataset.logoutPrompt) {
+        e.preventDefault();
+        appModal.open(form.dataset.logoutPrompt);
+    }
+});
+
+document.addEventListener("DOMContentLoaded", function () {
+    var reminder = document.querySelector("[data-shift-reminder]");
+    if (reminder) appModal.open(reminder.dataset.shiftReminder);
+});
 
 // Row toggles (layoutmodule::partials.row-toggle): save as soon as the switch is clicked
 document.addEventListener("change", function (e) {

@@ -6,12 +6,15 @@
 ---
 
 ## Current status
-- **Working on:** data transfer `dwidar_pivot_api` (old, live, READ ONLY) → `dwidar_res_portal` — **RAN 2026-10-11** (`to_run` steps 1–6; backup `storage/app/backups/dwidar_res_portal-20261011-1742.sql`, 6.1 MB). All checks match except 6.9 (17 packages differ from the old stored values — waiting for the user: accept the new values or not). Phase 1 code done (steps 5–10 + extras committed by the user in `ac1c79f`; `is_revenue` + docs uncommitted — the user commits, suggest messages only).
+- **Working on (2026-10-11): shift closing + account day closing (two levels) — ALL 8 STEPS BUILT**, spec `docs/payments-plan.md` §2b. Tested with rolled back transactions + HTTP kernel requests (service rules, locks, pages, popups, reminders, isolation); NOT clicked through in a browser yet. Uncommitted (the user commits).
+  - User answers: employees see ALL payment rows of one reservation / package incl. "Collected by" (isolation = lists / totals / closings / reports only); refunds = owner's period; owner's own payments locked by the final day close (no owner shift); layout / sidebar / middleware approved; imported dates closed (3.16).
+  - DB done by the user: `payments.shift_closing_id` + index, `accounts.shift_reminder_hours` / `shift_snooze_hours`, `migrate` (shift tables), day tables cleared, `to_run` 3.15 (14 imported employee closings) + check 6.11 = 0.
+- **Next up:** (1) user runs `to_run` **3.16** (closes the 862 imported days before today + logs "Imported from the old system", dry-run = totals equal `summary()`) + check **6.12**; (2) user tests in the browser (employee: My Shift, close popup, logout popup, reminder; account: day screen, close on behalf, reopen / close again, Shift Reminders settings); (3) then the 6.9 decision and Phase 2 (InvoiceModule).
+- **Before:** data transfer- **Before:** data transfer `dwidar_pivot_api` (old, live, READ ONLY) → `dwidar_res_portal` — **RAN 2026-10-11** (`to_run` steps 1–6; backup `storage/app/backups/dwidar_res_portal-20261011-1742.sql`, 6.1 MB). All checks match except 6.9 (17 packages differ from the old stored values — waiting for the user: accept the new values or not). Phase 1 code done (steps 5–10 + extras committed by the user in `ac1c79f`; `is_revenue` + docs uncommitted — the user commits, suggest messages only).
 - **Transfer result:** members 2,932, packages 220, reservations 19,823 (17,756 Confirmed / 2,067 Cancelled), extras 179 (extra 123 skipped: its package was deleted), payments 13,054 (7,707,148.91) + incomes 736 (76,550.94), methods 5, categories 9 (6 VAT inactive + not revenue: 12 incomes 32,564.44; 101 Buffet, 102 Break Hours, 103 Extra Hours), employees 15 + logins (active 3, 7, 10, 12, 13, 14, 15, 16; others leave_date), account login 1 untouched; next payment id / No. 100001 (imported max 14,220).
 - **`to_run` is re-runnable** for go-live day (after stopping the old system): 3.0 pre-check (74 checks on every source row, BLOCKING stops before any TRUNCATE, fallbacks listed); employees / logins upserted; ids from the source (income offset = max old payment id). User decisions: reservations of deleted members imported without a member (9), of deleted packages → no package + Cancelled (20), extras of deleted packages skipped (1), old 8330 (−43.40 withholding) → refund "withholding correction".
 - **Check 6.9 (packages vs old):** 215 / 220 same net, 203 / 220 same remaining (−5,127.10 in total). 12 = old stored remaining was stale (ours = old formula net + extras − paid); 5 (2, 3, 98, 139, 151) = old net not recalculated after reservations were cancelled (+ package 3: payment 35 moved in). Recommended: accept the new values.
-- **Next up:** the user's decision on 6.9; then Phase 2 (InvoiceModule).
-- **Waiting for the user:** (0) check 6.9 — accept the 17 new package values (recommended) or not; Cairo font files (`public/assets/fonts/Cairo/Cairo-{Regular,Bold,Light}.ttf`, static TTF); (1) migrations rule vs practice (edit `create_*` + manual DB, see CLAUDE.md Conventions); (2) are Vite / Tailwind 4 in package.json used or removable; (3) accountant: rounding strategy + T4 on invoices (don't block Phase 1).
+- **Waiting for the user:** (shift) run 3.16 + 6.12; OK to delete the unreachable `Employee/DayClosingEmployeeModuleController.php`; (0) check 6.9 — accept the 17 new package values (recommended) or not; Cairo font files (`public/assets/fonts/Cairo/Cairo-{Regular,Bold,Light}.ttf`, static TTF); (1) migrations rule vs practice (edit `create_*` + manual DB, see CLAUDE.md Conventions); (2) are Vite / Tailwind 4 in package.json used or removable; (3) accountant: rounding strategy + T4 on invoices (don't block Phase 1).
 - **Known issues:**
   - DB columns added by hand must exist: `reservation_statuses.color`, `is_counted`, `is_default`, `sort_order`; `plans.is_time_based`; `subscription_types.can_repeat`, `auto_renew`; `reservations.paid_amount`, `remaining`; `packages.paid_amount`; money columns of reservations / packages = decimal(12,2) (all run 2026-10-11).
   - After any change of a status's `is_counted` or a bulk data change: run the package recalculation + `php artisan payments:refresh` (`to_run` steps 4–5).
@@ -22,7 +25,9 @@
   - Cairo fonts of `config/pdf.php` (`public/assets/fonts/Cairo/`) are missing: the receipt falls back to DejaVu Sans (Arabic OK).
   - Changing a status's `is_counted` doesn't recalculate packages or refresh reservations (old gap) → run `payments:refresh` / package recalculation after such a change.
   - Table `creatable_backup` (old creator values of 220 packages + 2,887 members) — keep until the user confirms, then drop.
-  - Legacy, unused: `AdminModuleController`, `Admin/UserModuleController`, AdminModule `admin/*` + UserModule `change_password` / `forgotPassword` views, nwidart `components/layouts/master` stubs.
+  - Lucide here has no `lock-open` icon (use `unlock`): the existing day view "Reopen" button (`DayClosing/show`) shows no icon — not changed.
+  - Testing note: rolled back test inserts still move AUTO_INCREMENT (shift_closings / shift_events / day_closings / day_closing_logs ids may have gaps — cosmetic).
+  - Legacy, unused: `Employee/DayClosingEmployeeModuleController` (routes removed 2026-10-11, delete pending the user's OK), `AdminModuleController`, `Admin/UserModuleController`, AdminModule `admin/*` + UserModule `change_password` / `forgotPassword` views, nwidart `components/layouts/master` stubs.
 
 ---
 
@@ -46,12 +51,14 @@
   - `pdf.css`: PDF views only (mpdf, CSS 2, linked by `public_path()`), e.g. the payment receipt
   - Shell: `main` (page frame, `@yield('header'|'sidebar'|'title'|'actions'|'content')`, `@stack('styles'|'scripts')`), `header` (top bar + brand), `sidebar` (frame, `@include($menu)`), `partials/menu` (renders `$items`), `flash`, `footer`, `login` (guest shell for the login / register pages)
   - Per area: `{admin,account,employee}/main` (extends `main`, fills header vars + picks `{area}/sidebar`), `{area}/sidebar` (the `$items` array), `{area}/dashboard`
-  - Account sidebar groups: Reservations, Payments, Withholding Certificates, Day Closing, Employees, Spaces, Settings (Payment Methods, Income Categories) — all user approved 2026-10-11; employee sidebar: Reservations, Packages, Payments, Day Closing
+  - Account sidebar groups: Reservations, Payments, Withholding Certificates, Day Closing, Employees, Spaces, Settings (Payment Methods, Income Categories, Shift Reminders) — all user approved 2026-10-11; employee sidebar: Reservations, Packages, Payments, My Shift (was Day Closing)
+  - Shift popups (2026-10-11): `header` optional `$logoutPrompt` (`data-logout-prompt` on the logout form); `employee/main` passes it when `$shiftOpen` and pushes `[data-shift-reminder]` when `$shiftReminderUrl` (both shared by PaymentModule `ShiftReminder` middleware)
   - Brand: `public/assets/images/{logo.png, favicon.png|jpg}`
 - **How it works:** popup CRUD (`data-modal`), ajax forms (`data-ajax`, SweetAlert confirm, 422 errors under fields, `html_` errors rendered as HTML), DataTables row update/remove, row toggles, dependent selects (`data-options-url`, `data-parent`, `data-also`), `data-show-if` (checkbox name, or `field=value other` for a select; `field=` = empty) / `data-disable-if`, Tom Select (`searchable`), `Str::humanize()` option texts.
   - Page → `@extends('layoutmodule::{area}.main')` → `main`. The area layout passes `header` its variables (`$homeUrl`, `$userName`, `$userSubtitle`, `$menuLinks`, `$logoutUrl`) and gives `sidebar` its `$menu` view. Menu items: `divider` / link (`title, icon, url, active, badge, counter`) / `children` drop list.
   - Sidebar: open by default, the arrow next to the logo collapses it to icons and remembers the choice (`localStorage.compactMenu`). Collapsed = `favicon` icon, open = `logo.png` (`.brand-logo` / `.brand-icon` in custom.css). Below 1280px: ☰ opens it as an overlay.
   - `custom.js` loads BEFORE `themes/dagger.js`: it sets the default (open), blocks dagger's hover-to-expand, and replaces dagger's resize handler (it forced compact below 1600px).
+  - custom.js shift handling: logout form `data-logout-prompt` → popup instead of logging out; `[data-shift-reminder]` → popup on page load; ajax answer `{logout: true}` → `logoutNow()`; response header `X-Shift-Reminder` → popup after the action
   - Script order: template vendors (`dom.js` = `window.$`, popper, dropdown, transition, simplebar, modal, tom-select, lucide) → `custom.js` → `dagger.js` → SweetAlert2 CDN → `@stack('scripts')`.
 - **Depends on:** template (`Template_Source`), CDN DataTables / SweetAlert; area routes (`admin.dashboard`, `admin.logout`, `account.dashboard`, `employee.dashboard`, …) used by the area layouts / sidebars
 - **Decisions:**
@@ -108,7 +115,7 @@
 ### Payments / Invoices / ETA (PaymentModule — phase 1 in progress; InvoiceModule, ReportModule — not built)
 - **Last updated:** 2026-10-11
 - **Spec: `docs/payments-plan.md` — read before any payments/invoice work**
-- **Status:** Phase 1 done (`9dd28e0`, `a7170e8`, `a02f1fa`, `a2b6075`, `d73c9e2`, `ac1c79f`; `is_revenue` uncommitted); old data transferred from `dwidar_pivot_api` 2026-10-11 (`to_run`, re-runnable for go-live)
+- **Status:** shift closing (two levels, §2b) built 2026-10-11, uncommitted; Phase 1 done (`9dd28e0`, `a7170e8`, `a02f1fa`, `a2b6075`, `d73c9e2`, `ac1c79f`; `is_revenue` uncommitted); old data transferred from `dwidar_pivot_api` 2026-10-11 (`to_run`, re-runnable for go-live)
 - **Phases:** (1) payments + withholding certificates + day closing + old data import · (2) tax rates + invoices / receipts + ETA entry view · (3) reports
 - **Files (PaymentModule):**
   - `app/Contracts/Payable`, `app/Models/Concerns/HasPayments` (payments(), `paymentsTotal()`, `payment_status` unpaid / partial / paid / credit)
@@ -120,23 +127,27 @@
   - `income_categories.is_revenue` (create migration, model, request, service, "Counts as income" checkbox)
   - Payments: `app/Http/Controllers/Concerns/PaymentActions` + `Account|Employee/Payment*ModuleController` (account adds edit / update / deleteForm / destroy / refundForm / refund), `app/Http/Requests/Payment{,Update,Delete,Refund}Request`, `app/Repositories/PaymentRepository`, `views/Payment/{index, create, show, edit, delete, refund, receipt-pdf, partials/{form, row-source, row-actions, payable-payments, row-remaining, status-filter, payment-summary}}`
   - Withholding: `Account/WithholdingCertificateAccountModuleController`, `Services/WithholdingCertificateService`, `Repositories/WithholdingCertificateRepository`, `Requests/WithholdingCertificateRequest`, `views/Withholding/*`
-  - Day closing: `Concerns/DayClosingActions` + `Account|Employee/DayClosing*ModuleController` (account adds reopen), `Services/DayClosingService`, `Requests/Day{Closing,Reopen}Request`, `views/DayClosing/*`
+  - Day closing (account only now): `Concerns/DayClosingActions` (index + long open / reopened shift flags, create = day screen, confirm popup, store, show) + `Account/DayClosingAccountModuleController` (reopen), `Services/DayClosingService`, `Requests/Day{Closing,Reopen}Request`, `views/DayClosing/{index, create, confirm, show, reopen, partials/{status, totals}}`
+  - Shift closing: `app/Models/{ShiftClosing, ShiftEvent}`, migrations `2026_10_11_100007_create_shift_closings_table`, `100008_create_shift_events_table`, `payments.shift_closing_id` (payments create migration), `accounts.shift_reminder_hours` / `shift_snooze_hours` (accounts create migration + `Account` fillable); `Services/ShiftClosingService`; `Employee/ShiftClosingEmployeeModuleController` (index, data, confirm, close, reminder, logoutPrompt, stillWorking, show); `Account/ShiftClosingAccountModuleController` (show, confirm, close on behalf, reopenForm, reopen, reclose); `Account/ShiftSettingAccountModuleController`; `Requests/Shift{Close, StillWorking, Setting}Request`; `Http/Middleware/ShiftReminder` (appended to `web` in `PaymentModuleServiceProvider::boot()` via the HTTP kernel); `views/Shift/{index, confirm, show, reopen, reminder, logout, settings, partials/{totals, payments, period, back}}`
   - `config/config.php`: `number_start` (100001)
   - `app/Console/RefreshPaymentsCommand` (`payments:refresh {--account=}`, registered in `Providers/PaymentModuleServiceProvider::$commands`)
-  - `routes/web.php`: `{account|employee}.payments.{index, data, options.payables, create, store, show, receipt}` + `account.payments.{edit, update, delete, destroy, refund, refund.store}`; `{account|employee}.day-closings.{index, data, create, store, show}` + `account.day-closings.{reopen, reopen.store}`; `account.withholding-certificates.*` (+ `attachment`); `account.payment-methods.*`, `account.income-categories.*`
+  - `routes/web.php`: `{account|employee}.payments.{index, data, options.payables, create, store, show, receipt}` + `account.payments.{edit, update, delete, destroy, refund, refund.store}`; `account.day-closings.{index, data, create, confirm, store, show, reopen, reopen.store}`; `employee.shift.{index, data, confirm, close, reminder, logout-prompt, still-working, show}`; `account.shifts.{confirm, close, show, reopen, reopen.store, reclose}`; `account.shift-settings.{edit, update}`; `account.withholding-certificates.*` (+ `attachment`); `account.payment-methods.*`, `account.income-categories.*`
 - **How it works:**
   - Methods / categories: popup CRUD like reservation statuses (list, add / edit, active toggle, sort order); delete refused while used by payments
   - `PaymentService::create($accountId, $data, $creator)`: payable `reservation | package` (+ `payable_id`) or other income (`income_category_id`); type payment | withholding (refund = step 6); refuses a reservation inside a package, amount ≤ 0, no method (withholding → method 0), a closed day (`assertDayOpen`); `payment_no` = MAX + 1 per account under `lockForUpdate`; then `refresh(payable)`
   - `refresh()`: paid = Σ `Payment::PAID_SQL` (payments + withholding − refunds), remaining = due − paid (due 0 inside a package); `refreshAll()` one grouped query per payable type, ~7 s for all rows
   - `isOwner($user)` = userable is Account (edit / delete / refund rights, steps 6+)
-  - Payments list (account + employees): search (number, reference, member), filters for (reservation / package / other income `source`), type, method, category, dates; view + receipt in the row menu
+  - Payments list (account all; employees ONLY their own: `PaymentActions::collectorId()` + `Payment::scopeCollectedBy`; one payment of a reservation / package opens for any employee, a colleague's other income = 404): search (number, reference, member), filters for (reservation / package / other income `source`), type, method, category, dates; view + receipt in the row menu
   - Add form: For (reservation / package / other income) → member (searchable) → the member's reservations (not in a package) / packages by ajax (`options.payables`, owed first, "Remaining x" in the name) or income category; type payment / withholding (no method); `create?payable=reservation|package&payable_id=X` pre-fills it (amount = remaining) for step 5
   - Receipt: `receipt()` = mpdf A5 PDF (inline response from `output()`, not the package's `stream()` which echoes itself); Cairo font if its files exist, else DejaVu Sans
   - Ownership: `PaymentRequest` (exists + account + active) and `PaymentService::create()` (method / category / member of the account, active not checked: imports bring old ones)
   - Views: reservation / package views have the payments block (due / paid / remaining + status, payments table, "Add Payment"; a reservation in a package → "Paid through the package"); "Add Payment" in both row menus; lists: Paid + Remaining columns + payment status filter (`HasPayments::scopePaymentStatus`: unpaid / partial / paid / credit / nothing_due / elsewhere = in package)
   - Owner (account routes + `assertOwner()` in the service): edit (amount, date, method, category, reference, notes; payable / member / type kept), delete (reason required, soft delete + `deleted_by`), refund (a new `refund` row for the same payable / income, max = money received: payments − refunds of the payable, other income = that payment; not for a refund / withholding; reference "Refund of #N")
   - Withholding certificates (account only): number, issue date, payer (name, tax id, optional company / member), period, amount, attachment (private disk `withholding/{account_id}/`, `attachment` route), withholding payments attached by checkboxes (free ones + its own); difference = amount − payments, shown (+ list filter), not blocking; delete frees its payments
-  - Day closing (account + employees close, owner reopens with a reason): `summary()` by creator × method (payments − refunds), withholding apart; totals saved as json; closing again after a reopen saves new totals; `assertDayOpen` in create / update (old + new date) / delete / refund
+  - Shift closing (§2b): open period = the employee's payments with `shift_closing_id` 0 (linked, not a time window; `paid_at` is a date); `close()` locks them, sends the max payment id shown (newer → 422 "review again"), saves totals (methods, withholding, cash_total, count, first / last `created_at`), logs `shift_events`; on behalf = account (`close_on_behalf`); `reopen()` (account, reason) keeps the payments in it, `reclose()` recalculates; `PaymentService::assertPaymentOpen()` (closed shift or closed day) on update / delete; refunds = new owner rows (shift 0)
+  - Reminders: `reminderDue()` = oldest unclosed `created_at` older than `shift_reminder_hours` and no `still_working` in the last `shift_snooze_hours`; middleware `ShiftReminder` (employees only, not on `employee.shift.*`): full pages share `$shiftOpen` / `$shiftReminderUrl`, successful ajax actions get `X-Shift-Reminder`; logout popup "Close My Shift and Log Out" (confirm `?logout=1` → `logout_closed`) / "Log Out, I'm Still Working" (`logout_still_working`)
+  - Day closing (account only): day screen `create?date=` = employee shifts with payments of that date (open → Close on Behalf; closed / reopened → View, Reopen / Close Again), day totals, "Close this Day" popup (`confirm`); `close()` refused while `ShiftClosingService::blockingForDate()` (open period or reopened shift with payments of that date); owner's payments locked by it; `summary()` by creator × method; `assertDayOpen` in create / update / delete / refund
+  - Day closing index: Long Open Shifts (`longOpenPeriods()`: since, payments, collected, "still working" answers + reasons, Close on Behalf) + Reopened Shifts; popups carry `?date=` / `?index=1` back (`Shift/partials/back`)
   - Day closing history: every close / reopen → `day_closing_logs` (`DayClosingLog`: action, user, reason, cash / withholding totals + totals json snapshot; `DayClosing::logs()`), shown as "History" in the day view; `day_closings.reopened_*` = the last reopen only
   - A reservation / package with (not deleted) payments can't be deleted: `deleteOne()` returns the reason (422 toast "refund or delete its payments first / move it into a package")
   - `movePayments()`: a reservation moved into a package → all its payments (trashed too) move to the package, both refreshed (`ReservationService::update`)
@@ -147,7 +158,9 @@
   - A reservation inside a package is paid through the package; a paid reservation moved into a package → its payments move with it
   - Negative `remaining` = member credit, shown clearly; wallet later. Refunds = refund records only
   - Employees only add payments; edit / delete / refund = account owner; delete = soft delete + reason
-  - Day closing: one per account per day, locks that date; totals by employee × payment method (cash handover), withholding excluded from cash; reopen = owner + reason
+  - Two-level closing (user, 2026-10-11, §2b): employee SHIFT closing (24 h place, shift over midnight; payments linked by `shift_closing_id`; no counted-amount entry; account-only reopen with reason) + account-only DAY closing by date (one per day, totals by employee × method, withholding apart; refused while an employee payment of that date is not in a closed shift); never a hard block for employees (popups only, "still working" needs a reason, logged)
+  - Imported data: each old employee's payments = one closed "Imported from the old system" shift (`to_run` 3.15); every imported date before the import day = a closed day (3.16, the import day stays open for the first app payments)
+  - Employee isolation: no colleagues' collections as a whole (lists, totals, closings, reports); all payment rows of ONE reservation / package are shown with "Collected by"
   - Payment methods per account; expenses = separate table later (no `direction`)
   - Old data source = `dwidar_pivot_api` (live old system; `dwidar_pivot_res` was outdated): payments id = `payment_no` = old id, incomes after the highest old payment id; old method 5 "إشعار خصم" = withholding (not a method); a negative withholding with no positive one on its reservation → refund "withholding correction" (old 8330)
   - Service rule errors = `ValidationException` (422 under the fields), so the service is safe for imports / commands too
@@ -160,7 +173,7 @@
   - Prices VAT-inclusive by default (`prices_include_tax`); the calculator reverse-calculates through all taxes
   - Rounding to the exact price isolated in `RoundingStrategy` (setting `rounding_strategy`); extra-discount option waiting for the accountant
   - T4 (withholding) on invoices: setting `withholding_on_invoices`, default off (accountant confirming)
-- **Pending:** check 6.9 decision; go-live re-run of `to_run`; Phase 2 (InvoiceModule: extras of type extra + income categories become invoice lines; `is_revenue` 0 excluded from income reports in phase 3)
+- **Pending:** run 3.16 + browser test of the shift screens; check 6.9 decision; go-live re-run of `to_run` (3.15 / 3.16 included); Phase 2 (InvoiceModule: extras of type extra + income categories become invoice lines; `is_revenue` 0 excluded from income reports in phase 3)
 
 ### Member / Company / Job modules
 - **Last updated:** 2026-10-07
@@ -172,6 +185,13 @@
 ---
 
 ## Session log
+
+### 2026-10-11 — shift closing + account day closing (two levels)
+- **Changed:** plan `payments-plan.md` §2b; tables `shift_closings`, `shift_events`, `payments.shift_closing_id`, `accounts.shift_reminder_hours` / `shift_snooze_hours`; `ShiftClosingService`, two-level lock in `PaymentService`, day close guard in `DayClosingService`; employee My Shift (+ close popup, logout / reminder popups, still working); account day screen (close on behalf, reopen / close again, confirm popup), long open / reopened shift flags, Shift Reminders settings; employee payments list = own only, "Collected by" in the payments block; `ShiftReminder` middleware; custom.js popups; header / employee layout / both sidebars; `to_run` 3.1, 3.2, 3.15, 3.16, checks 6.11, 6.12; CLAUDE.md dependencies
+- **Why:** the place works 24 h: employees close per shift, the account closes days for reports (user spec + answers)
+- **Affects:** every payment edit / delete (closed shift), day closing (account only, guarded), employee payments list, LayoutModule header / employee layout / sidebars / custom.js, web middleware group
+- **Found:** a TEMPORARY table can't be read twice in one MySQL query (3.16 uses a normal helper table); pushing a middleware to the router group at boot is overwritten by the kernel (use the kernel's `appendMiddlewareToGroup`); mixing `@php(...)` and `@php ... @endphp` in one Blade file breaks it; no `lock-open` icon in this Lucide
+- **Commit:** see suggested commit (user commits)
 
 ### 2026-10-11 — data transfer from dwidar_pivot_api (ran)
 - **Changed:** `extras` (table, model, `HasExtras`, service, request, controller, routes, views; package due = net + extras); `income_categories.is_revenue` (create migration + form); `to_run` rewritten (backup, pre-check, truncate target tables, upsert employees / logins, inserts, recalculation, refresh, checks) and RUN; old `to_run` kept in `storage/app/backups/to_run.before-2026-10-11`
@@ -235,10 +255,3 @@
 - **Affects:** every module's pages (LayoutModule shell)
 - **Found:** favicon jpg/png mismatch between `main` and `login`; root `views/dashboard.blade.php` probably unused
 - **Commit:** layout code in `ea7738c` ("New Layout") and later commits; this entry: see suggested commit
-
-### 2026-10-09 — reservations, packages, statuses on imported data
-- **Changed:** reservation form (chain filters, time based plans, amount × periods, repeat on create, availability + concurrent usage, clickable conflict links), status menu + colors + `is_counted` + default status toggle, package price/net/dates/hours from reservations, list/view display (unit colors, `d-m-Y | h:i A`), memory files (CLAUDE.md, progress.md)
-- **Why:** user requests while finishing ReservationModule on old-system data
-- **Affects:** Package totals, Unit/Plan/Space options, LayoutModule JS/CSS
-- **Found:** reservation view 500 = imported `creatable_type` old class names (diagnosed, not fixed yet)
-- **Commit:** code in `b98d51b` / `2344555`; memory files: "docs: add CLAUDE.md and docs/progress.md project memory"

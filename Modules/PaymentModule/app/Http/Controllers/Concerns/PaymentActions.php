@@ -16,8 +16,10 @@ use niklasravnsborg\LaravelPdf\Facades\Pdf;
 use Yajra\DataTables\Facades\DataTables;
 
 /**
- * Payments actions shared by the account and the employee controllers (both add and view the account's payments;
+ * Payments actions shared by the account and the employee controllers (both add and view payments;
  * edit / delete / refund = the account only, Payments phase 1 step 6).
+ * An employee's list shows only the payments they added (never colleagues' collections as a whole, payments-plan.md §2b);
+ * one payment of a reservation / package opens for everyone (its payments block lists them all, with the collector).
  * The controller gives area(): "account" | "employee" (route names {area}.payments.*), the views read it from the route.
  * show / create open in the popup (ajax), store answers JSON (custom.js ajax forms), receipt() is the PDF,
  * payables() fills the reservation / package drop menu of the form (custom.js [data-options-url]).
@@ -45,6 +47,21 @@ trait PaymentActions
         return Auth::user()->userable->ownerAccountId();
     }
 
+    // the employee: only their own payments in the list (null = the account: all)
+    private function collectorId()
+    {
+        return $this->area() === 'employee' ? Auth::id() : null;
+    }
+
+    // one payment: an employee opens their own, or one of a reservation / package (its payments block); not a colleague's other income
+    private function findForViewer($id)
+    {
+        $payment = $this->paymentService->findOne($this->accountId(), $id);
+        abort_if($this->collectorId() && !$payment->payable_type && (int) $payment->creatable_id !== (int) $this->collectorId(), 404);
+
+        return $payment;
+    }
+
     private function route($name, $parameters = [])
     {
         return route($this->area() . '.payments.' . $name, $parameters);
@@ -69,7 +86,8 @@ trait PaymentActions
     // the list columns, for data() and for one row after a change (row(), steps 6+)
     private function table(array $filters, $id = null)
     {
-        $query = $this->paymentService->listQuery($this->accountId());
+        $query = $this->paymentService->listQuery($this->accountId())
+            ->when($this->collectorId(), fn ($query, $userId) => $query->collectedBy($userId));
         if ($id) {
             $query->whereKey($id);
         }
@@ -143,6 +161,13 @@ trait PaymentActions
         $payment = $this->paymentService->create($this->accountId(), $request->validated(), Auth::user());
         // a reservation / package payment: back to its view (popup or full page), with the new payment in its block
         $payableUrl = $request->validated('payable') ? route($this->area() . '.' . $request->validated('payable') . 's.show', $payment->payable_id) : null;
+        // a missed payment added from "My Shift": that page again (its open period with the new payment)
+        if ($this->area() === 'employee' && $request->boolean('back_to_shift')) {
+            return response()->json([
+                'message' => 'Payment #' . $payment->payment_no . ' has been added to your shift.',
+                'redirect' => route('employee.shift.index'),
+            ]);
+        }
 
         return response()->json([
             'message' => 'Payment #' . $payment->payment_no . ' has been added successfully.',
@@ -154,7 +179,7 @@ trait PaymentActions
 
     public function show($id)
     {
-        $payment = $this->paymentService->findOne($this->accountId(), $id);
+        $payment = $this->findForViewer($id);
         $payableName = $this->paymentService->payableName($payment->payable);
         return view('paymentmodule::Payment.show', compact('payment', 'payableName'));
     }
@@ -162,7 +187,7 @@ trait PaymentActions
     // the receipt (PDF, opened in the browser)
     public function receipt($id)
     {
-        $payment = $this->paymentService->findOne($this->accountId(), $id);
+        $payment = $this->findForViewer($id);
         $payableName = $this->paymentService->payableName($payment->payable);
         $account = $payment->account;
 

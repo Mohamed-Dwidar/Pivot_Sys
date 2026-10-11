@@ -18,15 +18,19 @@ use Modules\UserModule\app\Models\User;
  * The totals: by the user who added the payment (cash handover) × payment method: payments - refunds = net;
  * withholding is not cash: its own line, not in the cash total.
  * The account and its employees close a day; only the owner reopens it, with a reason.
+ * Two levels (docs/payments-plan.md §2b): a day can't be closed while an employee's payment dated that day is still open
+ * (their open period or a reopened shift, ShiftClosingService::blockingForDate()); the account's own payments are locked by it.
  * Every close / reopen is logged (day_closing_logs: who, why, the totals); the row keeps the current status + the last reopen.
  */
 class DayClosingService
 {
     private PaymentService $paymentService;
+    private ShiftClosingService $shiftClosingService;
 
-    public function __construct(PaymentService $paymentService)
+    public function __construct(PaymentService $paymentService, ShiftClosingService $shiftClosingService)
     {
         $this->paymentService = $paymentService;
+        $this->shiftClosingService = $shiftClosingService;
     }
 
     // the closings list (paged / ordered by DataTables)
@@ -106,6 +110,7 @@ class DayClosingService
             if ($closing?->status === 'closed') {
                 throw ValidationException::withMessages(['date' => 'The day ' . $date->format(Reservation::DATE_FORMAT) . ' is already closed.']);
             }
+            $this->assertShiftsClosed($accountId, $date);
 
             $summary = $this->summary($accountId, $date);
             $closing ??= new DayClosing(['account_id' => $accountId, 'date' => $date]);
@@ -121,6 +126,21 @@ class DayClosingService
 
             return $closing;
         });
+    }
+
+    // every employee payment dated that day is in a closed shift (else: who is still open)
+    private function assertShiftsClosed($accountId, Carbon $date): void
+    {
+        $blocking = $this->shiftClosingService->blockingForDate($accountId, $date);
+        if (!$blocking) {
+            return;
+        }
+
+        $names = $blocking['open']->map(fn ($period) => ($period['user']?->userable?->displayName() ?? 'User #' . $period['user']?->id) . ' (open shift)')
+            ->merge($blocking['reopened']->toBase()->map(fn ($closing) => ($closing->user?->userable?->displayName() ?? 'User #' . $closing->user_id) . ' (reopened shift)'));
+        throw ValidationException::withMessages([
+            'date' => 'The day ' . $date->format(Reservation::DATE_FORMAT) . ' has payments in shifts not closed yet: ' . $names->implode(', ') . '.',
+        ]);
     }
 
     // the owner opens a closed day again (its payments can be changed), the reason is kept

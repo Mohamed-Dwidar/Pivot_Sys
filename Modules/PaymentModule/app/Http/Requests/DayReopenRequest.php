@@ -4,7 +4,7 @@ namespace Modules\PaymentModule\app\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-// the owner reopens a closed day: the reason is required (kept on the closing)
+// the owner reopens a closed day / an employee's closed shift: the reason is required (kept on the closing + logged)
 class DayReopenRequest extends FormRequest
 {
     public function rules(): array

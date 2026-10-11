@@ -36,6 +36,13 @@ class PaymentModuleServiceProvider extends ModuleServiceProvider
         RouteServiceProvider::class,
     ];
 
+    public function boot(): void
+    {
+        parent::boot();
+        // the employees' shift reminders on every page / ajax action (it does nothing for other users)
+        $this->app->make(\Illuminate\Contracts\Http\Kernel::class)->appendMiddlewareToGroup('web', \Modules\PaymentModule\app\Http\Middleware\ShiftReminder::class);
+    }
+
     /**
      * Define module schedules.
      * 

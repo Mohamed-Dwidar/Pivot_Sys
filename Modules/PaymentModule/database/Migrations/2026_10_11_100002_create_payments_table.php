@@ -27,6 +27,8 @@ return new class extends Migration {
             // 0 for withholding (no money received, a certificate instead)
             $table->bigInteger('payment_method_id')->default(0);
             $table->bigInteger('withholding_certificate_id')->default(0);
+            // the employee's shift closing (0 = their open period; the account's own payments: always 0, locked by the day closing)
+            $table->bigInteger('shift_closing_id')->default(0);
             $table->date('paid_at')->index();
             $table->string('reference')->nullable();
             $table->text('notes')->nullable();
@@ -40,6 +42,8 @@ return new class extends Migration {
 
             $table->unique(['account_id', 'payment_no']);
             $table->index(['payable_type', 'payable_id']);
+            // an employee's open period / a shift closing's payments
+            $table->index(['account_id', 'creatable_id', 'shift_closing_id']);
         });
     }
 

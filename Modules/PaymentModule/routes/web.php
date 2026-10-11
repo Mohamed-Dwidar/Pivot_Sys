@@ -8,9 +8,11 @@ use Modules\PaymentModule\app\Http\Controllers\Account\ExtraAccountModuleControl
 use Modules\PaymentModule\app\Http\Controllers\Account\IncomeCategoryAccountModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Account\PaymentAccountModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Account\PaymentMethodAccountModuleController;
+use Modules\PaymentModule\app\Http\Controllers\Account\ShiftClosingAccountModuleController;
+use Modules\PaymentModule\app\Http\Controllers\Account\ShiftSettingAccountModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Account\WithholdingCertificateAccountModuleController;
-use Modules\PaymentModule\app\Http\Controllers\Employee\DayClosingEmployeeModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Employee\PaymentEmployeeModuleController;
+use Modules\PaymentModule\app\Http\Controllers\Employee\ShiftClosingEmployeeModuleController;
 
 /**
  *  Payments: added and viewed by the account and by its employees (same actions, see Concerns\PaymentActions);
@@ -79,7 +81,8 @@ Route::prefix('account/withholding-certificates')->name('account.withholding-cer
 });
 
 /**
- *  Day closing: the account and its employees close days (same actions, see Concerns\DayClosingActions); reopen = the account only
+ *  Day closing: the account only (Concerns\DayClosingActions); two levels since 2026-10-11 (docs/payments-plan.md §2b):
+ *  employees close their SHIFT (employee/shift below), the account closes the day when every shift with its payments is closed
  */
 $closingRoutes = function ($controller) {
     Route::get('/', [$controller, 'index'])->name('index');
@@ -91,13 +94,45 @@ $closingRoutes = function ($controller) {
 };
 
 Route::prefix('account/day-closings')->name('account.day-closings.')->middleware(['auth', 'user.active:' . Account::class])->group(function () use ($closingRoutes) {
+    // ?date=: the final close popup (totals + "Confirm closing")
+    Route::get('confirm', [DayClosingAccountModuleController::class, 'confirm'])->name('confirm');
     $closingRoutes(DayClosingAccountModuleController::class);
     Route::get('{id}/reopen', [DayClosingAccountModuleController::class, 'reopenForm'])->name('reopen');
     Route::post('{id}/reopen', [DayClosingAccountModuleController::class, 'reopen'])->name('reopen.store');
 });
 
-Route::prefix('employee/day-closings')->name('employee.day-closings.')->middleware(['auth', 'user.active:' . Employee::class])
-    ->group(fn () => $closingRoutes(DayClosingEmployeeModuleController::class));
+/**
+ *  The account and the employees' shifts (from the day screen): view, close on behalf (?user_id=), reopen (reason), close again
+ */
+Route::prefix('account/shifts')->name('account.shifts.')->middleware(['auth', 'user.active:' . Account::class])->group(function () {
+    Route::get('confirm', [ShiftClosingAccountModuleController::class, 'confirm'])->name('confirm');
+    Route::post('close', [ShiftClosingAccountModuleController::class, 'close'])->name('close');
+    Route::get('{id}', [ShiftClosingAccountModuleController::class, 'show'])->name('show');
+    Route::get('{id}/reopen', [ShiftClosingAccountModuleController::class, 'reopenForm'])->name('reopen');
+    Route::post('{id}/reopen', [ShiftClosingAccountModuleController::class, 'reopen'])->name('reopen.store');
+    Route::post('{id}/reclose', [ShiftClosingAccountModuleController::class, 'reclose'])->name('reclose');
+});
+
+// the shift reminder settings (hours)
+Route::prefix('account/shift-settings')->name('account.shift-settings.')->middleware(['auth', 'user.active:' . Account::class])->group(function () {
+    Route::get('/', [ShiftSettingAccountModuleController::class, 'edit'])->name('edit');
+    Route::put('/', [ShiftSettingAccountModuleController::class, 'update'])->name('update');
+});
+
+/**
+ *  The employee's shift: their open period (own payments only), close it (confirmation popup), their past closings
+ */
+Route::prefix('employee/shift')->name('employee.shift.')->middleware(['auth', 'user.active:' . Employee::class])->group(function () {
+    Route::get('/', [ShiftClosingEmployeeModuleController::class, 'index'])->name('index');
+    Route::get('data', [ShiftClosingEmployeeModuleController::class, 'data'])->name('data');
+    Route::get('confirm', [ShiftClosingEmployeeModuleController::class, 'confirm'])->name('confirm');
+    Route::post('close', [ShiftClosingEmployeeModuleController::class, 'close'])->name('close');
+    // the reminders (popups) + the "still working" answer
+    Route::get('reminder', [ShiftClosingEmployeeModuleController::class, 'reminder'])->name('reminder');
+    Route::get('logout', [ShiftClosingEmployeeModuleController::class, 'logoutPrompt'])->name('logout-prompt');
+    Route::post('still-working', [ShiftClosingEmployeeModuleController::class, 'stillWorking'])->name('still-working');
+    Route::get('{id}', [ShiftClosingEmployeeModuleController::class, 'show'])->name('show');
+});
 
 /**
  *  Package extras / adjustments: only the account manages them (from the package view)

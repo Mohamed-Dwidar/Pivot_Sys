@@ -7,23 +7,28 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Modules\PaymentModule\app\Http\Requests\DayClosingRequest;
 use Modules\PaymentModule\app\Services\DayClosingService;
+use Modules\PaymentModule\app\Services\ShiftClosingService;
 use Modules\ReservationModule\app\Models\Reservation;
 use Yajra\DataTables\Facades\DataTables;
 
 /**
- * Day closing actions shared by the account and the employee controllers (both close days; reopen = the account only).
- * The controller gives area(): "account" | "employee" (route names {area}.day-closings.*).
- * create(?date=) shows the day's totals with "Close this day", store() closes it (JSON, custom.js ajax form).
+ * Day closing actions (the account only since the two levels, docs/payments-plan.md §2b; employees close their shift).
+ * The controller gives area(): "account" (route names {area}.day-closings.*).
+ * create(?date=) = the day screen: the employees' shifts with payments of that day (closed / open / reopened),
+ * the day's totals, "Close this Day" (the confirm() popup, refused while a shift with its payments is not closed);
+ * store() closes it (JSON, custom.js ajax form).
  */
 trait DayClosingActions
 {
     private DayClosingService $closingService;
+    private ShiftClosingService $shiftService;
 
     abstract protected function area(): string;
 
-    public function __construct(DayClosingService $closingService)
+    public function __construct(DayClosingService $closingService, ShiftClosingService $shiftService)
     {
         $this->closingService = $closingService;
+        $this->shiftService = $shiftService;
     }
 
     private function accountId()
@@ -36,9 +41,13 @@ trait DayClosingActions
         return route($this->area() . '.day-closings.' . $name, $parameters);
     }
 
+    // the closed days + the flags: long open shifts ("still working" answers), reopened shifts
     public function index()
     {
-        return view('paymentmodule::DayClosing.index');
+        return view('paymentmodule::DayClosing.index', [
+            'longOpen' => $this->shiftService->longOpenPeriods(Auth::user()->userable),
+            'reopenedShifts' => $this->shiftService->reopenedClosings($this->accountId()),
+        ]);
     }
 
     // DataTables server side: the closed / reopened days
@@ -81,6 +90,21 @@ trait DayClosingActions
             'date' => $date,
             'closing' => $this->closingService->forDate($this->accountId(), $date),
             'summary' => $this->closingService->summary($this->accountId(), $date),
+            // the employees' closings with payments of that day, and the open periods holding payments of that day
+            'shifts' => $this->shiftService->closingsForDate($this->accountId(), $date),
+            'openPeriods' => $this->shiftService->openPeriods($this->accountId(), $date),
+        ]);
+    }
+
+    // the final close popup: the day's totals per method + withholding + grand total, "Confirm closing" / "Cancel"
+    public function confirm(Request $request)
+    {
+        $date = rescue(fn () => Carbon::parse($request->input('date', today()))->startOfDay(), today(), false);
+
+        return view('paymentmodule::DayClosing.confirm', [
+            'date' => $date,
+            'summary' => $this->closingService->summary($this->accountId(), $date),
+            'blocking' => $this->shiftService->blockingForDate($this->accountId(), $date),
         ]);
     }
 
@@ -91,7 +115,7 @@ trait DayClosingActions
         return response()->json([
             'message' => 'The day ' . $closing->date->format(Reservation::DATE_FORMAT) . ' has been closed, its payments are locked.',
             'reload' => true,
-            'redirect' => $this->route('show', $closing->id),
+            'redirect' => $this->route('create', ['date' => $closing->date->format('Y-m-d')]),
         ]);
     }
 

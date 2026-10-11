@@ -66,6 +66,7 @@ Then suggest a commit message.
   - area layouts / sidebars use named routes from Admin/Account/Employee/User modules — renaming those routes breaks every page of that area
   - Login / register pages (AdminModule `login`, UserModule `user/login`, AccountModule `Guest/register`) → `layoutmodule::login`
   - `custom.js` must load before `themes/dagger.js` (sidebar default / overrides); DataTables' jQuery must stay `noConflict` (template `$` = `dom.js`)
+  - `header` optional `$logoutPrompt` (popup url instead of logging out at once) and `employee/main` (`$shiftOpen`, `$shiftReminderUrl` shared by PaymentModule `ShiftReminder`) — employee shift popups
 - **SpaceModule** ↔ UnitModule, PlanModule, ReservationModule: spaces ↔ subscription types (`can_repeat`, `auto_renew`) ↔ plans (`plan_space`); unit form picks from its space's types / plans
 - **UnitModule** ↔ ReservationModule: unit `subscription_type_id`, `capacity`, `concurrent_usage`, `color` used by the reservation form + availability check
 - **PlanModule** ↔ ReservationModule: `is_time_based`, `lease_period`, `amount` → reservation times + amount (`Plan::amountBetween`, same formula in custom.js)
@@ -74,6 +75,7 @@ Then suggest a commit message.
 - **MemberModule** ↔ PackageModule, ReservationModule: member options "name mobile" (searchable), package locks the reservation member
 - **EmployeeModule** ↔ ReservationModule, PackageModule: employees manage the account's reservations / packages (`employee.*` routes)
 - **PaymentModule** ↔ ReservationModule, PackageModule, MemberModule: Reservation / Package implement `Payable` + `HasPayments` (`paid_amount`, `remaining`, payment status, `scopePaymentStatus`); `PaymentService::refresh()` after every payment change, at the end of `Package::recalculate()` and in `ReservationService` create / update / changeStatus; due = 0 inside a package or with a not counted status; moved into a package → `movePayments()`; a reservation / package with payments can't be deleted; their views include `paymentmodule::Payment.partials.payable-payments`, lists `row-remaining` / `status-filter`; payment ids / numbers from `paymentmodule.number_start` (100001, old import below it); spec `docs/payments-plan.md`
+- **PaymentModule shift closing** ↔ LayoutModule, EmployeeModule, AccountModule (`docs/payments-plan.md` §2b): employee payments join a `shift_closings` row via `payments.shift_closing_id` (0 = open period); `PaymentService::assertPaymentOpen()` (closed shift or closed day) on edit / delete; `DayClosingService::close()` refused while `ShiftClosingService::blockingForDate()`; middleware `ShiftReminder` appended to the `web` group by `PaymentModuleServiceProvider::boot()` (employees only: reminder popup, logout prompt, `X-Shift-Reminder` header read by `custom.js`); `accounts.shift_reminder_hours` / `shift_snooze_hours`; employees see only their own payments in lists (`PaymentActions::collectorId()`)
 
 ## Rules
 - Before renaming anything shared (routes, components, config keys), search the whole project for references and update them all.

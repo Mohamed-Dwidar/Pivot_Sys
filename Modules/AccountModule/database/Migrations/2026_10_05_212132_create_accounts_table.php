@@ -20,6 +20,9 @@ return new class extends Migration
             $table->string('logo')->nullable();
             $table->string('status', 20)->default('pending')->index();
             $table->timestamp('approved_at')->nullable();
+            // shift closing reminders: an open period older than this → popup; "still working" → again after the snooze
+            $table->unsignedSmallInteger('shift_reminder_hours')->default(12);
+            $table->unsignedSmallInteger('shift_snooze_hours')->default(4);
             $table->timestamps();
         });
     }

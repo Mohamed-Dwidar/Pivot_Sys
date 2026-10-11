@@ -14,6 +14,10 @@
 @if (request()->filled('payable_id'))
     <input type="hidden" name="back_to_payable" value="1">
 @endif
+{{-- opened from the employee's "My Shift" page (a missed payment): back to it after saving --}}
+@if (request()->boolean('back_to_shift'))
+    <input type="hidden" name="back_to_shift" value="1">
+@endif
 
 <div class="form-section">Payment For</div>
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">

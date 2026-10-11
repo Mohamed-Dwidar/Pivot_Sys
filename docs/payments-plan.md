@@ -1,6 +1,6 @@
 # Payments, Invoices & ETA — Module Plan
 
-> Status: **plan approved 2026-10-10, Phase 1 not started.**
+> Status: Phase 1 done (old data transferred 2026-10-11); §2b shift closing (two levels) built 2026-10-11; Phase 2 not started.
 > Phases: (1) payments + withholding certificates + day closing + old data import · (2) tax rates + invoices / receipts + ETA entry view · (3) reports.
 
 ---
@@ -14,7 +14,7 @@
 | Member credit | Negative `remaining` = member credit, shown clearly (badge + member statement). Wallet comes later. |
 | Refunds | Refund records only (a `type = refund` row, positive amount). |
 | Rights | Employees **add** payments only. Edit / delete / refund = account owner only. Delete = soft delete + required reason. |
-| Day closing | Locks a date: no add / edit / delete of payments dated on a closed day. |
+| Day closing | Two levels since 2026-10-11 (§2b): employee **shift closing** (locks that shift's payments) + account **day closing** by date (locks payments dated that day). |
 | Payment methods | Managed per account. |
 | Expenses | Separate table later, no `direction` column. |
 | Invoices | Simplified, ETA-ready (no API now). Created on demand; one builder, so auto-creation can be added later. Issued = read-only; corrections via credit / debit note. |
@@ -23,7 +23,7 @@
 | Prices | VAT-inclusive by default (`prices_include_tax = 1` per account); the calculator also supports exclusive. |
 
 ### Further decisions (approved 2026-10-10)
-1. **Day closing:** one closing per account per day (not per shift). Account and employees can close; only the owner can reopen, with a reason (logged). The totals are broken down **by employee AND by payment method** (cash handover per employee). Withholding payments are **excluded from the cash totals** and shown on a separate line.
+1. **Day closing (REPLACED 2026-10-11 by the two-level model in §2b; original text kept):** one closing per account per day (not per shift). Account and employees can close; only the owner can reopen, with a reason (logged). The totals are broken down **by employee AND by payment method** (cash handover per employee). Withholding payments are **excluded from the cash totals** and shown on a separate line.
 2. **Reservation moved into a package after being paid:** its payments move to the package (the payable changes; the amount and date don't).
 3. **Old payment method 5 "إشعار خصم"** (8 payments, 20–270 EGP): **confirmed as withholding**. Imported as `type = withholding`, no certificate attached yet.
 4. **Withholding tax (T4) on invoices:** not shown by default; the account setting `withholding_on_invoices` turns it on (still being confirmed with the accountant). The customer's withholding is recorded through payments of type withholding + certificates.
@@ -293,6 +293,63 @@ Steps 1–6 go into `to_run`.
 8. Day closing (summary, close, reopen) + `assertDayOpen` everywhere
 9. Package / reservation hooks (`recalculate` → `refresh`, `movePayments`)
 10. Sidebar items (shared layout — confirm) + import SQL + checks
+
+---
+
+## 2b. Shift closing + account day closing (two levels) — approved 2026-10-11
+
+> Replaces decision 1 of "Further decisions" (one day closing per account, closed by account or employees).
+> Why: the place works 24 hours; an employee's shift crosses midnight, so employee closing is per SHIFT, not per date.
+
+### Model
+- **Payments join a closing by link, not by time window** (`paid_at` is a DATE, no time): an employee's **open period** = their payments (`creatable` = their user) with `shift_closing_id = 0`, not deleted. Closing writes the closing id on those rows. A missed / back-dated payment added before closing joins the open period by itself; a shift over midnight needs nothing special.
+- `paid_at` stays the accounting date: the account's day closing works on it.
+- "Open since" / the X-hour timer = `created_at` of the OLDEST unclosed payment (not the last closing: back after days off → no popup). An open period without payments never triggers a popup.
+- **The account owner's own payments** (refunds included, only the owner refunds) are NOT in a shift: no owner shift closing; they are locked by the final day close of their `paid_at` date (user answer 3).
+- **Refunds** belong to the period of the user who made them = the owner (user answer 2).
+
+### Employee shift closing
+- "My shift" page (employee sidebar, replaces the employee Day Closing page): ONLY their open-period payments — full list + totals per method, withholding on its own line, refunds as minus; no counted-amount entry; "Add payment" (a missed payment); "Close my shift".
+- "Close my shift" → app popup (`data-modal`, not a browser confirm) with total per method, withholding apart, final total collected; buttons "Confirm closing" / "Cancel". The form sends the highest payment id shown; new payments meanwhile → refused "new payments were added, review again".
+- A closed shift locks its payments. Only the account reopens it (reason required, logged); a reopened closing KEEPS its payments (they don't join the current open period), they become editable, the account re-closes that same closing (totals recalculated, logged `reclose`).
+
+### Reminders (never a hard block)
+- No permanent banner.
+- Logout with an open period that has payments → popup "Close my shift and log out" / "Log out, I'm still working" (logged `logout_closed` / `logout_still_working`). The layout marks the logout form; `custom.js` shows the popup.
+- Oldest unclosed payment older than X hours (account setting `shift_reminder_hours`, default 12), on login or any action → popup "Close my shift now" / "I'm still working (covering a shift)". "Still working" requires a reason, is logged (`still_working`), the popup comes back after Y hours (`shift_snooze_hours`, default 4) = last `still_working` + Y. Middleware on employee routes: full pages get the popup, ajax answers get a response header that `custom.js` turns into the same popup.
+- The account's closing screen flags long open periods: employee, open since, number of "still working" answers + their reasons.
+
+### Account day closing (by calendar date, for reports)
+- The day screen: all shift closings that include payments of that date (details + totals), employees with an open period containing payments of that date, the owner's own payments of that date.
+- The account can close an employee's open period on their behalf (logged `close_on_behalf`), reopen / re-close shift closings.
+- Final day close is REFUSED while any employee payment dated that day is unclosed (`shift_closing_id = 0`) or in a reopened shift closing. Same confirmation popup (totals per method + withholding + grand total). It locks the date (as before: `assertDayOpen`) — the owner's payments of that date included.
+- Only the account closes / reopens a day now (employees: their shift only).
+
+### Locks (`PaymentService`)
+- Add: refused on a closed DAY (as before; a missed payment for a closed day gets a later date).
+- Edit / delete / refund: refused when the payment's SHIFT closing is closed, or its day (old + new date) is closed.
+
+### Employee isolation (user answer 1)
+- Employees never see colleagues' collections AS A WHOLE: shift closings, payments list (own payments only, no creator filter), totals, day screens (account only), reports (phase 3).
+- NOT covered: the payments of ONE reservation / package — employees see all rows there (date, amount, method, type AND "Collected by"), so they can answer a customer and contact the colleague; the single payment view / receipt opens from there.
+
+### DB
+- `payments.shift_closing_id` bigint default 0 + index `(account_id, creatable_id, shift_closing_id)`.
+- `shift_closings`: `account_id`, `user_id` (collector), `status` closed | reopened, `first_payment_at`, `last_payment_at`, `count`, `cash_total`, `withholding_total`, `totals` json (per method), `closed_by` (employee or account), `closed_at`, `reopened_by`, `reopened_at`, `reopen_reason`, timestamps.
+- `shift_events` (the one shift log): `account_id`, `user_id` (employee), `shift_closing_id` (0 = open period), `by_user_id`, `action` close | close_on_behalf | reopen | reclose | logout_closed | logout_still_working | still_working, `reason`, `totals` json, `created_at`.
+- `accounts.shift_reminder_hours` (12), `accounts.shift_snooze_hours` (4) — a settings page under Settings.
+- `day_closings` + `day_closing_logs`: kept as they are (account day level); existing rows = test data, cleared (user answer 5).
+- `to_run`: imported payments of each old employee → one closed "Imported" shift closing per employee (else years of open period → popup at once).
+
+### Build order
+1. DB: migrations, SQL (+ clear `day_closings` / `day_closing_logs`), models, `to_run` import closing
+2. `ShiftClosingService` (open period, summary, close, close on behalf, reopen, re-close, events) + the two-level lock in `PaymentService`
+3. Employee isolation in `PaymentActions` / repository; "Collected by" in the payments block
+4. Employee "My shift" page + confirmation popup; employee day-closing routes removed, sidebar item changed
+5. Account day screen rework (shift closings, open periods, close on behalf, reopen / re-close, final-close guard + popup)
+6. Reminders: logout popup, long-open middleware + ajax header, "still working" form, snooze, settings form
+7. Long open periods block on the account screen
+8. `progress.md` + CLAUDE.md (Dependencies map: PaymentModule ↔ LayoutModule logout / middleware)
 
 ---
 

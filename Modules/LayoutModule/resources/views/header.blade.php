@@ -1,6 +1,7 @@
 {{--
     Shared top bar. Variables (from the user-type layout):
     $homeUrl, $userName, $userSubtitle, $menuLinks [[label, icon, url]], $logoutUrl
+    optional $logoutPrompt: a popup url opened instead of logging out at once (employees with a shift not closed, custom.js)
 --}}
 <div class="box fixed inset-x-0 top-0 z-10 flex h-[65px] rounded-none border-x-0 border-t-0">
     <div class="side-menu__content brand-bar bg-white flex-none flex items-center z-10 px-5 h-full xl:w-[275px] overflow-hidden relative duration-300 group-[.side-menu--collapsed]:xl:w-[91px] group-[.side-menu--collapsed.side-menu--on-hover]:xl:w-[275px] group-[.side-menu--collapsed.side-menu--on-hover]:xl:shadow-[6px_0_12px_-4px_#0000001f] before:content-[''] before:hidden before:xl:block before:absolute before:right-0 before:border-r before:border-dashed before:border-slate-300/70 before:h-4/6 before:group-[.side-menu--collapsed.side-menu--on-hover]:xl:border-solid before:group-[.side-menu--collapsed.side-menu--on-hover]:xl:h-full">
@@ -56,7 +57,7 @@
                                 </a>
                             @endforeach
                             <div class="h-px my-2 -mx-2 bg-slate-200/60 dark:bg-darkmode-400"></div>
-                            <form method="POST" action="{{ $logoutUrl }}">
+                            <form method="POST" action="{{ $logoutUrl }}" @if (!empty($logoutPrompt)) data-logout-prompt="{{ $logoutPrompt }}" @endif>
                                 @csrf
                                 <button type="submit" class="dropdown-item-button cursor-pointer flex items-center p-2 transition duration-300 ease-in-out rounded-md hover:bg-slate-200/60 dark:bg-darkmode-600 dark:hover:bg-darkmode-400 dropdown-item">
                                     <i data-tw-merge="" data-lucide="power" class="stroke-[1] w-4 h-4 mr-2"></i>

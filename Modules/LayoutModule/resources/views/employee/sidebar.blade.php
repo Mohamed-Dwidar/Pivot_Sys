@@ -28,10 +28,10 @@
             'active' => request()->routeIs('employee.payments.*'),
         ],
         [
-            'title' => 'Day Closing',
+            'title' => 'My Shift',
             'icon' => 'lock',
-            'url' => route('employee.day-closings.index'),
-            'active' => request()->routeIs('employee.day-closings.*'),
+            'url' => route('employee.shift.index'),
+            'active' => request()->routeIs('employee.shift.*'),
         ],
 
         ['divider' => 'Settings'],
