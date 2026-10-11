@@ -84,6 +84,7 @@ class IncomeCategoryService
             'name_ar' => $data['name_ar'],
             'name_en' => $data['name_en'] ?? null,
             'is_active' => !empty($data['is_active']),
+            'is_revenue' => !empty($data['is_revenue']),
             'sort_order' => (int) ($data['sort_order'] ?? 0),
         ];
     }

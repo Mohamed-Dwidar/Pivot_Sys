@@ -6,15 +6,18 @@
 ---
 
 ## Current status
-- **Working on:** full data transfer `dwidar_pivot_api` (old, up to date, READ ONLY) → `dwidar_res_portal` — `to_run` rewritten (backup → truncate target tables → members, packages, reservations, extras, payments + incomes, payment methods, income categories 1–9, employees + logins from old users → recalculation → refresh → checks); WAITING for the user's go-ahead, nothing run yet. Phase 1 code done (steps 5–10 + extras NOT committed — the user commits, suggest messages only).
-- **Source:** `dwidar_pivot_api` is the live old system (payments to 2026-10-11); `dwidar_pivot_res` was an outdated copy (ignore it). The new DB's reservations were a 2026-10-06 snapshot of `api`.
-- **Next up:** after the transfer: check 6.9 (packages vs old: our net formula matched 208 / 212 before), then Phase 2 (InvoiceModule).
-- **Waiting for the user:** (0) cutoff 2024-04-24 (recommended: config `paymentmodule.opening_date`, `refresh()` writes remaining 0 for a payable dated before it — not built; it only touches 18 reservations, all fully paid) and the 7,348 unpaid counted reservations outside packages (4,044,782.44): 6,796 of them (3.85M) are repeat copies created from 2025-03-16 that are NOT in `dwidar_pivot_res` (11,916 reservations of this DB aren't there), old payments end 2025-02-14; overpaid list `storage/app/payments-review/overpaid-reservations.csv` (163, don't touch); Cairo font files; (1) migrations rule vs practice (edit `create_*` + manual DB, see CLAUDE.md Conventions); (2) are Vite / Tailwind 4 in package.json used or removable; (3) accountant: rounding strategy + T4 on invoices (don't block Phase 1).
+- **Working on:** data transfer `dwidar_pivot_api` (old, live, READ ONLY) → `dwidar_res_portal` — **RAN 2026-10-11** (`to_run` steps 1–6; backup `storage/app/backups/dwidar_res_portal-20261011-1742.sql`, 6.1 MB). All checks match except 6.9 (17 packages differ from the old stored values — waiting for the user: accept the new values or not). Phase 1 code done (steps 5–10 + extras committed by the user in `ac1c79f`; `is_revenue` + docs uncommitted — the user commits, suggest messages only).
+- **Transfer result:** members 2,932, packages 220, reservations 19,823 (17,756 Confirmed / 2,067 Cancelled), extras 179 (extra 123 skipped: its package was deleted), payments 13,054 (7,707,148.91) + incomes 736 (76,550.94), methods 5, categories 9 (6 VAT inactive + not revenue: 12 incomes 32,564.44; 101 Buffet, 102 Break Hours, 103 Extra Hours), employees 15 + logins (active 3, 7, 10, 12, 13, 14, 15, 16; others leave_date), account login 1 untouched; next payment id / No. 100001 (imported max 14,220).
+- **`to_run` is re-runnable** for go-live day (after stopping the old system): 3.0 pre-check (74 checks on every source row, BLOCKING stops before any TRUNCATE, fallbacks listed); employees / logins upserted; ids from the source (income offset = max old payment id). User decisions: reservations of deleted members imported without a member (9), of deleted packages → no package + Cancelled (20), extras of deleted packages skipped (1), old 8330 (−43.40 withholding) → refund "withholding correction".
+- **Check 6.9 (packages vs old):** 215 / 220 same net, 203 / 220 same remaining (−5,127.10 in total). 12 = old stored remaining was stale (ours = old formula net + extras − paid); 5 (2, 3, 98, 139, 151) = old net not recalculated after reservations were cancelled (+ package 3: payment 35 moved in). Recommended: accept the new values.
+- **Next up:** the user's decision on 6.9; then Phase 2 (InvoiceModule).
+- **Waiting for the user:** (0) check 6.9 — accept the 17 new package values (recommended) or not; Cairo font files (`public/assets/fonts/Cairo/Cairo-{Regular,Bold,Light}.ttf`, static TTF); (1) migrations rule vs practice (edit `create_*` + manual DB, see CLAUDE.md Conventions); (2) are Vite / Tailwind 4 in package.json used or removable; (3) accountant: rounding strategy + T4 on invoices (don't block Phase 1).
 - **Known issues:**
   - DB columns added by hand must exist: `reservation_statuses.color`, `is_counted`, `is_default`, `sort_order`; `plans.is_time_based`; `subscription_types.can_repeat`, `auto_renew`; `reservations.paid_amount`, `remaining`; `packages.paid_amount`; money columns of reservations / packages = decimal(12,2) (all run 2026-10-11).
-  - `reservations.paid_amount` / `remaining` are 0 until `php artisan payments:refresh` runs (lists show "Nothing due"); packages keep old values (remaining = net, "Unpaid") until recalculated (`to_run`).
-  - App payments use ids / `payment_no` from 100001 (config `paymentmodule.number_start`, `PAYMENT_NUMBER_START`; `nextNumber()` floor) — run the `AUTO_INCREMENT = 100001` SQL; the import keeps old ids below it (its SQL checks / sets that).
-  - Tables `day_closing_logs` and `extras` are created by `to_run` step 3.1 (CREATE IF NOT EXISTS + migrations rows) — until then day closing / package views with extras fail.
+  - After any change of a status's `is_counted` or a bulk data change: run the package recalculation + `php artisan payments:refresh` (`to_run` steps 4–5).
+  - App payments use ids / `payment_no` from 100001 (config `paymentmodule.number_start`, `PAYMENT_NUMBER_START`; `nextNumber()` floor; AUTO_INCREMENT set by `to_run` 3.14); imported old payments / incomes stay below (max 14,220 now).
+  - 9 reservations (June 2024) have no member (deleted in the old system): views / lists / receipt show "-" (checked); a NEW payment for them can't be added (the form needs an existing member).
+  - Old 4 payments of 0.00, 6,110 old reservations end before they start (same-day times), 106 repeat copies without their original — imported as they are (pre-check warnings).
   - Old users 12, 13, 15 had plain-text passwords (`000` / `0000`): imported as the same password hashed — weak, ask them to change it. Inactive users (2, 4, 5, 6, 8, 9, 11) get `leave_date` = last login → login refused.
   - Cairo fonts of `config/pdf.php` (`public/assets/fonts/Cairo/`) are missing: the receipt falls back to DejaVu Sans (Arabic OK).
   - Changing a status's `is_counted` doesn't recalculate packages or refresh reservations (old gap) → run `payments:refresh` / package recalculation after such a change.
@@ -26,15 +29,16 @@
 ## Modules
 
 ### UserModule / AccountModule / EmployeeModule (auth & user types)
-- **Last updated:** 2026-10-06
+- **Last updated:** 2026-10-11 (data transfer)
 - **Files:** `UserModule/app/{Contracts/Userable, Models/User, Http/Middleware/EnsureUserIsActive}`, `AccountModule/app/Models/Account`, `EmployeeModule/app/Models/Employee`, `UserModule/resources/views/user/account.blade.php`
 - **How it works:** one login (`/login`) for all `users`; the `userable` model decides access (`loginError`), home, layout. Accounts register → pending → admin approves. Employees belong to an account, log in, change password only. Middleware `user.active:{Model}`.
 - **Depends on:** LayoutModule (layouts per type)
 - **Decisions:**
   - Employees' email managed by the account (`canChangeEmail()`) — account owns the profile
   - Employee attachments on the private disk, downloaded via the account — personal documents
-  - Deleting an employee removes his login — email reusable
-- **Pending:** —
+  - Deleting an employee removes their login — email reusable
+  - Old system users = employees (user decision 2026-10-11): employee id = user id = old user id (2–16), same email + old bcrypt password; inactive ones have `leave_date` (login refused by `Employee::loginError()`); the 2 test employees were dropped; account login 1 untouched
+- **Pending:** positions / shifts of the imported employees (only 3 = Accountant set); 12, 13, 15 should change their weak passwords
 
 ### LayoutModule (layouts, shared UI, JS/CSS)
 - **Last updated:** 2026-10-11
@@ -90,21 +94,21 @@
 - **Pending:** repeat for edits not supported by design
 
 ### PackageModule
-- **Last updated:** 2026-10-11 (step 4)
-- **Files:** `app/Http/Controllers/Concerns/PackageActions.php`, `app/Models/Package.php`, `app/Services/PackageService.php`, `views/Package/*`
+- **Last updated:** 2026-10-11 (extras, data transfer)
+- **Files:** `app/Http/Controllers/Concerns/PackageActions.php`, `app/Models/Package.php`, `app/Services/PackageService.php`, `views/Package/*` (view includes `paymentmodule::Extra.partials.package-extras` + `Payment.partials.payable-payments`)
 - **How it works:** a member's package; price (`amount`) = sum of its counted reservations' net, discount % → net (`after_discount`), `date_from/to` from the reservations, total hours shown in the view. Recalculated on every reservation change (`recalculate()`).
 - **Depends on:** ReservationModule, MemberModule
 - **Decisions:**
   - A package with reservations or payments can't be deleted (user, 2026-10-11)
   - Discount typed as % or net, stored as % — price changes keep the %
-  - `Package` implements `Payable` (due = `after_discount`), uses `HasPayments` + `SafeMorphHelper`; column `paid_amount`
+  - `Package` implements `Payable`: due = `after_discount` + Σ extras (`HasExtras`, the old system's rule: remaining = net + extras − paid); uses `HasPayments` + `SafeMorphHelper`; column `paid_amount`
   - `recalculate()` ends with `PaymentService::refresh($this)` (paid / remaining from the payments; it no longer sets `remaining` itself) — Payments step 4
-- **Pending:** recalc existing packages (`to_run`, on hold)
+- **Pending:** 17 packages differ from the old stored values after the recalculation (check 6.9, stale old values) — user decision
 
 ### Payments / Invoices / ETA (PaymentModule — phase 1 in progress; InvoiceModule, ReportModule — not built)
 - **Last updated:** 2026-10-11
 - **Spec: `docs/payments-plan.md` — read before any payments/invoice work**
-- **Status:** Phase 1 — steps 1–9 done (`9dd28e0`, `a7170e8`, `a02f1fa`, `a2b6075`, 5–9 uncommitted); DB migrated + ALTERs run; methods / categories imported; old payments import on hold
+- **Status:** Phase 1 done (`9dd28e0`, `a7170e8`, `a02f1fa`, `a2b6075`, `d73c9e2`, `ac1c79f`; `is_revenue` uncommitted); old data transferred from `dwidar_pivot_api` 2026-10-11 (`to_run`, re-runnable for go-live)
 - **Phases:** (1) payments + withholding certificates + day closing + old data import · (2) tax rates + invoices / receipts + ETA entry view · (3) reports
 - **Files (PaymentModule):**
   - `app/Contracts/Payable`, `app/Models/Concerns/HasPayments` (payments(), `paymentsTotal()`, `payment_status` unpaid / partial / paid / credit)
@@ -112,6 +116,8 @@
   - `app/Services/{PaymentService, PaymentMethodService, IncomeCategoryService}`, `app/Repositories/{PaymentMethod, IncomeCategory}Repository`
   - `app/Http/Controllers/Account/{PaymentMethod, IncomeCategory}AccountModuleController`, `app/Http/Requests/{PaymentMethod, IncomeCategory}Request`, `views/{Method, Category}/*`
   - `app/Models/DayClosingLog`, `database/Migrations/2026_10_11_100005_create_day_closing_logs_table`
+  - Extras: `app/Models/Extra`, `app/Models/Concerns/HasExtras`, `app/Services/ExtraService`, `app/Http/Requests/ExtraRequest`, `Account/ExtraAccountModuleController`, routes `account.extras.{create, store, edit, update, destroy}`, `views/Extra/*`, migration `2026_10_11_100006_create_extras_table`
+  - `income_categories.is_revenue` (create migration, model, request, service, "Counts as income" checkbox)
   - Payments: `app/Http/Controllers/Concerns/PaymentActions` + `Account|Employee/Payment*ModuleController` (account adds edit / update / deleteForm / destroy / refundForm / refund), `app/Http/Requests/Payment{,Update,Delete,Refund}Request`, `app/Repositories/PaymentRepository`, `views/Payment/{index, create, show, edit, delete, refund, receipt-pdf, partials/{form, row-source, row-actions, payable-payments, row-remaining, status-filter, payment-summary}}`
   - Withholding: `Account/WithholdingCertificateAccountModuleController`, `Services/WithholdingCertificateService`, `Repositories/WithholdingCertificateRepository`, `Requests/WithholdingCertificateRequest`, `views/Withholding/*`
   - Day closing: `Concerns/DayClosingActions` + `Account|Employee/DayClosing*ModuleController` (account adds reopen), `Services/DayClosingService`, `Requests/Day{Closing,Reopen}Request`, `views/DayClosing/*`
@@ -143,18 +149,18 @@
   - Employees only add payments; edit / delete / refund = account owner; delete = soft delete + reason
   - Day closing: one per account per day, locks that date; totals by employee × payment method (cash handover), withholding excluded from cash; reopen = owner + reason
   - Payment methods per account; expenses = separate table later (no `direction`)
-  - Old data: 5,042 payments + 227 incomes from `dwidar_pivot_res`, ids kept; old method 5 "إشعار خصم" = withholding (confirmed): NOT imported as a method, no `is_cash` column (re-confirmed 2026-10-11)
+  - Old data source = `dwidar_pivot_api` (live old system; `dwidar_pivot_res` was outdated): payments id = `payment_no` = old id, incomes after the highest old payment id; old method 5 "إشعار خصم" = withholding (not a method); a negative withholding with no positive one on its reservation → refund "withholding correction" (old 8330)
   - Service rule errors = `ValidationException` (422 under the fields), so the service is safe for imports / commands too
   - Ownership (method, category, member, payable of the account) checked in the Form Request AND in `PaymentService` — the service is also called by imports / invoices (user, 2026-10-11)
-  - Old payments / incomes import moved before step 5 (user, 2026-10-11): payments id = `payment_no` = old id, incomes id = `payment_no` = 5189 + old id; old payment 35 (reservation 106 in package 3) → package 3; old 0.00 payment 42 kept; checks: counts, signed totals, per method / type / payable / category all equal the old DB
-  - Old methods / categories imported with old ids: methods 1–4, 6 (Cash, Visa, InstaPay, Vodafone Cash, Bank Transfer - CIB; 5 skipped), categories 1–5; AUTO_INCREMENT 7 / 6
+  - Methods 1–4, 6 and categories 1–6 keep old ids; 6 VAT = inactive + `is_revenue` 0 (VAT collected never counts as income); new categories 101 Buffet, 102 Break Hours, 103 Extra Hours (ids 101+ so new old types never clash)
+  - Extras (user, 2026-10-11): type extra = a sale (income category, revenue, invoiceable in phase 2) / adjustment = a balance move (not revenue, can be negative); amount = qty × unit price; account manages them from the package view; old extras classified by item (rule in `to_run` 3.10)
   - `refresh()` writes only `paid_amount` / `remaining` (query update: no `updated_at`, no events)
   - Invoices ETA-ready, no API now: invoices + receipts in one table, created on demand, issued = read-only, corrections by credit / debit note; manual ETA entry view + paste UUID (pending / registered); one ETA service layer (`EtaGateway`, manual now, API later)
   - Taxes: `tax_rates` (T1 VAT, T2 / T3 table tax, …), several per plan / income category (`taxables` pivot), several per line (`invoice_item_taxes`); ETA order = VAT on (net + table tax + taxable fees); ONE `TaxCalculator`
   - Prices VAT-inclusive by default (`prices_include_tax`); the calculator reverse-calculates through all taxes
   - Rounding to the exact price isolated in `RoundingStrategy` (setting `rounding_strategy`); extra-discount option waiting for the accountant
   - T4 (withholding) on invoices: setting `withholding_on_invoices`, default off (accountant confirming)
-- **Pending:** old payments import (ON HOLD, `to_run` part 2, dry-run checked against `dwidar_pivot_res`); cutoff 2024-04-24 (recommended, not built); Phase 2
+- **Pending:** check 6.9 decision; go-live re-run of `to_run`; Phase 2 (InvoiceModule: extras of type extra + income categories become invoice lines; `is_revenue` 0 excluded from income reports in phase 3)
 
 ### Member / Company / Job modules
 - **Last updated:** 2026-10-07
@@ -166,6 +172,13 @@
 ---
 
 ## Session log
+
+### 2026-10-11 — data transfer from dwidar_pivot_api (ran)
+- **Changed:** `extras` (table, model, `HasExtras`, service, request, controller, routes, views; package due = net + extras); `income_categories.is_revenue` (create migration + form); `to_run` rewritten (backup, pre-check, truncate target tables, upsert employees / logins, inserts, recalculation, refresh, checks) and RUN; old `to_run` kept in `storage/app/backups/to_run.before-2026-10-11`
+- **Why:** user: move all old data (up to date source) into the new system, account 1, old users = employees
+- **Affects:** every module's data; PackageModule due (extras); IncomeCategory form
+- **Found:** first run stopped at 3.10 (an extra without a date) → pre-check added (74 checks, stops before TRUNCATE); old system's stored package values were stale for 17 packages (check 6.9, decision pending); 9 old users had plain-text passwords (3 active: 12, 13, 15 — hashed as is, weak); all member displays are null-safe (9 reservations without a member checked: views, lists, receipt)
+- **Commit:** `ac1c79f` (extras + code) + see suggested commit (is_revenue, docs)
 
 ### 2026-10-11 — step 10 (sidebars), delete guard, day closing history
 - **Changed:** account sidebar + Withholding Certificates, Day Closing; employee sidebar + Day Closing; reservation / package delete refused while they have payments (`deleteOne()` → reason, 422); `day_closing_logs` (create migration, `DayClosingLog`, logged on close / reopen, History in the day view) + SQL in `to_run`; checkpoint

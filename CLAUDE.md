@@ -36,7 +36,7 @@ Then suggest a commit message.
 - `app/Providers/AppServiceProvider.php` — `Str::humanize()` macro (drop-menu option texts)
 - `public/assets/css/custom.css` — ALL custom CSS (except PDF views: `pdf.css`); `public/assets/js/custom.js` — modal, ajax forms, dynamic forms, toggles; `public/assets/js/datatables.js` — DataTables + `window.dataTables` row API
 - `Template_Source/` — the purchased template HTML (reference for markup/classes)
-- `to_run` — user's notes: manual SQL / commands to run on the DB
+- `to_run` — the data transfer script `dwidar_pivot_api` (old system, READ ONLY) → `dwidar_res_portal` (steps 1–6: backup, pre-check, truncate target tables, inserts, recalculation, refresh, checks); re-runnable for go-live; gitignored (old notes: `storage/app/backups/to_run.before-2026-10-11`)
 
 ## Conventions
 - Controllers: `{Module}{UserType}ModuleController` in `Controllers/{UserType}/`; a feature used by account AND employee = `Controllers/Concerns/{X}Actions` trait + 2 thin controllers (`area()` = account|employee)

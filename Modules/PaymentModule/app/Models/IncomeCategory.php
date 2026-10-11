@@ -17,10 +17,12 @@ class IncomeCategory extends Model
     // read in the active language: $model->name (see App\Helpers\LocalizedHelper)
     protected array $localizedFields = ['name'];
 
-    protected $fillable = ['account_id', 'name_ar', 'name_en', 'is_active', 'sort_order'];
+    protected $fillable = ['account_id', 'name_ar', 'name_en', 'is_active', 'is_revenue', 'sort_order'];
 
     protected $casts = [
         'is_active' => 'boolean',
+        // false = not income (VAT collected ...): the income reports leave it out
+        'is_revenue' => 'boolean',
         'sort_order' => 'integer',
     ];
 

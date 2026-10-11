@@ -5,4 +5,5 @@
     @include('layoutmodule::partials.field', ['name' => 'sort_order', 'label' => 'Sort Order', 'type' => 'number', 'value' => $category?->sort_order,
         'attrs' => 'min="0" max="65535" step="1"', 'hint' => $category ? 'Lower first in the lists.' : 'Lower first in the lists. Empty = after the last one.'])
     @include('layoutmodule::partials.checkbox', ['name' => 'is_active', 'label' => 'Active', 'checked' => $category?->is_active ?? true, 'hint' => 'Inactive categories are hidden from the payment form.'])
+    @include('layoutmodule::partials.checkbox', ['name' => 'is_revenue', 'label' => 'Counts as income', 'checked' => $category?->is_revenue ?? true, 'hint' => 'Off for money collected for others (e.g. VAT): left out of the income reports.'])
 </div>

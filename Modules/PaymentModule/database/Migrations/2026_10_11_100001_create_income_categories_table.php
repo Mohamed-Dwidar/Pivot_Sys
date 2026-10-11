@@ -15,6 +15,8 @@ return new class extends Migration {
             $table->string('name_ar')->nullable();
             $table->string('name_en')->nullable();
             $table->boolean('is_active')->default(1);
+            // 0 = money collected for someone else (VAT ...): never counted as income in the reports
+            $table->boolean('is_revenue')->default(1);
             $table->unsignedSmallInteger('sort_order')->default(0);
 
             $table->timestamps();
