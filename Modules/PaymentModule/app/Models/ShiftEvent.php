@@ -19,12 +19,14 @@ class ShiftEvent extends Model
         'payment_edit' => 'Payment edited',
         'payment_delete' => 'Payment deleted',
         'payment_refund' => 'Payment refunded',
+        'expense_edit' => 'Expense edited',
+        'expense_delete' => 'Expense deleted',
     ];
 
     // only created_at (a log row is never changed)
     const UPDATED_AT = null;
 
-    protected $fillable = ['account_id', 'user_id', 'shift_closing_id', 'payment_id', 'by_user_id', 'action', 'reason', 'totals', 'changes'];
+    protected $fillable = ['account_id', 'user_id', 'shift_closing_id', 'payment_id', 'expense_id', 'by_user_id', 'action', 'reason', 'totals', 'changes'];
 
     protected $casts = [
         'totals' => 'array',

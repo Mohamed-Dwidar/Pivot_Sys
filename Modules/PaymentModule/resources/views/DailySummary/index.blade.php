@@ -10,8 +10,9 @@
 
 {{--
     The Daily Summary (docs/payments-plan.md §2b, 2026-10-13): read only, no closing / lock (the shift is the only closing).
-    The date picker reloads it with ?date=. Long open shifts (employees, whatever their dates) | the shifts holding payments of
-    this day (open → Close on Behalf / Close My Shift, closed → View) | the day's totals (per method, per collector) | its refunds.
+    The date picker reloads it with ?date=. Long open shifts (employees, whatever their dates) | the shifts holding payments /
+    expenses of this day (open → Close on Behalf / Close My Shift, closed → View) | the day's totals (per method: payments - refunds -
+    expenses = net, per collector) | its expenses | its refunds.
 --}}
 @section('title')
     Daily Summary {{ $dateText }}
@@ -39,6 +40,7 @@
                             <td class="whitespace-nowrap">{{ $period['since']->format('d-m-Y h:i A') }} <span class="text-xs text-slate-500">({{ $period['since']->diffForHumans(null, true) }})</span></td>
                             <td>{{ $period['count'] }}</td>
                             <td>{{ number_format($period['cash_total'], 2) }}</td>
+                            <td class="{{ $period['expenses_total'] ? 'text-danger' : '' }}">{{ $period['expenses_total'] ? number_format(-$period['expenses_total'], 2) : '0.00' }}</td>
                             <td>
                                 {{ $period['answers']->count() }}
                                 @foreach ($period['answers'] as $answer)
@@ -56,11 +58,11 @@
     {{-- the shifts holding payments of this day --}}
     <div class="form-section {{ $longOpen->isNotEmpty() ? 'mt-8' : '' }}">Shifts</div>
     @if ($openPeriods->isEmpty() && $shifts->isEmpty())
-        <div class="text-slate-500">No payments on this day.</div>
+        <div class="text-slate-500">No payments or expenses on this day.</div>
     @else
         <div class="table-wrap">
             <table class="data-table">
-                <thead><tr><th>Collected By</th><th>Status</th><th>Payments From → To</th><th>Payments</th><th>Collected</th>@if ($showWithholding)<th>Withholding</th>@endif<th></th></tr></thead>
+                <thead><tr><th>Collected By</th><th>Status</th><th>Payments From → To</th><th>Payments</th><th>Collected</th><th>Expenses</th>@if ($showWithholding)<th>Withholding</th>@endif<th></th></tr></thead>
                 <tbody>
                     @foreach ($openPeriods as $userId => $period)
                         <tr>
@@ -88,6 +90,7 @@
                             <td>@include('paymentmodule::Shift.partials.period', ['closing' => $shift])</td>
                             <td>{{ $shift->count }}</td>
                             <td>{{ number_format($shift->cash_total, 2) }}</td>
+                            <td class="{{ $shift->expenses_total ? 'text-danger' : '' }}">{{ $shift->expenses_total ? number_format(-$shift->expenses_total, 2) : '0.00' }}</td>
                             @if ($showWithholding)
                                 <td>{{ number_format($shift->withholding_total, 2) }}</td>
                             @endif
@@ -102,6 +105,27 @@
 
     <div class="form-section mt-8">Day Totals</div>
     @include('paymentmodule::DailySummary.partials.totals')
+
+    {{-- the day's expenses (spent_at): who paid out, for what, how much --}}
+    @if ($expenses->isNotEmpty())
+        <div class="form-section mt-8">Expenses</div>
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead><tr><th>Expense</th><th>Category</th><th>Recorded By</th><th>Method</th><th>Amount</th></tr></thead>
+                <tbody>
+                    @foreach ($expenses as $expense)
+                        <tr>
+                            <td>@include('paymentmodule::Expense.partials.row-item') <span class="text-xs text-slate-500">{{ $expense->created_at?->format('h:i A') }}</span></td>
+                            <td>{{ $expense->expenseCategory?->name ?? '-' }}</td>
+                            <td>{{ $expense->creatable?->userable?->displayName() ?? '-' }}</td>
+                            <td>{{ $expense->method_name }}</td>
+                            <td class="whitespace-nowrap">@include('paymentmodule::Expense.partials.row-amount')</td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    @endif
 
     {{-- the day's refunds: who gave the money back, how much, for which payment, why --}}
     @if ($refunds->isNotEmpty())

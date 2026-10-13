@@ -16,11 +16,11 @@
 @endsection
 
 @section('content')
-    @if ($period['payments']->isEmpty())
-        <div class="text-slate-500">No payments since the last closing, nothing to close.</div>
+    @if ($period['payments']->isEmpty() && $period['expenses']->isEmpty())
+        <div class="text-slate-500">No payments or expenses since the last closing, nothing to close.</div>
     @else
         <div class="mb-4">
-            {{ $period['summary']['count'] }} payments since {{ $period['since']?->format('d-m-Y h:i A') }}.
+            {{ $period['summary']['count'] }} payments and {{ $period['summary']['expenses']['count'] }} expenses since {{ $period['since']?->format('d-m-Y h:i A') }}.
             After closing, only the account can still change them (with a reason, logged on the shift).
             @if ($employee)
                 It is logged as closed by you on their behalf.
@@ -32,6 +32,7 @@
         <form method="POST" action="{{ route($employee ? 'account.shifts.close' : $area . '.shift.close') }}" data-ajax>
             @csrf
             <input type="hidden" name="up_to_id" value="{{ $period['summary']['max_id'] }}">
+            <input type="hidden" name="up_to_expense_id" value="{{ $period['summary']['max_expense_id'] }}">
             @if ($employee)
                 <input type="hidden" name="user_id" value="{{ $employee->id }}">
             @endif

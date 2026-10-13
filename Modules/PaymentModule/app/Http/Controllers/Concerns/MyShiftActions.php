@@ -59,8 +59,11 @@ trait MyShiftActions
             ->addColumn('status_html', fn ($closing) => view('paymentmodule::Shift.partials.status', compact('closing'))->render())
             ->editColumn('cash_total', fn ($closing) => number_format($closing->cash_total, 2))
             ->editColumn('withholding_total', fn ($closing) => number_format($closing->withholding_total, 2))
-            ->rawColumns(['closed_html', 'period', 'payments_html', 'status_html'])
-            ->only(['DT_RowId', 'closed_html', 'period', 'payments_html', 'status_html', 'cash_total', 'withholding_total'])
+            ->editColumn('expenses_total', fn ($closing) => $closing->expenses_total ? '<span class="text-danger">' . number_format(-$closing->expenses_total, 2) . '</span>' : '0.00')
+            // what was handed over: collected - expenses
+            ->addColumn('net_total', fn ($closing) => '<span class="font-medium">' . number_format($closing->net_total, 2) . '</span>')
+            ->rawColumns(['closed_html', 'period', 'payments_html', 'status_html', 'expenses_total', 'net_total'])
+            ->only(['DT_RowId', 'closed_html', 'period', 'payments_html', 'status_html', 'cash_total', 'expenses_total', 'net_total', 'withholding_total'])
             ->toJson();
     }
 
@@ -76,10 +79,11 @@ trait MyShiftActions
     public function close(ShiftCloseRequest $request)
     {
         $logout = $this->area() === 'employee' && $request->boolean('logout');
-        $closing = $this->shiftService->close($this->accountId(), Auth::user(), (int) $request->validated('up_to_id'), Auth::user(), $logout ? 'logout_closed' : 'close');
+        $closing = $this->shiftService->close($this->accountId(), Auth::user(), (int) $request->validated('up_to_id'), Auth::user(),
+            $logout ? 'logout_closed' : 'close', (int) $request->validated('up_to_expense_id'));
 
         return response()->json([
-            'message' => 'Your shift has been closed: ' . number_format($closing->cash_total, 2) . ' collected.',
+            'message' => 'Your shift has been closed: ' . number_format($closing->net_total, 2) . ' to hand over.',
             // the logout popup: logged out after closing (custom.js submits the logout form)
             'logout' => $logout,
             'redirect' => route($this->area() . '.shift.index'),

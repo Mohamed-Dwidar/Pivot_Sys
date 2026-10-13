@@ -26,6 +26,12 @@
             'active' => request()->routeIs('account.payments.*'),
         ],
         [
+            'title' => 'Expenses',
+            'icon' => 'banknote',
+            'url' => route('account.expenses.index'),
+            'active' => request()->routeIs('account.expenses.*'),
+        ],
+        [
             'title' => 'My Shift',
             'icon' => 'lock',
             'url' => route('account.shift.index'),
@@ -111,6 +117,12 @@
                     'icon' => 'tags',
                     'url' => route('account.income-categories.index'),
                     'active' => request()->routeIs('account.income-categories.*'),
+                ],
+                [
+                    'title' => 'Expense Categories',
+                    'icon' => 'tags',
+                    'url' => route('account.expense-categories.index'),
+                    'active' => request()->routeIs('account.expense-categories.*'),
                 ],
                 [
                     'title' => 'Companies',

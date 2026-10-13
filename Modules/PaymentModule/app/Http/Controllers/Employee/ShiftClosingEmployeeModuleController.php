@@ -49,6 +49,7 @@ class ShiftClosingEmployeeModuleController extends Controller
     {
         $closing = $this->shiftService->findOne($this->accountId(), $id, Auth::id());
         $closing->setRelation('payments', $this->shiftService->popupPayments($closing));
+        $closing->setRelation('expenses', $this->shiftService->popupExpenses($closing));
 
         return view('paymentmodule::Shift.show', compact('closing'));
     }

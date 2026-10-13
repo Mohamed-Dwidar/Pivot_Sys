@@ -17,7 +17,7 @@ use Modules\UserModule\app\Models\User;
 class ShiftClosing extends Model
 {
     protected $fillable = [
-        'account_id', 'user_id', 'first_payment_at', 'last_payment_at', 'count', 'cash_total', 'withholding_total', 'totals', 'notes',
+        'account_id', 'user_id', 'first_payment_at', 'last_payment_at', 'count', 'cash_total', 'withholding_total', 'expenses_total', 'totals', 'notes',
         'closed_by', 'closed_at', 'edited_at', 'edit_count',
     ];
 
@@ -27,6 +27,7 @@ class ShiftClosing extends Model
         'count' => 'integer',
         'cash_total' => 'float',
         'withholding_total' => 'float',
+        'expenses_total' => 'float',
         'totals' => 'array',
         'closed_at' => 'datetime',
         'edited_at' => 'datetime',
@@ -52,6 +53,18 @@ class ShiftClosing extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
+    }
+
+    // the expenses recorded in this shift (money paid out of the drawer)
+    public function expenses(): HasMany
+    {
+        return $this->hasMany(Expense::class);
+    }
+
+    // what is handed over: collected (payments - refunds) - expenses
+    public function getNetTotalAttribute(): float
+    {
+        return round((float) ($this->totals['net_total'] ?? ($this->cash_total - $this->expenses_total)), 2);
     }
 
     // the close + every change after it (payment edited / deleted / refunded), newest first

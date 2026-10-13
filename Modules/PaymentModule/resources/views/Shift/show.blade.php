@@ -30,4 +30,9 @@
 
     <div class="form-section mt-8">Payments</div>
     @include('paymentmodule::Shift.partials.payments', ['payments' => $closing->payments])
+
+    @if ($closing->expenses->isNotEmpty())
+        <div class="form-section mt-8">Expenses</div>
+        @include('paymentmodule::Shift.partials.expenses', ['expenses' => $closing->expenses])
+    @endif
 @endsection

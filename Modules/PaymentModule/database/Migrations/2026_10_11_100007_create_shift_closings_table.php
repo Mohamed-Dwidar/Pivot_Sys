@@ -22,6 +22,8 @@ return new class extends Migration {
             // payments - refunds (withholding excluded)
             $table->decimal('cash_total', 12, 2)->default(0);
             $table->decimal('withholding_total', 12, 2)->default(0);
+            // its expenses (money paid out); net to hand over = cash_total - expenses_total
+            $table->decimal('expenses_total', 12, 2)->default(0);
             // ShiftClosingService::summary(): {methods: {method_id: {name, payments, refunds, net}}, withholding: {count, total}, cash_total, count}
             $table->json('totals')->nullable();
             $table->string('notes')->nullable();

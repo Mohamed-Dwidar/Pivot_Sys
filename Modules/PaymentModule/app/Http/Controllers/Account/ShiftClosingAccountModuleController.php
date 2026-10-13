@@ -41,6 +41,7 @@ class ShiftClosingAccountModuleController extends Controller
     {
         $closing = $this->shiftService->findOne($this->accountId(), $id);
         $closing->setRelation('payments', $this->shiftService->popupPayments($closing));
+        $closing->setRelation('expenses', $this->shiftService->popupExpenses($closing));
 
         return view('paymentmodule::Shift.show', compact('closing'));
     }
@@ -60,10 +61,11 @@ class ShiftClosingAccountModuleController extends Controller
     public function close(ShiftCloseRequest $request)
     {
         $employee = $this->employee($request->validated('user_id'));
-        $closing = $this->shiftService->close($this->accountId(), $employee, (int) $request->validated('up_to_id'), Auth::user());
+        $closing = $this->shiftService->close($this->accountId(), $employee, (int) $request->validated('up_to_id'), Auth::user(), 'close',
+            (int) $request->validated('up_to_expense_id'));
 
         return response()->json([
-            'message' => 'The shift of ' . $employee->userable->displayName() . ' has been closed: ' . number_format($closing->cash_total, 2) . ' collected.',
+            'message' => 'The shift of ' . $employee->userable->displayName() . ' has been closed: ' . number_format($closing->net_total, 2) . ' to hand over.',
             'redirect' => $this->back($request, $closing->id),
         ]);
     }

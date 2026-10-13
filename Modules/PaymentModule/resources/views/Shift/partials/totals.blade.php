@@ -1,41 +1,58 @@
 {{--
-    The totals of a shift (ShiftClosingService::summary(), also saved on the closing): by payment method
-    (payments - refunds = net), refunds as their own minus line, withholding apart (not cash), the total collected = what is handed over.
-    $summary: ['methods', 'refunds', 'withholding', 'cash_total', 'count'] (closings saved before 2026-10-13 have no 'refunds')
+    The totals of a shift (ShiftClosingService::summary(), also saved on the closing): per payment method
+    payments - refunds - expenses = net to hand over; then the sum: Total payments, Refunds (minus), Total collected, Expenses (minus),
+    Net to hand over; withholding apart (not cash). Expenses with no method (imported old method 5) are in the expenses only.
+    $summary: ['methods', 'refunds', 'expenses', 'withholding', 'cash_total', 'expenses_total', 'net_total', 'count']
+    (closings saved before 2026-10-13 have no 'refunds', before 2026-10-14 no 'expenses': read as 0)
 --}}
-@if (empty($summary['count']))
-    <div class="text-slate-500">No payments.</div>
+@php
+    $refundsTotal = (float) ($summary['refunds']['total'] ?? collect($summary['methods'] ?? [])->sum('refunds'));
+    $expensesTotal = (float) ($summary['expenses']['total'] ?? 0);
+    $expensesCount = (int) ($summary['expenses']['count'] ?? 0);
+    $netTotal = (float) ($summary['net_total'] ?? ($summary['cash_total'] ?? 0));
+    $noMethod = (float) ($summary['no_method_expenses'] ?? 0);
+@endphp
+@if (empty($summary['count']) && !$expensesCount)
+    <div class="text-slate-500">No payments or expenses.</div>
 @else
     <div class="table-wrap">
         <table class="data-table">
-            <thead><tr><th>Method</th><th>Payments</th><th>Refunds</th><th>Net</th></tr></thead>
+            <thead><tr><th>Method</th><th>Payments</th><th>Refunds</th><th>Expenses</th><th>Net</th></tr></thead>
             <tbody>
                 @foreach ($summary['methods'] ?? [] as $method)
                     <tr>
                         <td>{{ $method['name'] }}</td>
                         <td>{{ number_format($method['payments'], 2) }}</td>
                         <td class="{{ $method['refunds'] ? 'text-danger' : '' }}">{{ $method['refunds'] ? number_format(-$method['refunds'], 2) : '0.00' }}</td>
-                        <td>{{ number_format($method['net'], 2) }}</td>
+                        <td class="{{ !empty($method['expenses']) ? 'text-danger' : '' }}">{{ !empty($method['expenses']) ? number_format(-$method['expenses'], 2) : '0.00' }}</td>
+                        <td class="font-medium">{{ number_format($method['net'], 2) }}</td>
                     </tr>
                 @endforeach
-                {{-- the handover as a sum: all payments, the refunds as their own minus line, = total collected --}}
-                @php($refundsTotal = (float) ($summary['refunds']['total'] ?? collect($summary['methods'] ?? [])->sum('refunds')))
+                {{-- the handover as a sum --}}
                 <tr class="row-total">
-                    <td colspan="3">Total payments</td>
-                    <td>{{ number_format($summary['cash_total'] + $refundsTotal, 2) }}</td>
+                    <td colspan="4">Total payments</td>
+                    <td>{{ number_format(($summary['cash_total'] ?? 0) + $refundsTotal, 2) }}</td>
                 </tr>
                 <tr>
-                    <td colspan="3">Refunds <span class="text-slate-400">(money given back{{ !empty($summary['refunds']['count']) ? ', ' . $summary['refunds']['count'] : '' }})</span></td>
+                    <td colspan="4">Refunds <span class="text-slate-400">(money given back{{ !empty($summary['refunds']['count']) ? ', ' . $summary['refunds']['count'] : '' }})</span></td>
                     <td class="{{ $refundsTotal ? 'text-danger' : '' }}">{{ number_format(-$refundsTotal, 2) }}</td>
                 </tr>
+                <tr>
+                    <td colspan="4">Total collected</td>
+                    <td>{{ number_format($summary['cash_total'] ?? 0, 2) }}</td>
+                </tr>
+                <tr>
+                    <td colspan="4">Expenses <span class="text-slate-400">(money paid out{{ $expensesCount ? ', ' . $expensesCount : '' }}{{ $noMethod ? ', ' . number_format($noMethod, 2) . ' with no method' : '' }})</span></td>
+                    <td class="{{ $expensesTotal ? 'text-danger' : '' }}">{{ number_format(-$expensesTotal, 2) }}</td>
+                </tr>
                 <tr class="font-medium">
-                    <td colspan="3">Total collected</td>
-                    <td class="text-success">{{ number_format($summary['cash_total'], 2) }}</td>
+                    <td colspan="4">Net to hand over</td>
+                    <td class="text-success">{{ number_format($netTotal, 2) }}</td>
                 </tr>
                 {{-- withholding apart (not cash); hidden when Withholding tax is off and there is none (Settings › General) --}}
                 @if (!empty($summary['withholding']['count']) || \Modules\PaymentModule\app\Services\PaymentService::withholdingOn())
                     <tr>
-                        <td colspan="3">Withholding <span class="text-slate-400">(not cash, {{ $summary['withholding']['count'] ?? 0 }})</span></td>
+                        <td colspan="4">Withholding <span class="text-slate-400">(not cash, {{ $summary['withholding']['count'] ?? 0 }})</span></td>
                         <td>{{ number_format($summary['withholding']['total'] ?? 0, 2) }}</td>
                     </tr>
                 @endif

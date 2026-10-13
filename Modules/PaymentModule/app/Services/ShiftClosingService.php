@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Modules\AccountModule\app\Models\Account;
 use Modules\EmployeeModule\app\Models\Employee;
+use Modules\PaymentModule\app\Models\Expense;
 use Modules\PaymentModule\app\Models\Payment;
 use Modules\PaymentModule\app\Models\PaymentMethod;
 use Modules\PaymentModule\app\Models\ShiftClosing;
@@ -24,7 +25,9 @@ use Modules\UserModule\app\Models\User;
  * - a closed shift keeps its payments; only the account edits / deletes one of them (reason required): paymentChanged()
  *   recalculates the totals, logs the change (before / after) and marks the shift "Edited after closing"; a refund of one
  *   of them goes into the refunder's open shift, the closed shift only gets the log entry + the mark
- * - every close, payment change and reminder answer is logged (shift_events)
+ * - expenses (2026-10-14) join the recorder's open shift too: the totals per method = payments - refunds - expenses = net to hand
+ *   over; an expense changed after closing is logged the same way (expense_edit / expense_delete)
+ * - every close, payment / expense change and reminder answer is logged (shift_events)
  * - closing sends the highest payment id the collector saw: a payment added meanwhile → refused (review again)
  * - reminders (employees only): config paymentmodule.shift_reminder_hours / shift_snooze_hours
  */
@@ -82,36 +85,60 @@ class ShiftClosingService
         return $this->paymentsOf($accountId, $userId)->where('shift_closing_id', 0);
     }
 
+    // the collector's open shift: the expenses they recorded, not in a closing yet
+    public function openExpenses($accountId, $userId): Builder
+    {
+        return Expense::where('account_id', $accountId)->where('shift_closing_id', 0)
+            ->where('creatable_type', (new User)->getMorphClass())->where('creatable_id', $userId);
+    }
+
+    // created_at of the oldest unclosed payment / expense of a login (null = nothing open)
+    private function openSince($accountId, $userId): ?Carbon
+    {
+        $since = collect([$this->openPayments($accountId, $userId)->min('created_at'), $this->openExpenses($accountId, $userId)->min('created_at')])
+            ->filter()->min();
+        return $since ? Carbon::parse($since) : null;
+    }
+
     /**
-     * The collector's open shift: ['payments' (oldest first), 'summary', 'since' (created_at of the oldest payment, null = none),
-     * 'last_closing' (their last closing, null = never)]
+     * The collector's open shift: ['payments' (oldest first), 'expenses', 'summary', 'since' (created_at of the oldest payment /
+     * expense, null = none), 'last_closing' (their last closing, null = never)]
      */
     public function openPeriod($accountId, $userId): array
     {
         $payments = $this->openPayments($accountId, $userId)
             ->with('payable', 'member', 'paymentMethod', 'incomeCategory')->orderBy('created_at')->orderBy('id')->get();
+        $expenses = $this->openExpenses($accountId, $userId)->with('expenseCategory', 'paymentMethod')->orderBy('created_at')->orderBy('id')->get();
 
         return [
             'payments' => $payments,
-            'summary' => $this->summary($accountId, $payments),
-            'since' => $payments->first()?->created_at,
+            'expenses' => $expenses,
+            'summary' => $this->summary($accountId, $payments, $expenses),
+            'since' => collect([$payments->first()?->created_at, $expenses->first()?->created_at])->filter()->min(),
             'last_closing' => ShiftClosing::where('account_id', $accountId)->where('user_id', $userId)->latest('closed_at')->first(),
         ];
     }
 
     /**
-     * The totals of some payments (an open shift / a closing; saved on the closing):
-     * ['methods' => [method_id => ['name', 'payments', 'refunds', 'net']], 'refunds' => ['count', 'total'] (all methods, its own
-     *  minus line in the close popup), 'withholding' => ['count', 'total'],
-     *  'cash_total' (payments - refunds, withholding apart), 'count', 'max_id', 'first_payment_at', 'last_payment_at']
+     * The totals of some payments + expenses (an open shift / a closing; saved on the closing):
+     * ['methods' => [method_id => ['name', 'payments', 'refunds', 'expenses', 'net' (= payments - refunds - expenses: to hand over)]],
+     *  'refunds' / 'expenses' => ['count', 'total'] (all methods, their own minus lines), 'withholding' => ['count', 'total'],
+     *  'no_method_expenses' (imported old method 5: in the expenses total, in no method's cash),
+     *  'cash_total' (payments - refunds, withholding apart), 'expenses_total', 'net_total' (the methods' net), 'count' (payments),
+     *  'max_id' / 'max_expense_id' (the newest shown), 'first_payment_at', 'last_payment_at' (the span, payments + expenses)]
      */
-    public function summary($accountId, Collection $payments): array
+    public function summary($accountId, Collection $payments, ?Collection $expenses = null): array
     {
+        $expenses ??= collect();
         $methodNames = PaymentMethod::withTrashed()->where('account_id', $accountId)->get()->pluck('name', 'id');
-        $summary = ['methods' => [], 'refunds' => ['count' => 0, 'total' => 0.0], 'withholding' => ['count' => 0, 'total' => 0.0], 'cash_total' => 0.0, 'count' => 0,
-            'max_id' => (int) $payments->max('id'),
-            'first_payment_at' => $payments->min('created_at')?->format('Y-m-d H:i:s'),
-            'last_payment_at' => $payments->max('created_at')?->format('Y-m-d H:i:s')];
+        $times = $payments->pluck('created_at')->merge($expenses->pluck('created_at'))->filter();
+        $summary = ['methods' => [], 'refunds' => ['count' => 0, 'total' => 0.0], 'expenses' => ['count' => 0, 'total' => 0.0],
+            'withholding' => ['count' => 0, 'total' => 0.0], 'no_method_expenses' => 0.0,
+            'cash_total' => 0.0, 'expenses_total' => 0.0, 'net_total' => 0.0, 'count' => 0,
+            'max_id' => (int) $payments->max('id'), 'max_expense_id' => (int) $expenses->max('id'),
+            'first_payment_at' => $times->min()?->format('Y-m-d H:i:s'),
+            'last_payment_at' => $times->max()?->format('Y-m-d H:i:s')];
+        $line = fn ($methodId) => ['name' => $methodNames[$methodId] ?? 'Method #' . $methodId, 'payments' => 0.0, 'refunds' => 0.0, 'expenses' => 0.0, 'net' => 0.0];
 
         foreach ($payments as $payment) {
             $summary['count']++;
@@ -122,7 +149,7 @@ class ShiftClosingService
             }
 
             $methodId = (int) $payment->payment_method_id;
-            $summary['methods'][$methodId] ??= ['name' => $methodNames[$methodId] ?? 'Method #' . $methodId, 'payments' => 0.0, 'refunds' => 0.0, 'net' => 0.0];
+            $summary['methods'][$methodId] ??= $line($methodId);
             $method = &$summary['methods'][$methodId];
             $key = $payment->type === 'refund' ? 'refunds' : 'payments';
             $method[$key] = round($method[$key] + $payment->amount, 2);
@@ -135,14 +162,30 @@ class ShiftClosingService
             unset($method);
         }
 
+        foreach ($expenses as $expense) {
+            $summary['expenses']['count']++;
+            $summary['expenses']['total'] = round($summary['expenses']['total'] + $expense->amount, 2);
+            $methodId = (int) $expense->payment_method_id;
+            if (!$methodId) {
+                $summary['no_method_expenses'] = round($summary['no_method_expenses'] + $expense->amount, 2);
+                continue;
+            }
+            $summary['methods'][$methodId] ??= $line($methodId);
+            $summary['methods'][$methodId]['expenses'] = round($summary['methods'][$methodId]['expenses'] + $expense->amount, 2);
+            $summary['methods'][$methodId]['net'] = round($summary['methods'][$methodId]['net'] - $expense->amount, 2);
+        }
+        $summary['expenses_total'] = $summary['expenses']['total'];
+        $summary['net_total'] = round(collect($summary['methods'])->sum('net'), 2);
+
         return $summary;
     }
 
     /**
-     * Close a collector's open shift. $upToId = the highest payment id shown in the confirmation (a newer one = refused).
-     * $collector: an employee or the account's own login; $by: the collector (close / logout_closed) or the account (close_on_behalf).
+     * Close a collector's open shift. $upToId / $upToExpenseId = the highest payment / expense id shown in the confirmation
+     * (a newer one = refused). $collector: an employee or the account's own login; $by: the collector (close / logout_closed)
+     * or the account (close_on_behalf).
      */
-    public function close($accountId, User $collector, int $upToId, Model $by, string $action = 'close'): ShiftClosing
+    public function close($accountId, User $collector, int $upToId, Model $by, string $action = 'close', int $upToExpenseId = 0): ShiftClosing
     {
         $this->assertCollectorOf($accountId, $collector);
         $onBehalf = $by->getKey() !== $collector->getKey();
@@ -151,14 +194,15 @@ class ShiftClosingService
         }
         $action = $onBehalf ? 'close_on_behalf' : (in_array($action, ['close', 'logout_closed'], true) ? $action : 'close');
 
-        return DB::transaction(function () use ($accountId, $collector, $upToId, $by, $action) {
-            // locked until the end: a payment can't join / leave the period while it is closed
+        return DB::transaction(function () use ($accountId, $collector, $upToId, $upToExpenseId, $by, $action) {
+            // locked until the end: a payment / expense can't join / leave the shift while it is closed
             $payments = $this->openPayments($accountId, $collector->getKey())->lockForUpdate()->get();
-            if ($payments->isEmpty()) {
-                throw ValidationException::withMessages(['shift' => 'There are no payments to close.']);
+            $expenses = $this->openExpenses($accountId, $collector->getKey())->lockForUpdate()->get();
+            if ($payments->isEmpty() && $expenses->isEmpty()) {
+                throw ValidationException::withMessages(['shift' => 'There are no payments or expenses to close.']);
             }
-            if ((int) $payments->max('id') !== $upToId) {
-                throw ValidationException::withMessages(['shift' => 'Payments were added or changed since you opened this window. Review the totals again.']);
+            if ((int) $payments->max('id') !== $upToId || (int) $expenses->max('id') !== $upToExpenseId) {
+                throw ValidationException::withMessages(['shift' => 'Payments or expenses were added or changed since you opened this window. Review the totals again.']);
             }
 
             $closing = $this->saveTotals(new ShiftClosing([
@@ -166,8 +210,9 @@ class ShiftClosingService
                 'user_id' => $collector->getKey(),
                 'closed_by' => $by->getKey(),
                 'closed_at' => now(),
-            ]), $accountId, $payments);
+            ]), $accountId, $payments, $expenses);
             Payment::whereKey($payments->modelKeys())->update(['shift_closing_id' => $closing->id]);
+            Expense::whereKey($expenses->modelKeys())->update(['shift_closing_id' => $closing->id]);
             $this->log($closing, $action, $by);
 
             return $closing;
@@ -201,8 +246,8 @@ class ShiftClosingService
      */
     public function reminderDue(Account $account, User $employee): bool
     {
-        $since = $this->openPayments($account->id, $employee->getKey())->min('created_at');
-        if (!$since || Carbon::parse($since)->gt(now()->subHours(self::reminderHours()))) {
+        $since = $this->openSince($account->id, $employee->getKey());
+        if (!$since || $since->gt(now()->subHours(self::reminderHours()))) {
             return false;
         }
 
@@ -227,25 +272,40 @@ class ShiftClosingService
      */
     public function openPeriods($accountId, $date = null): Collection
     {
-        $rows = Payment::where('account_id', $accountId)->where('shift_closing_id', 0)
+        $day = $date ? Carbon::parse($date)->toDateString() : null;
+        $payments = Payment::where('account_id', $accountId)->where('shift_closing_id', 0)
             ->where('creatable_type', (new User)->getMorphClass())->whereIn('creatable_id', $this->collectorUserIds($accountId))
             ->groupBy('creatable_id')
             ->selectRaw("creatable_id, MIN(created_at) since, COUNT(*) n,
                 SUM(CASE type WHEN 'payment' THEN amount WHEN 'refund' THEN -amount ELSE 0 END) cash,
-                SUM(IF(type = 'withholding', amount, 0)) wh, SUM(paid_at = ?) dated", [$date ? Carbon::parse($date)->toDateString() : null])
-            ->when($date, fn ($query) => $query->havingRaw('dated > 0'))
-            ->orderBy('since')
-            ->get();
-        $users = User::with('userable')->whereIn('id', $rows->pluck('creatable_id'))->get()->keyBy('id');
+                SUM(IF(type = 'withholding', amount, 0)) wh, SUM(paid_at = ?) dated", [$day])
+            ->get()->keyBy('creatable_id');
+        $expenses = Expense::where('account_id', $accountId)->where('shift_closing_id', 0)
+            ->where('creatable_type', (new User)->getMorphClass())->whereIn('creatable_id', $this->collectorUserIds($accountId))
+            ->groupBy('creatable_id')
+            ->selectRaw('creatable_id, MIN(created_at) since, COUNT(*) n, SUM(amount) total, SUM(spent_at = ?) dated', [$day])
+            ->get()->keyBy('creatable_id');
+        $users = User::with('userable')->whereIn('id', $payments->keys()->merge($expenses->keys())->unique())->get()->keyBy('id');
 
-        return $rows->toBase()->mapWithKeys(fn ($row) => [(int) $row->creatable_id => [
-            'user' => $users[$row->creatable_id] ?? null,
-            'since' => Carbon::parse($row->since),
-            'count' => (int) $row->n,
-            'cash_total' => round((float) $row->cash, 2),
-            'withholding_total' => round((float) $row->wh, 2),
-            'dated_count' => (int) $row->dated,
-        ]]);
+        return $payments->keys()->merge($expenses->keys())->unique()
+            ->map(function ($userId) use ($payments, $expenses, $users) {
+                $payment = $payments[$userId] ?? null;
+                $expense = $expenses[$userId] ?? null;
+                return [
+                    'user_id' => (int) $userId,
+                    'user' => $users[$userId] ?? null,
+                    'since' => Carbon::parse(collect([$payment?->since, $expense?->since])->filter()->min()),
+                    'count' => (int) ($payment?->n ?? 0),
+                    'expenses_count' => (int) ($expense?->n ?? 0),
+                    'cash_total' => round((float) ($payment?->cash ?? 0), 2),
+                    'expenses_total' => round((float) ($expense?->total ?? 0), 2),
+                    'withholding_total' => round((float) ($payment?->wh ?? 0), 2),
+                    'dated_count' => (int) ($payment?->dated ?? 0) + (int) ($expense?->dated ?? 0),
+                ];
+            })
+            ->when($day, fn ($rows) => $rows->filter(fn ($row) => $row['dated_count'] > 0))
+            ->sortBy('since')
+            ->mapWithKeys(fn ($row) => [$row['user_id'] => $row]);
     }
 
     /**
@@ -279,6 +339,13 @@ class ShiftClosingService
         return $this->listQuery($accountId, $userId)->findOrFail($id);
     }
 
+    // a closed shift's totals from its payments + expenses now (shifts:recalculate, after an import); no log, no "edited" mark
+    public function recalculate(ShiftClosing $closing): ShiftClosing
+    {
+        return DB::transaction(fn () => $this->saveTotals($closing, $closing->account_id,
+            $closing->payments()->lockForUpdate()->get(), $closing->expenses()->lockForUpdate()->get()));
+    }
+
     // the shift popup's payments (Payments list cells): the newest POPUP_LIMIT first (an imported shift holds thousands)
     const POPUP_LIMIT = 200;
 
@@ -289,24 +356,33 @@ class ShiftClosingService
             ->latest('created_at')->latest('id')->limit(self::POPUP_LIMIT)->get();
     }
 
-    // the closings with payments dated $date (the Daily Summary)
+    // the shift popup's expenses: the newest POPUP_LIMIT first
+    public function popupExpenses(ShiftClosing $closing): Collection
+    {
+        return $closing->expenses()->with('expenseCategory', 'paymentMethod')->latest('created_at')->latest('id')->limit(self::POPUP_LIMIT)->get();
+    }
+
+    // the closings with payments / expenses dated $date (the Daily Summary)
     public function closingsForDate($accountId, $date): Collection
     {
         $date = Carbon::parse($date)->toDateString();
-        return $this->listQuery($accountId)->whereHas('payments', fn ($query) => $query->whereDate('paid_at', $date))
+        return $this->listQuery($accountId)
+            ->where(fn ($query) => $query->whereHas('payments', fn ($query) => $query->where('paid_at', $date))
+                ->orWhereHas('expenses', fn ($query) => $query->where('spent_at', $date)))
             ->orderBy('closed_at')->get();
     }
 
     // the totals of a closing from its payments, saved
-    private function saveTotals(ShiftClosing $closing, $accountId, Collection $payments): ShiftClosing
+    private function saveTotals(ShiftClosing $closing, $accountId, Collection $payments, ?Collection $expenses = null): ShiftClosing
     {
-        $summary = $this->summary($accountId, $payments);
+        $summary = $this->summary($accountId, $payments, $expenses);
         $closing->fill([
             'first_payment_at' => $summary['first_payment_at'],
             'last_payment_at' => $summary['last_payment_at'],
             'count' => $summary['count'],
             'cash_total' => $summary['cash_total'],
             'withholding_total' => $summary['withholding']['total'],
+            'expenses_total' => $summary['expenses_total'],
             'totals' => $summary,
         ])->save();
 
@@ -314,30 +390,33 @@ class ShiftClosingService
     }
 
     /**
-     * A payment of a CLOSED shift was changed by the account (PaymentService update / delete), or refunded by anyone (refund):
-     * payment_edit / payment_delete → the totals recalculated from its payments now; payment_refund → totals unchanged (the refund
-     * row is in the refunder's open shift). Always: the log entry (before / after, who, reason) + "Edited after closing".
+     * A payment / expense of a CLOSED shift was changed by the account (PaymentService / ExpenseService update / delete), or a
+     * payment refunded by anyone: payment_edit / payment_delete / expense_edit / expense_delete → the totals recalculated from its
+     * payments + expenses now; payment_refund → totals unchanged (the refund row is in the refunder's open shift). Always: the log entry (before / after, who, reason) + "Edited after closing".
      * Call inside the change's transaction.
      */
-    public function paymentChanged(ShiftClosing $closing, string $action, Payment $payment, Model $by, string $reason, array $changes): void
+    public function paymentChanged(ShiftClosing $closing, string $action, Payment|Expense $record, Model $by, string $reason, array $changes): void
     {
-        if (!in_array($action, ['payment_edit', 'payment_delete', 'payment_refund'], true)) {
+        if (!in_array($action, ['payment_edit', 'payment_delete', 'payment_refund', 'expense_edit', 'expense_delete'], true)) {
             abort(500, 'Unknown shift change.');
         }
         if ($action !== 'payment_refund') {
-            $this->saveTotals($closing, $closing->account_id, $closing->payments()->lockForUpdate()->get());
+            $this->saveTotals($closing, $closing->account_id, $closing->payments()->lockForUpdate()->get(), $closing->expenses()->lockForUpdate()->get());
         }
         $closing->forceFill(['edited_at' => now(), 'edit_count' => $closing->edit_count + 1])->save();
-        $this->log($closing, $action, $by, $reason, $payment->getKey(), $changes);
+        $record instanceof Expense
+            ? $this->log($closing, $action, $by, $reason, 0, $changes, $record->getKey())
+            : $this->log($closing, $action, $by, $reason, $record->getKey(), $changes);
     }
 
-    private function log(ShiftClosing $closing, string $action, Model $by, ?string $reason = null, int $paymentId = 0, ?array $changes = null): void
+    private function log(ShiftClosing $closing, string $action, Model $by, ?string $reason = null, int $paymentId = 0, ?array $changes = null, int $expenseId = 0): void
     {
         ShiftEvent::create([
             'account_id' => $closing->account_id,
             'user_id' => $closing->user_id,
             'shift_closing_id' => $closing->id,
             'payment_id' => $paymentId,
+            'expense_id' => $expenseId,
             'by_user_id' => $by->getKey(),
             'action' => $action,
             'reason' => $reason,

@@ -386,6 +386,31 @@ Steps 1–6 go into `to_run`.
   payments / certificates are never changed or deleted and stay visible (rows, badges, totals). ON again = everything back.
 - **VAT:** stored + switch only for now; the Phase 2 rule is in §3 Rules.
 
+### Expenses (2026-10-14, built; user answers 2026-10-14)
+- **Rule:** an expense always joins the OPEN shift of whoever records it (cash leaves their drawer), like a refund. Fields: category
+  (`expense_categories`, Settings › Expense Categories, same CRUD as income categories), item, amount (> 0 in the app), payment method,
+  date (`spent_at`), notes, optional receipt (image / PDF, private disk `expenses/{account_id}/`, `{area}.expenses.attachment`).
+  `expense_no` per account like `payment_no` (app from 100001, imported = old id).
+- **Who:** everyone adds; employees see their own only, the payments list rule (no tabs, ONE day, today by default — forced on the
+  server); the account sees all (tabs Today | This Month | All + date range) and edits / deletes. An expense of a CLOSED shift: reason
+  required → `ShiftClosingService::paymentChanged()` (`expense_edit` / `expense_delete`, `shift_events.expense_id`, before / after,
+  totals recalculated, "Edited after closing"). Files: `Models/{Expense, ExpenseCategory}`, `Services/{ExpenseService,
+  ExpenseCategoryService}`, `Concerns/ExpenseActions` + `{Account, Employee}/Expense*ModuleController`, `Requests/ExpenseRequest`,
+  `views/Expense/*`, `views/ExpenseCategory/*`; routes `{area}.expenses.*`, `account.expenses.{edit, update, delete, destroy}`,
+  `account.expense-categories.*`; sidebar Expenses (Daily, both areas), Settings › Expense Categories.
+- **Totals:** per method payments − refunds − expenses = **net to hand over** (`ShiftClosingService::summary()`: methods[…]['expenses'],
+  `expenses` {count, total}, `expenses_total`, `net_total`, `no_method_expenses`); `shift_closings.cash_total` stays "collected"
+  (payments − refunds), `expenses_total` new, net = `ShiftClosing::net_total`. Close popup / My Shift / shift popup / Daily Summary:
+  Total payments, Refunds (−), Total collected, Expenses (−), Net to hand over, withholding apart; My Shift lists its expenses
+  (`Expense/partials/list-table`, `?shift=open`); closing also sends the newest expense id shown (`up_to_expense_id`).
+- **Imported (`dwidar_pivot_api`):** `types` → `expense_categories` (ids kept; 16 "Building Expenses", 40 "Chamber of Commerce"
+  translated — the only Arabic `name_en`); `expenses` → `expenses` (ids kept, type_id → category, method 5 "إشعار خصم" → 0 = "No method
+  (withholding notice)": in the expense totals, in no method's cash; the 2 negative rows = returns, as they are; creator =
+  creatable_type / creatable_id: Admin / unknown → login 1, User X → login X; `created_by` ignored; dates as they are). Each login's
+  imported expenses join its "Imported" shift, closed_at = the later of its last payment / expense; totals by
+  `php artisan shifts:recalculate --imported`. `to_run`: 3.0e, 3.1 ALTERs, 3.2, 3.13b / 3.13c, 3.14, 3.15, STEP 3.15c (one time),
+  STEP 5, checks 6.11 + 6.13. Old data: 2,060 expenses, 4,582,668.30, 31 types.
+
 ### Employee isolation
 - Employees never see colleagues' collections AS A WHOLE: shifts, payments list (own payments only), totals, the Daily Summary
   (account only), reports (phase 3).

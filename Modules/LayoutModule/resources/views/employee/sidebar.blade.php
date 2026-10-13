@@ -24,6 +24,12 @@
             'active' => request()->routeIs('employee.payments.*'),
         ],
         [
+            'title' => 'Expenses',
+            'icon' => 'banknote',
+            'url' => route('employee.expenses.index'),
+            'active' => request()->routeIs('employee.expenses.*'),
+        ],
+        [
             'title' => 'Packages',
             'icon' => 'package',
             'url' => route('employee.packages.index'),

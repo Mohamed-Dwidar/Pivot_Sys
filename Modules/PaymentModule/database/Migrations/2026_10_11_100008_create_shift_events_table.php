@@ -19,10 +19,12 @@ return new class extends Migration {
             $table->bigInteger('shift_closing_id')->default(0)->index();
             // the payment changed after closing (payment_edit / payment_delete / payment_refund), else 0
             $table->bigInteger('payment_id')->default(0)->index();
+            // the expense changed after closing (expense_edit / expense_delete), else 0
+            $table->bigInteger('expense_id')->default(0)->index();
             // users.id of who did it (the employee or the account)
             $table->bigInteger('by_user_id');
             $table->enum('action', ['close', 'close_on_behalf', 'logout_closed', 'logout_still_working', 'still_working',
-                'payment_edit', 'payment_delete', 'payment_refund']);
+                'payment_edit', 'payment_delete', 'payment_refund', 'expense_edit', 'expense_delete']);
             // required on still_working and the payment_* actions
             $table->string('reason')->nullable();
             // the closing's totals at that moment (close, payment_edit / payment_delete: after the change)

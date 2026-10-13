@@ -4,6 +4,8 @@ use Illuminate\Support\Facades\Route;
 use Modules\AccountModule\app\Models\Account;
 use Modules\EmployeeModule\app\Models\Employee;
 use Modules\PaymentModule\app\Http\Controllers\Account\DailySummaryAccountModuleController;
+use Modules\PaymentModule\app\Http\Controllers\Account\ExpenseAccountModuleController;
+use Modules\PaymentModule\app\Http\Controllers\Account\ExpenseCategoryAccountModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Account\ExtraAccountModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Account\IncomeCategoryAccountModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Account\MyShiftAccountModuleController;
@@ -11,6 +13,7 @@ use Modules\PaymentModule\app\Http\Controllers\Account\PaymentAccountModuleContr
 use Modules\PaymentModule\app\Http\Controllers\Account\PaymentMethodAccountModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Account\ShiftClosingAccountModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Account\WithholdingCertificateAccountModuleController;
+use Modules\PaymentModule\app\Http\Controllers\Employee\ExpenseEmployeeModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Employee\PaymentEmployeeModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Employee\ShiftClosingEmployeeModuleController;
 use Modules\PaymentModule\app\Http\Middleware\WithholdingEnabled;
@@ -66,6 +69,33 @@ Route::prefix('account/payment-methods')->name('account.payment-methods.')->midd
 
 Route::prefix('account/income-categories')->name('account.income-categories.')->middleware(['auth', 'user.active:' . Account::class])
     ->group(fn () => $settingRoutes(IncomeCategoryAccountModuleController::class));
+
+Route::prefix('account/expense-categories')->name('account.expense-categories.')->middleware(['auth', 'user.active:' . Account::class])
+    ->group(fn () => $settingRoutes(ExpenseCategoryAccountModuleController::class));
+
+/**
+ *  Expenses (docs/payments-plan.md "Expenses"): recorded by the account and its employees into their own open shift
+ *  (Concerns\ExpenseActions); edit / delete = the account only
+ */
+$expenseRoutes = function ($controller) {
+    Route::get('/', [$controller, 'index'])->name('index');
+    Route::get('data', [$controller, 'data'])->name('data');
+    Route::get('create', [$controller, 'create'])->name('create');
+    Route::post('/', [$controller, 'store'])->name('store');
+    Route::get('{id}', [$controller, 'show'])->name('show');
+    Route::get('{id}/attachment', [$controller, 'attachment'])->name('attachment');
+};
+
+Route::prefix('account/expenses')->name('account.expenses.')->middleware(['auth', 'user.active:' . Account::class])->group(function () use ($expenseRoutes) {
+    $expenseRoutes(ExpenseAccountModuleController::class);
+    Route::get('{id}/edit', [ExpenseAccountModuleController::class, 'edit'])->name('edit');
+    Route::put('{id}', [ExpenseAccountModuleController::class, 'update'])->name('update');
+    Route::get('{id}/delete', [ExpenseAccountModuleController::class, 'deleteForm'])->name('delete');
+    Route::delete('{id}', [ExpenseAccountModuleController::class, 'destroy'])->name('destroy');
+});
+
+Route::prefix('employee/expenses')->name('employee.expenses.')->middleware(['auth', 'user.active:' . Employee::class])
+    ->group(fn () => $expenseRoutes(ExpenseEmployeeModuleController::class));
 
 /**
  *  Withholding tax certificates: only the account manages them
