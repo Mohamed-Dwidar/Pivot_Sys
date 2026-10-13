@@ -1286,3 +1286,13 @@ input:disabled:not([type="checkbox"]):not([type="radio"]) {
     justify-content: space-between;
     gap: 0.75rem;
 }
+
+/* a not counted reservation (cancelled, pending ...) in the list: muted, still readable (DT_RowClass) */
+.data-table tbody tr.row-muted > td {
+    opacity: 0.55;
+}
+
+/* a filters form with tabs (reservations list): the tabs on their own row, the filters in one row under them */
+.filter-bar__tabs {
+    flex-basis: 100%;
+}

@@ -23,6 +23,9 @@ $reservationRoutes = function ($controller) {
     Route::get('{id}/edit', [$controller, 'edit'])->name('edit');
     Route::put('{id}', [$controller, 'update'])->name('update');
     Route::patch('{id}/status', [$controller, 'changeStatus'])->name('status');
+    // a not counted reservation (cancelled ...) back to the default counted status, after the availability check
+    Route::get('{id}/restore', [$controller, 'restoreForm'])->name('restore');
+    Route::patch('{id}/restore', [$controller, 'restore'])->name('restore.store');
     Route::delete('{id}', [$controller, 'destroy'])->name('destroy');
 };
 

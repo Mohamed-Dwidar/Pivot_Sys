@@ -21,6 +21,8 @@ return new class extends Migration
             $table->boolean('can_repeat')->default(0);
             $table->boolean('auto_renew')->default(0);
             $table->boolean('full_day')->default(0);
+            // a contract (monthly subscription): collapsed on the reservations daily tabs, its own Subscriptions tab
+            $table->boolean('is_contract')->default(0);
             $table->timestamps();
         });
     }

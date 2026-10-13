@@ -6,10 +6,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Modules\PackageModule\app\Models\Package;
 use Modules\PackageModule\app\Services\PackageService;
 use Modules\PaymentModule\app\Services\PaymentService;
 use Modules\ReservationModule\app\Models\Reservation;
+use Modules\ReservationModule\app\Models\ReservationStatus;
 use Modules\ReservationModule\app\Repositories\ReservationRepository;
 use Modules\PlanModule\app\Models\Plan;
 use Modules\SpaceModule\app\Models\SubscriptionType;
@@ -98,10 +100,15 @@ class ReservationService
         });
     }
 
-    // the status menu of the reservation view; the package is calculated again (a not counted status is not in its price)
+    // the status menu of the reservation view; the package is calculated again (a not counted status is not in its price).
+    // Not counted → counted (cancelled → confirmed ...): the slot must be free again, the same check as a new booking
     public function changeStatus($accountId, $id, $statusId)
     {
         $reservation = $this->findOne($accountId, $id);
+        $status = ReservationStatus::where('account_id', $accountId)->find($statusId);
+        if ($status?->is_counted && !$reservation->isCounted() && ($error = $this->restoreError($reservation))) {
+            throw ValidationException::withMessages(['html_status' => $error]);
+        }
 
         return DB::transaction(function () use ($reservation, $statusId) {
             $reservation->update(['reservation_status_id' => $statusId]);
@@ -110,6 +117,61 @@ class ReservationService
             $this->paymentService->refresh($reservation->load('status'));
             return $reservation;
         });
+    }
+
+    /**
+     * Restore a not counted reservation (cancelled, pending ...) to the default counted status (Confirmed):
+     * refused when its slot is taken now (the reservations holding it, as links); then like changeStatus()
+     * (package recalculated, paid / remaining refreshed: the amount due comes back).
+     */
+    public function restore($accountId, $id)
+    {
+        $reservation = $this->findOne($accountId, $id);
+        if ($reservation->isCounted()) {
+            throw ValidationException::withMessages(['html_status' => 'This reservation is already active.']);
+        }
+        $status = $this->restoreStatus($accountId)
+            ?? throw ValidationException::withMessages(['html_status' => 'There is no active counted status to restore to.']);
+
+        return $this->changeStatus($accountId, $id, $status->id);
+    }
+
+    // the status a reservation is restored to: the default one when it is counted, else the first active counted one
+    public function restoreStatus($accountId): ?ReservationStatus
+    {
+        $statuses = ReservationStatus::where('account_id', $accountId)->where('is_active', true)->where('is_counted', true);
+        return (clone $statuses)->where('is_default', true)->first() ?? $statuses->ordered()->first();
+    }
+
+    // the slot of a not counted reservation is free for it again (null) / taken: the reason (HTML, links to the holders)
+    public function restoreError(Reservation $reservation): ?string
+    {
+        $unit = Unit::find($reservation->unit_id);
+        // a continuous subscription has no end (as when it is saved, period())
+        $end = $reservation->is_continue && $reservation->subscriptionType?->auto_renew ? null : $reservation->end_at;
+
+        return $unit ? $this->periodsError($unit, [[$reservation->start_at, $end]], $reservation->id) : null;
+    }
+
+    /**
+     * The next period of a subscription (the "Renew" form, not saved): same member, type, space, unit, plan, amounts,
+     * starting when it ends (date only plans: the next day) for the same length; no package / notes.
+     */
+    public function renewalOf(Reservation $subscription): Reservation
+    {
+        $end = $subscription->realEnd() ?? $subscription->start_at;
+        $start = $subscription->plan?->is_time_based ? $end->copy() : $end->copy()->addSecond()->startOfDay();
+        $length = $subscription->start_at->diffInSeconds($end);
+
+        $renewal = $subscription->replicate(['paid_amount', 'remaining', 'repeat_id', 'notes']);
+        $renewal->forceFill([
+            'start_at' => $start,
+            'end_at' => $length > 0 ? $start->copy()->addSeconds($length) : $start->copy(),
+            'package_id' => 0,
+            'notes' => null,
+        ]);
+
+        return $renewal;
     }
 
     // soft delete; the reason when it can not be deleted (it has payments: their money must not be lost), null when deleted
@@ -174,7 +236,6 @@ class ReservationService
         if (!$unit) {
             return null;
         }
-        $limit = max(1, (int) $unit->concurrent_usage);
         [$startAt, $endAt] = $this->period($data);
 
         // the periods to check: the reservation + its repeats (create only)
@@ -187,6 +248,13 @@ class ReservationService
             }
         }
 
+        return $this->periodsError($unit, $periods, $ignoreId);
+    }
+
+    // the first period (the reservation, then its repeats) where the unit is full: the reason (HTML), null when all are free
+    private function periodsError(Unit $unit, array $periods, $ignoreId = null): ?string
+    {
+        $limit = max(1, (int) $unit->concurrent_usage);
         foreach ($periods as $index => [$start, $end]) {
             $overlapping = Reservation::overlapping($unit->id, $start, $end)
                 ->when($ignoreId, fn ($query) => $query->whereKeyNot($ignoreId))

@@ -16,15 +16,19 @@ class SubscriptionType extends Model
         'can_repeat' => 'Can Repeat',
         'auto_renew' => 'Auto Renew',
         'full_day' => 'Full Day',
+        // a contract (monthly subscription, one reservation per period): the reservations list collapses it on the daily
+        // tabs and lists it on its Subscriptions tab (docs/reservations-list-plan.md)
+        'is_contract' => 'Contract',
     ];
 
-    protected $fillable = ['account_id', 'name', 'show_home', 'can_repeat', 'auto_renew', 'full_day'];
+    protected $fillable = ['account_id', 'name', 'show_home', 'can_repeat', 'auto_renew', 'full_day', 'is_contract'];
 
     protected $casts = [
         'show_home' => 'boolean',
         'can_repeat' => 'boolean',
         'auto_renew' => 'boolean',
         'full_day' => 'boolean',
+        'is_contract' => 'boolean',
     ];
 
     public function account(): BelongsTo

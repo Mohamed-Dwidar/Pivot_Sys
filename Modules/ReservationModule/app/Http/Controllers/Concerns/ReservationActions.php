@@ -10,6 +10,7 @@ use Modules\MemberModule\app\Services\MemberService;
 use Modules\PackageModule\app\Services\PackageService;
 use Modules\PlanModule\app\Services\PlanService;
 use Modules\ReservationModule\app\Http\Requests\ReservationRequest;
+use Modules\ReservationModule\app\Models\Reservation;
 use Modules\ReservationModule\app\Services\ReservationService;
 use Modules\ReservationModule\app\Services\ReservationStatusService;
 use Modules\SpaceModule\app\Services\SpaceService;
@@ -25,6 +26,7 @@ use Yajra\DataTables\Facades\DataTables;
  */
 trait ReservationActions
 {
+
     private ReservationService $reservationService;
     private ReservationStatusService $statusService;
     private SubscriptionTypeService $subscriptionTypeService;
@@ -94,10 +96,29 @@ trait ReservationActions
         return view('reservationmodule::Reservation.index', [
             'statuses' => $this->statusService->filterOptions($accountId),
             'spaces' => $this->spaceService->options($accountId),
+            // the type filter (Day Use / Meeting / Subscriptions ...): a contract type shows its rows on every tab
+            'types' => $this->subscriptionTypeService->options($accountId),
+            'counts' => $this->tabCounts([]),
         ]);
     }
 
-    // DataTables server side: search (member) + status / space / dates filters
+    // the list tab: today (default, also '') | upcoming | all (docs/reservations-list-plan.md)
+    private function tab(array $filters): string
+    {
+        $tab = (string) ($filters['tab'] ?? '');
+        return isset(Reservation::TABS[$tab]) ? $tab : 'today';
+    }
+
+    // the counted reservations of the Today tab with the other filters (not the tab / dates)
+    private function tabCounts(array $filters): array
+    {
+        $filters = ['search' => trim((string) ($filters['search'] ?? ''))]
+            + Arr::only($filters, ['reservation_status_id', 'space_id', 'subscription_type_id', 'payment_status']);
+
+        return ['reservations-today' => $this->reservationService->listQuery($this->accountId(), $filters)->counted()->tab('today', $filters)->count()];
+    }
+
+    // DataTables server side: tab + search (member) + status / space / type / payment / dates filters
     public function data(Request $request)
     {
         return $this->table(['search' => $request->input('search.value')] + $request->all())->toJson();
@@ -106,29 +127,45 @@ trait ReservationActions
     // the list columns, for data() and for one row after a change (row())
     private function table(array $filters, $id = null)
     {
-        $query = $this->reservationService->listQuery($this->accountId());
+        $tab = $this->tab($filters);
+        // the not counted ones (cancelled, pending ...) always after the counted ones
+        // + who added it (the "By" column)
+        $query = $this->reservationService->listQuery($this->accountId())->with('creatable.userable')->countedFirst();
         if ($id) {
             $query->whereKey($id);
+        } elseif (!request()->filled('order')) {
+            // the tab's order until a column is clicked (the list has data-order='[]')
+            $query->tabOrder($tab);
         }
 
-        return DataTables::eloquent($query)
+        $table = DataTables::eloquent($query)
             // inside filter() so "of N total" counts all the reservations
             ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))]
-                + Arr::only($filters, ['reservation_status_id', 'space_id', 'date_from', 'date_to', 'payment_status'])))
+                + Arr::only($filters, ['reservation_status_id', 'space_id', 'subscription_type_id', 'date_from', 'date_to', 'payment_status']))
+                ->tab($tab, Arr::only($filters, ['subscription_type_id'])))
             ->setRowId(fn ($reservation) => 'row-' . $reservation->id)
+            // not counted (cancelled, pending ...): muted (custom.css)
+            ->setRowClass(fn ($reservation) => $reservation->isCounted() ? '' : 'row-muted')
+            // the columns (docs/reservations-list-plan.md, 2026-10-13): Member | Space › Unit | Plan | Period | Status | Amount | Paid | Remaining | By
             ->addColumn('member_html', fn ($reservation) => view('reservationmodule::Reservation.partials.row-member', compact('reservation'))->render())
-            // (the unit color) space › unit
-            ->addColumn('place', fn ($reservation) => view('reservationmodule::Reservation.partials.row-place', compact('reservation'))->render())
+            // (the unit color) space / › unit (two lines)
+            ->addColumn('place', fn ($reservation) => view('reservationmodule::Reservation.partials.row-place', ['reservation' => $reservation, 'stacked' => true])->render())
             ->addColumn('plan', fn ($reservation) => e($reservation->plan?->name ?? '-'))
-            ->addColumn('period', fn ($reservation) => e($reservation->period))
-            ->addColumn('status', fn ($reservation) => '<span class="' . ($reservation->status?->badge_class ?? 'badge badge-status-slate') . '">' . e($reservation->status?->name ?? '-') . '</span>')
-            ->editColumn('net_amount', fn ($reservation) => number_format($reservation->net_amount, 2))
+            // by the subscription type: full day = one date, auto renew / contract = From + Ends, else date | time → (date |) time
+            ->addColumn('period', fn ($reservation) => view('reservationmodule::Reservation.partials.row-period', compact('reservation'))->render())
+            // the reservation status + the payment status (two badges)
+            ->addColumn('status', fn ($reservation) => view('reservationmodule::Reservation.partials.row-status', compact('reservation'))->render())
+            ->editColumn('net_amount', fn ($reservation) => '<span class="font-bold text-success">' . number_format($reservation->net_amount, 2) . '</span>')
             ->editColumn('paid_amount', fn ($reservation) => number_format($reservation->paid_amount, 2))
-            // the remaining + the payment status badge (in a package: paid through the package)
-            ->addColumn('remaining_html', fn ($reservation) => view('paymentmodule::Payment.partials.row-remaining', ['payable' => $reservation])->render())
+            // red when owed, a credit (negative) in blue
+            ->addColumn('remaining_html', fn ($reservation) => view('reservationmodule::Reservation.partials.row-remaining', compact('reservation'))->render())
+            ->addColumn('by', fn ($reservation) => e($reservation->creatable?->userable?->displayName() ?? '-'))
             ->addColumn('actions', fn ($reservation) => view('reservationmodule::Reservation.partials.row-actions', compact('reservation'))->render())
-            ->rawColumns(['member_html', 'place', 'status', 'remaining_html', 'actions'])
-            ->only(['DT_RowId', 'member_html', 'place', 'plan', 'period', 'status', 'net_amount', 'paid_amount', 'remaining_html', 'actions']);
+            ->rawColumns(['member_html', 'place', 'period', 'status', 'net_amount', 'remaining_html', 'actions'])
+            ->only(['DT_RowId', 'DT_RowClass', 'member_html', 'place', 'plan', 'period', 'status', 'net_amount', 'paid_amount', 'remaining_html', 'by', 'actions']);
+
+        // the Today tab count (datatables.js → [data-counter]); not for one row
+        return $id ? $table : $table->with('counts', $this->tabCounts($filters));
     }
 
     // the updated row with the list filters (list[...]), null when it does not match them any more
@@ -159,9 +196,14 @@ trait ReservationActions
         return response()->json(collect($this->planService->optionsForUnit($unit))->map(fn ($plan) => ['name' => Str::humanize($plan['name'])] + $plan)->values());
     }
 
-    public function create()
+    // ?renew=ID (the Subscriptions page): the form pre-filled from that subscription, starting when it ends
+    public function create(Request $request)
     {
-        return view('reservationmodule::Reservation.create', $this->formOptions());
+        $renewal = $request->filled('renew')
+            ? $this->reservationService->renewalOf($this->reservationService->findOne($this->accountId(), (int) $request->input('renew')))
+            : null;
+
+        return view('reservationmodule::Reservation.create', ['reservation' => $renewal] + $this->formOptions($renewal));
     }
 
     public function store(ReservationRequest $request)
@@ -198,6 +240,29 @@ trait ReservationActions
             'message' => 'The status has been changed to "' . $reservation->status?->name . '".',
             'status' => ['id' => $reservation->reservation_status_id, 'name' => $reservation->status?->name, 'class' => $reservation->status?->badge_class],
             'row' => $this->row($request, $id),
+        ]);
+    }
+
+    // the Restore popup (a not counted reservation back to the default counted status): the slot is checked first
+    public function restoreForm($id)
+    {
+        $reservation = $this->reservationService->findOne($this->accountId(), $id);
+
+        return view('reservationmodule::Reservation.restore', [
+            'reservation' => $reservation,
+            'status' => $this->reservationService->restoreStatus($this->accountId()),
+            'error' => $reservation->isCounted() ? null : $this->reservationService->restoreError($reservation),
+        ]);
+    }
+
+    public function restore(Request $request, $id)
+    {
+        $reservation = $this->reservationService->restore($this->accountId(), $id);
+
+        return response()->json([
+            'message' => 'The reservation has been restored to "' . $reservation->status?->name . '", its amount is due again.',
+            'row' => $this->row($request, $id),
+            'modal' => $request->boolean('back_to_view') ? route($this->area() . '.reservations.show', $id) : null,
         ]);
     }
 

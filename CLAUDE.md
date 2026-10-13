@@ -66,8 +66,9 @@ Then suggest a commit message.
   - area layouts / sidebars use named routes from Admin/Account/Employee/User modules — renaming those routes breaks every page of that area
   - Login / register pages (AdminModule `login`, UserModule `user/login`, AccountModule `Guest/register`) → `layoutmodule::login`
   - `custom.js` must load before `themes/dagger.js` (sidebar default / overrides); DataTables' jQuery must stay `noConflict` (template `$` = `dom.js`)
+  - `datatables.js` reads json `counts` {name: n} sent with the rows → `[data-counter]` (reservations Today tab)
   - `header` optional `$logoutPrompt` (popup url instead of logging out at once) and `employee/main` (`$shiftOpen`, `$shiftReminderUrl` shared by PaymentModule `ShiftReminder`) — employee shift popups
-- **SpaceModule** ↔ UnitModule, PlanModule, ReservationModule: spaces ↔ subscription types (`can_repeat`, `auto_renew`) ↔ plans (`plan_space`); unit form picks from its space's types / plans
+- **SpaceModule** ↔ UnitModule, PlanModule, ReservationModule: spaces ↔ subscription types (`can_repeat`, `auto_renew`, `is_contract` = contract periods hidden from the reservations Today / Upcoming tabs unless the type filter selects them) ↔ plans (`plan_space`); unit form picks from its space's types / plans
 - **UnitModule** ↔ ReservationModule: unit `subscription_type_id`, `capacity`, `concurrent_usage`, `color` used by the reservation form + availability check
 - **PlanModule** ↔ ReservationModule: `is_time_based`, `lease_period`, `amount` → reservation times + amount (`Plan::amountBetween`, same formula in custom.js)
 - **ReservationModule** ↔ PackageModule: saving / deleting / status change of a reservation calls `PackageService::recalculate()` (price, net, dates); `ReservationStatus::is_counted` excludes cancelled-like reservations from package totals, hours and availability

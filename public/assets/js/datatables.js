@@ -169,6 +169,13 @@
             },
         });
 
+        // counts sent with the rows (json "counts": {name: n}) → [data-counter="name"] (e.g. the reservations Today tab)
+        table.on('xhr', function (e, settings, json) {
+            Object.keys((json && json.counts) || {}).forEach(function (name) {
+                document.querySelectorAll('[data-counter="' + name + '"]').forEach(function (el) { el.textContent = json.counts[name]; });
+            });
+        });
+
         table.on('error', function (e, settings, techNote, message) {
             console.error('DataTables:', message);
             var columnsCount = tableEl.querySelectorAll('thead th').length;

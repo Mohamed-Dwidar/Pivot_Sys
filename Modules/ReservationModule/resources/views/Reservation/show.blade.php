@@ -20,6 +20,9 @@
 @section('actions')
     {{-- the status: a drop menu like its badge, changed by ajax --}}
     @include('reservationmodule::Reservation.partials.status-menu')
+    @unless ($reservation->isCounted())
+        <a href="{{ route($area . '.reservations.restore', [$reservation->id, 'back_to_view' => 1]) }}" data-modal class="btn btn-secondary"><i data-lucide="rotate-ccw"></i> Restore</a>
+    @endunless
     <a href="{{ route($area . '.reservations.edit', $reservation->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
     @include('reservationmodule::Reservation.partials.delete-form')
 @endsection

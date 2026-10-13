@@ -236,6 +236,188 @@ class Reservation extends Model implements Payable
         return $query;
     }
 
+    // the list tabs (docs/reservations-list-plan.md, simplified 2026-10-13): today (default, running today) | upcoming | all
+    const TABS = [
+        'today' => 'Today',
+        'upcoming' => 'Upcoming',
+        'all' => 'All',
+    ];
+
+    /**
+     * Running at some moment of [from, to): starts before "to" and ends after "from".
+     * An end before the start (old same-day rows) = it ends at its start: it counts on its start day.
+     * Plain ranges (no whereDate), so the (account_id, start_at) / (account_id, end_at) indexes can be used.
+     */
+    public function scopeRunningBetween($query, Carbon $from, Carbon $to)
+    {
+        return $query->where('start_at', '<', $to)
+            ->where(fn ($query) => $query->where('end_at', '>', $from)->orWhere('start_at', '>=', $from)->orWhereNull('end_at'));
+    }
+
+    /**
+     * The rows of a list tab (an unknown tab = all). Today / Upcoming leave the contract periods out (one row per month)
+     * unless the type filter ($filters['subscription_type_id']) is chosen: then that type's rows show on any tab.
+     */
+    public function scopeTab($query, ?string $tab, array $filters = [])
+    {
+        if (in_array($tab, ['today', 'upcoming'], true) && empty($filters['subscription_type_id'])) {
+            $query->notContracts();
+        }
+
+        return match ($tab) {
+            'today' => $query->runningBetween(today(), today()->addDay()),
+            'upcoming' => $query->where('start_at', '>=', today()->addDay()),
+            default => $query,
+        };
+    }
+
+    // the default order of a tab (until a column is clicked): today = starting today first (by start time), then the
+    // ones already running (long ones); upcoming = nearest first; all = newest first
+    public function scopeTabOrder($query, ?string $tab)
+    {
+        if ($tab === 'today') {
+            $query->orderByRaw('start_at >= ? DESC', [today()]);
+        }
+
+        return in_array($tab, ['today', 'upcoming'], true)
+            ? $query->orderBy('start_at')->orderBy('id')
+            : $query->orderByDesc('start_at')->orderByDesc('id');
+    }
+
+    // the counted reservations first, the not counted ones (cancelled, pending ...) after: always the first order key
+    public function scopeCountedFirst($query)
+    {
+        $ids = ReservationStatus::notCountedIds();
+        return $ids ? $query->orderByRaw('reservation_status_id IN (' . implode(',', array_map('intval', $ids)) . ')') : $query;
+    }
+
+    public function scopeCounted($query)
+    {
+        return $query->whereNotIn('reservation_status_id', ReservationStatus::notCountedIds());
+    }
+
+    // counted (its status counts: not cancelled / pending ...); no status = counted
+    public function isCounted(): bool
+    {
+        return $this->status?->is_counted ?? true;
+    }
+
+    // the end used for the length / the badges: an end before the start (old same-day rows) = the start
+    public function realEnd(): ?Carbon
+    {
+        return $this->end_at && $this->start_at && $this->end_at->lt($this->start_at) ? $this->start_at : $this->end_at;
+    }
+
+    /**
+     * The badge of a reservation longer than a day (the list Period column): "running · day 12 of 90" while it runs,
+     * "ends 30-11" before, "ended 30-11" after (the year only when not this year). null for a short one.
+     */
+    public function getLongBadgeAttribute(): ?string
+    {
+        $end = $this->realEnd();
+        if (!$this->start_at || !$end || $this->start_at->diffInHours($end) <= 24) {
+            return null;
+        }
+
+        $date = $end->format($end->year === now()->year ? 'd-m' : 'd-m-Y');
+        if (now()->lt($this->start_at)) {
+            return 'ends ' . $date;
+        }
+        if (now()->gte($end)) {
+            return 'ended ' . $date;
+        }
+        $days = (int) ceil($this->start_at->diffInMinutes($end) / 1440);
+        $day = min($days, (int) floor($this->start_at->diffInMinutes(now()) / 1440) + 1);
+
+        return 'running · day ' . $day . ' of ' . $days;
+    }
+
+    // the Subscriptions tab's filter (docs/reservations-list-plan.md)
+    const SUBSCRIPTION_TABS = [
+        'active' => 'Active Now',
+        'ending7' => 'Ending within 7 Days',
+        'ending30' => 'Ending within 30 Days',
+        'ended' => 'Ended, Not Renewed',
+    ];
+
+    // "ended, not renewed": ended within this many days by default (a date range looks further back)
+    const ENDED_DAYS = 60;
+
+    // the ids of the contract subscription types (subscription_types.is_contract: monthly subscriptions, one row per period)
+    public static function contractTypeIds(): array
+    {
+        return once(fn () => SubscriptionType::where('is_contract', true)->pluck('id')->map(fn ($id) => (int) $id)->all());
+    }
+
+    // contract periods (one reservation per renewal period)
+    public function scopeContracts($query)
+    {
+        return $query->whereIn('subscription_type_id', self::contractTypeIds() ?: [0]);
+    }
+
+    public function scopeNotContracts($query)
+    {
+        return ($ids = self::contractTypeIds()) ? $query->whereNotIn('subscription_type_id', $ids) : $query;
+    }
+
+    public function isContract(): bool
+    {
+        return in_array((int) $this->subscription_type_id, self::contractTypeIds(), true);
+    }
+
+    /**
+     * SQL: the next period exists = the member has a later counted contract reservation in the same space (renewed),
+     * for "reservations" in the query. In the data the renewal is the same member + space in 1,092 / 1,113 cases (2026-10-12).
+     */
+    public static function renewedSql(): string
+    {
+        $types = self::contractTypeIds() ?: [0];
+        $notCounted = array_map('intval', ReservationStatus::notCountedIds()) ?: [0];
+
+        return 'EXISTS (SELECT 1 FROM reservations next WHERE next.account_id = reservations.account_id'
+            . ' AND next.member_id = reservations.member_id AND next.space_id = reservations.space_id'
+            . ' AND next.start_at > reservations.start_at AND next.deleted_at IS NULL'
+            . ' AND next.subscription_type_id IN (' . implode(',', $types) . ')'
+            . ' AND next.reservation_status_id NOT IN (' . implode(',', $notCounted) . '))';
+    }
+
+    // + the "renewed" column (0 / 1)
+    public function scopeWithRenewed($query)
+    {
+        return $query->select('reservations.*')->selectRaw(self::renewedSql() . ' AS renewed');
+    }
+
+    public function scopeNotRenewed($query)
+    {
+        return $query->whereRaw('NOT ' . self::renewedSql());
+    }
+
+    /**
+     * The Subscriptions tab's filter (counted contract periods with a member): active (running now, renewed or not) |
+     * ending7 / ending30 (end within 7 / 30 days, not renewed) | ended (ended, not renewed: the member's latest one in that
+     * space; ended within ENDED_DAYS days, or in the date range on the end date).
+     */
+    public function scopeSubscriptionTab($query, string $tab, array $filters = [])
+    {
+        $query->contracts()->counted()->where('member_id', '>', 0);
+        $now = now();
+
+        return match ($tab) {
+            'ending7', 'ending30' => $query->where('end_at', '>', $now)->where('end_at', '<=', $now->copy()->addDays($tab === 'ending7' ? 7 : 30))->notRenewed(),
+            'ended' => $query->where('end_at', '<=', $now)->notRenewed()
+                ->where('end_at', '>=', !empty($filters['date_from']) ? Carbon::parse($filters['date_from'])->startOfDay() : $now->copy()->subDays(self::ENDED_DAYS)->startOfDay())
+                ->when(!empty($filters['date_to']), fn ($query) => $query->where('end_at', '<', Carbon::parse($filters['date_to'])->addDay()->startOfDay())),
+            default => $query->where('start_at', '<=', $now)->where(fn ($query) => $query->where('end_at', '>', $now)->orWhereNull('end_at')),
+        };
+    }
+
+    // days left (running / future end) or days since it ended (negative)
+    public function getDaysLeftAttribute(): ?int
+    {
+        $end = $this->realEnd();
+        return $end ? (int) floor(now()->diffInMinutes($end, false) / 1440) : null;
+    }
+
     public function scopeFilter($query, array $filters = [])
     {
         if (!empty($filters['search'])) {
@@ -249,11 +431,12 @@ class Reservation extends Model implements Payable
             }
         }
 
+        // ranges (not whereDate) so the start_at index can be used
         if (!empty($filters['date_from'])) {
-            $query->whereDate('start_at', '>=', $filters['date_from']);
+            $query->where('start_at', '>=', Carbon::parse($filters['date_from'])->startOfDay());
         }
         if (!empty($filters['date_to'])) {
-            $query->whereDate('start_at', '<=', $filters['date_to']);
+            $query->where('start_at', '<', Carbon::parse($filters['date_to'])->addDay()->startOfDay());
         }
 
         // unpaid / partial / paid / credit / nothing_due / elsewhere (in a package)

@@ -344,6 +344,27 @@ document.addEventListener("DOMContentLoaded", function () {
     if (reminder) appModal.open(reminder.dataset.shiftReminder);
 });
 
+// Reservations list tabs (form[data-reservation-tabs]): a date range switches to the "All" tab, another tab clears the dates.
+// Capture phase: runs before datatables.js reloads the list (it reads the filters at once).
+function reservationTab(form, value) {
+    form.querySelector('input[name="tab"]').value = value;
+    form.querySelectorAll('[data-filter-tab][data-name="tab"]').forEach(function (tab) {
+        tab.classList.toggle("active", tab.dataset.value === value);
+    });
+}
+document.addEventListener("change", function (e) {
+    var form = e.target.closest && e.target.closest("form[data-reservation-tabs]");
+    if (form && ["date_from", "date_to"].indexOf(e.target.name) !== -1 && e.target.value) {
+        reservationTab(form, "all");
+    }
+}, true);
+document.addEventListener("click", function (e) {
+    var tab = e.target.closest && e.target.closest("form[data-reservation-tabs] [data-filter-tab]");
+    if (tab && tab.dataset.value !== "all") {
+        tab.form.querySelectorAll('[name="date_from"], [name="date_to"]').forEach(function (input) { input.value = ""; });
+    }
+}, true);
+
 // Row toggles (layoutmodule::partials.row-toggle): save as soon as the switch is clicked
 document.addEventListener("change", function (e) {
     var form = e.target.closest && e.target.closest("form[data-toggle-form]");
@@ -723,6 +744,11 @@ document.addEventListener("click", function (e) {
         .then(function (result) {
             var json = result.json;
             if (!result.ok || !json.status) {
+                // "html_" errors (built and escaped by the server, with links: e.g. the slot is taken) stay open until closed
+                if (json.errors && Object.keys(json.errors)[0].indexOf("html_") === 0 && window.Swal) {
+                    Swal.fire({ icon: "error", title: "Can't change the status", html: [].concat(Object.values(json.errors)[0])[0] });
+                    return;
+                }
                 var errors = json.errors ? Object.values(json.errors)[0] : null;
                 toast((errors && errors[0]) || json.message || "Could not change the status, please try again.", "error");
                 return;

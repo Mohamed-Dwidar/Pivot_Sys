@@ -1,5 +1,5 @@
 {{--
-    Reservation create / edit fields. $reservation is null on create. Every drop menu is searchable (Tom Select).
+    Reservation create / edit fields. $reservation is null on create (or not saved yet: a renewal pre-filled from a subscription). Every drop menu is searchable (Tom Select).
     The drop menus chain (custom.js [data-options-url]): subscription type -> spaces -> units -> plans, loaded by ajax.
     The package locks the member, the plan fills the amount; discount % / discount value / net amount calculate each other
     (custom.js "Reservation form"), the server calculates them again (and the subscription day from the start date).
@@ -99,7 +99,7 @@
 
 {{-- only when the subscription type can repeat (custom.js [data-type-allows]) --}}
 {{-- on create only: the copies are made when it is saved (not changed on edit) --}}
-@unless ($reservation)
+@unless ($reservation?->exists)
     <div data-type-allows="can-repeat">
         <div class="form-section mt-8">Repeat</div>
         <div class="grid grid-cols-1 gap-5 md:grid-cols-4">

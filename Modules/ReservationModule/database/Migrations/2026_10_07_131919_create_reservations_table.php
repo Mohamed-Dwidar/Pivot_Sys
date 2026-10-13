@@ -47,6 +47,10 @@ return new class extends Migration {
             $table->morphs('creatable');
             $table->timestamps();
             $table->softDeletes();
+
+            // the list tabs / subscriptions (range comparisons on the dates, docs/reservations-list-plan.md)
+            $table->index(['account_id', 'start_at']);
+            $table->index(['account_id', 'end_at']);
         });
     }
 

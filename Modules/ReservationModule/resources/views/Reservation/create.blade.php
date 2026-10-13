@@ -2,7 +2,7 @@
 @extends(request()->ajax() ? 'layoutmodule::modal' : Auth::user()->userable->layout())
 
 @section('title')
-    Add Reservation
+    {{ !empty($reservation) ? 'Renew Subscription' : 'Add Reservation' }}
 @endsection
 
 @section('modal-size', 'xl')
@@ -15,7 +15,8 @@
         data-confirm-variant="success">
         @csrf
 
-        @include('reservationmodule::Reservation.partials.form', ['reservation' => null])
+        {{-- $reservation: a renewal (not saved, pre-filled from a subscription) or null --}}
+        @include('reservationmodule::Reservation.partials.form', ['reservation' => $reservation ?? null])
 
         @include('layoutmodule::partials.form-actions', ['cancel' => route($area . '.reservations.index')])
     </form>

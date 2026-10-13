@@ -6,15 +6,20 @@
 ---
 
 ## Current status
+- **Working on (2026-10-12/13): reservations list** — spec `docs/reservations-list-plan.md` (CURRENT toolbar section, 2026-10-13). Uncommitted.
+  - Built + tested (HTTP kernel, real data): tabs **Today | Upcoming | All** (Today = overlap rule, count on Today only); one filter row: search | status | space | **type** (`subscription_type_id`) | payment | date from | date to | Clear; contract periods hidden from Today / Upcoming unless the type filter is chosen; muted cancelled-like rows last; Restore + status menu check; Renew on contract rows; same for employees. DB done by the user: `subscription_types.is_contract` (1 = Subscriptions) + reservations indexes.
+  - Question open: the 243 "continues" rows with an end date treated as ending at it?
+  - Kept on purpose, unused (user 2026-10-13: "may use it later"): the Subscriptions page files (`Concerns/SubscriptionActions`, `Account|Employee/Subscription*ModuleController`, `views/Subscription/index`, no routes / menu), `partials/contracts-summary`, the model subscription scopes (`SUBSCRIPTION_TABS`, `scopeSubscriptionTab`, `withRenewed`, `renewedSql()`).
+  - Columns (2026-10-13, built + tested on real rows, account + employee; NOT checked in a browser yet): Member (phone, package line = link to the package popup) | Space / Unit on two lines (color dot, no "›") | Plan | Period by type (full day = `31-12-2026 Mon`; auto renew / contract = From / Ends; else two lines: date + day name / times, or `date day | time →` / `date day | time`) | Status (reservation + payment badges; "In package" badge = link to the package popup; cancelled = status only, muted) | Amount (green bold) | Paid | Remaining (red > 0, blue "credit" < 0, "-" in a package) | By (creator); long badge dropped.
 - **Working on (2026-10-11): shift closing + account day closing (two levels) — ALL 8 STEPS BUILT**, spec `docs/payments-plan.md` §2b. Tested with rolled back transactions + HTTP kernel requests (service rules, locks, pages, popups, reminders, isolation); NOT clicked through in a browser yet. Uncommitted (the user commits).
   - User answers: employees see ALL payment rows of one reservation / package incl. "Collected by" (isolation = lists / totals / closings / reports only); refunds = owner's period; owner's own payments locked by the final day close (no owner shift); layout / sidebar / middleware approved; imported dates closed (3.16).
   - DB done by the user: `payments.shift_closing_id` + index, `accounts.shift_reminder_hours` / `shift_snooze_hours`, `migrate` (shift tables), day tables cleared, `to_run` 3.15 (14 imported employee closings) + check 6.11 = 0.
-- **Next up:** (1) user runs `to_run` **3.16** (closes the 862 imported days before today + logs "Imported from the old system", dry-run = totals equal `summary()`) + check **6.12**; (2) user tests in the browser (employee: My Shift, close popup, logout popup, reminder; account: day screen, close on behalf, reopen / close again, Shift Reminders settings); (3) then the 6.9 decision and Phase 2 (InvoiceModule).
-- **Before:** data transfer- **Before:** data transfer `dwidar_pivot_api` (old, live, READ ONLY) → `dwidar_res_portal` — **RAN 2026-10-11** (`to_run` steps 1–6; backup `storage/app/backups/dwidar_res_portal-20261011-1742.sql`, 6.1 MB). All checks match except 6.9 (17 packages differ from the old stored values — waiting for the user: accept the new values or not). Phase 1 code done (steps 5–10 + extras committed by the user in `ac1c79f`; `is_revenue` + docs uncommitted — the user commits, suggest messages only).
+- **Next up:** (0) user checks the reservations list in the browser; (1) user runs `to_run` **3.16** (closes the 862 imported days before today + logs "Imported from the old system", dry-run = totals equal `summary()`) + check **6.12**; (2) user tests in the browser (employee: My Shift, close popup, logout popup, reminder; account: day screen, close on behalf, reopen / close again, Shift Reminders settings); (3) then the 6.9 decision and Phase 2 (InvoiceModule).
+- **Before:** data transfer `dwidar_pivot_api` (old, live, READ ONLY) → `dwidar_res_portal` — **RAN 2026-10-11** (`to_run` steps 1–6; backup `storage/app/backups/dwidar_res_portal-20261011-1742.sql`, 6.1 MB). All checks match except 6.9 (17 packages differ from the old stored values — waiting for the user: accept the new values or not). Phase 1 code done (steps 5–10 + extras committed by the user in `ac1c79f`; `is_revenue` + docs uncommitted — the user commits, suggest messages only).
 - **Transfer result:** members 2,932, packages 220, reservations 19,823 (17,756 Confirmed / 2,067 Cancelled), extras 179 (extra 123 skipped: its package was deleted), payments 13,054 (7,707,148.91) + incomes 736 (76,550.94), methods 5, categories 9 (6 VAT inactive + not revenue: 12 incomes 32,564.44; 101 Buffet, 102 Break Hours, 103 Extra Hours), employees 15 + logins (active 3, 7, 10, 12, 13, 14, 15, 16; others leave_date), account login 1 untouched; next payment id / No. 100001 (imported max 14,220).
 - **`to_run` is re-runnable** for go-live day (after stopping the old system): 3.0 pre-check (74 checks on every source row, BLOCKING stops before any TRUNCATE, fallbacks listed); employees / logins upserted; ids from the source (income offset = max old payment id). User decisions: reservations of deleted members imported without a member (9), of deleted packages → no package + Cancelled (20), extras of deleted packages skipped (1), old 8330 (−43.40 withholding) → refund "withholding correction".
 - **Check 6.9 (packages vs old):** 215 / 220 same net, 203 / 220 same remaining (−5,127.10 in total). 12 = old stored remaining was stale (ours = old formula net + extras − paid); 5 (2, 3, 98, 139, 151) = old net not recalculated after reservations were cancelled (+ package 3: payment 35 moved in). Recommended: accept the new values.
-- **Waiting for the user:** (shift) run 3.16 + 6.12; OK to delete the unreachable `Employee/DayClosingEmployeeModuleController.php`; (0) check 6.9 — accept the 17 new package values (recommended) or not; Cairo font files (`public/assets/fonts/Cairo/Cairo-{Regular,Bold,Light}.ttf`, static TTF); (1) migrations rule vs practice (edit `create_*` + manual DB, see CLAUDE.md Conventions); (2) are Vite / Tailwind 4 in package.json used or removable; (3) accountant: rounding strategy + T4 on invoices (don't block Phase 1).
+- **Waiting for the user:** (reservations) the "continues" question above; (shift) run 3.16 + 6.12; OK to delete the unreachable `Employee/DayClosingEmployeeModuleController.php`; (0) check 6.9 — accept the 17 new package values (recommended) or not; Cairo font files (`public/assets/fonts/Cairo/Cairo-{Regular,Bold,Light}.ttf`, static TTF); (1) migrations rule vs practice (edit `create_*` + manual DB, see CLAUDE.md Conventions); (2) are Vite / Tailwind 4 in package.json used or removable; (3) accountant: rounding strategy + T4 on invoices (don't block Phase 1).
 - **Known issues:**
   - DB columns added by hand must exist: `reservation_statuses.color`, `is_counted`, `is_default`, `sort_order`; `plans.is_time_based`; `subscription_types.can_repeat`, `auto_renew`; `reservations.paid_amount`, `remaining`; `packages.paid_amount`; money columns of reservations / packages = decimal(12,2) (all run 2026-10-11).
   - After any change of a status's `is_counted` or a bulk data change: run the package recalculation + `php artisan payments:refresh` (`to_run` steps 4–5).
@@ -75,19 +80,25 @@
 - **Pending:** RTL / Arabic UI; favicon file differs (`main` + header icon use `favicon.jpg`, `login` uses `favicon.png`); root `views/dashboard.blade.php` looks unused (no references found)
 
 ### SpaceModule / UnitModule / PlanModule (places & prices)
-- **Last updated:** 2026-10-09
-- **Files:** `SpaceModule/app/{Models/Space,SubscriptionType}`, `UnitModule/app/{Models/Unit,Color, Services/UnitService}`, `PlanModule/app/{Models/Plan, Services/PlanService}`
+- **Last updated:** 2026-10-13
+- **Files:** `SpaceModule/app/{Models/Space,SubscriptionType}` (flags in `SubscriptionType::OPTIONS` drive the form checkboxes, request, service, list badges), `UnitModule/app/{Models/Unit,Color, Services/UnitService}`, `PlanModule/app/{Models/Plan, Services/PlanService}`
 - **How it works:** spaces have subscription types and plans; units belong to a space with one subscription type, capacity, concurrent usage, color, plans (from the space). Plans: amount, lease period, `is_time_based`.
 - **Depends on:** —
 - **Decisions:**
   - Subscription type flags `can_repeat`, `auto_renew` drive the reservation form options
+  - `is_contract` (2026-10-12, column added by hand — create migration edited): a contract = monthly subscription stored as one reservation per period; drives the reservations list display (not the name / id / auto_renew)
   - Time based plan amount = amount × periods (`PERIOD_HOURS`, exact, month = 30 d)
 - **Pending:** —
 
 ### ReservationModule
-- **Last updated:** 2026-10-11
-- **Files:** `app/Http/Controllers/Concerns/ReservationActions.php`, `Account|Employee/Reservation*ModuleController`, `Account/ReservationStatusAccountModuleController`, `app/Services/{ReservationService,ReservationStatusService}`, `app/Models/{Reservation,ReservationStatus}`, `app/Http/Requests/ReservationRequest.php`, `views/Reservation/*`, `views/Status/*`
-- **How it works:** account + employees manage reservations. Form chain: subscription type → spaces → units (space + type) → plans (ajax). Package locks member. Status not in the form (new = default status; changed from the view header menu by ajax). Repeat on create only (frequency, every, until; copies with `repeat_id`). Availability check: overlapping counted reservations vs unit `concurrent_usage` (busiest moment), repeats included; error links to the clashing reservations.
+- **Last updated:** 2026-10-13 (list tabs, Restore, contracts — spec `docs/reservations-list-plan.md`)
+- **Files:** `app/Http/Controllers/Concerns/ReservationActions.php`, `Account|Employee/Reservation*ModuleController`, `Account/ReservationStatusAccountModuleController`, `app/Services/{ReservationService,ReservationStatusService}`, `app/Models/{Reservation,ReservationStatus}`, `app/Http/Requests/ReservationRequest.php`, `views/Reservation/*` (+ `restore`, `partials/row-period`; `partials/contracts-summary` unused), `views/Status/*`, `views/Subscription/partials/days`; kept unused for later (user 2026-10-13, no routes / menu): `Concerns/SubscriptionActions`, `Account|Employee/Subscription*ModuleController`, `views/Subscription/index`
+  - routes + `{area}.reservations.{restore, restore.store}`; `create?renew=ID`
+- **How it works:** account + employees manage reservations. Form chain: subscription type → spaces → units (space + type) → plans (ajax). Package locks member. Status not in the form (new = default status; changed from the view header menu by ajax). Repeat on create only (frequency, every, until; copies with `repeat_id`). Availability check: overlapping counted reservations vs unit `concurrent_usage` (busiest moment), repeats included; error links to the clashing reservations (`periodsError()`, shared by `availabilityError()` / `restoreError()`).
+  - List toolbar (2026-10-13): tabs Today (default, `scopeRunningBetween` overlap `start_at < to AND (end_at > from OR start_at >= from)`, starting today first) | Upcoming (`start_at >= tomorrow`, nearest first) | All (`Reservation::TABS`, hidden `tab`, `[data-filter-tab]`, `scopeTab` / `scopeTabOrder`); one filter row: search, status, space, type (`subscription_type_id`), payment, date from / to, Clear (`.filter-bar__tabs` puts the tabs on their own row). `data-order='[]'` → tab order until a column click; `countedFirst()` always first; Today count (counted) via json `counts`; date range → All; date filters are ranges (no `whereDate`)
+  - Contracts (`is_contract` types, `contractTypeIds()`, `scopeContracts` / `notContracts`): hidden from Today / Upcoming unless a type is chosen; Renew = `renewalOf()` (next period, same length, form pre-filled, repeat allowed); unused leftovers of the 2026-10-12 versions (subscription scopes, `contracts-summary`, the Subscriptions page) are kept for later (user)
+  - List columns (2026-10-13): partials `row-member` (package line → `{area}.packages.show` popup), `row-place` (`stacked` = two lines, list only; one line in the package view), `row-period` (by type: `full_day` / `auto_renew` / `is_contract` / else; day names `D`), `row-status` (two badges; "In package" → package popup; "Partial" short label here only), `row-remaining` (red / blue credit / "-" in a package); `by` = `creatable.userable` (eager loaded in `table()`); `long_badge` / `days_left` kept in the model, not shown; `realEnd()` (end before start = start); not counted rows `DT_RowClass row-muted`
+  - Restore (`restoreForm` popup checks the slot first, `ReservationService::restore()` → default counted status via `changeStatus()`); `changeStatus()` refuses not counted → counted when the slot is taken (`html_status`, shown in a Swal popup)
 - **Depends on:** Space/Unit/Plan, PackageModule (recalculate), MemberModule
 - **Decisions:**
   - Status colors = fixed theme palette (`badge-status-{color}`) — no inline CSS
@@ -98,7 +109,9 @@
   - `Reservation` implements `Payable` (payable only when `package_id = 0`; due = net, 0 with a not counted status — user 2026-10-11), uses `HasPayments` + `SafeMorphHelper`; columns `paid_amount`, `remaining`
   - `ReservationService` create (+ repeat copies) / update / changeStatus → `PaymentService::refresh()`; update into a package → `movePayments()`
   - Imported creators: all reservations → User 1 (fixed by hand, old class names); `SafeMorphHelper` makes unknown / empty morph types load as null
-- **Pending:** repeat for edits not supported by design
+  - Contracts = one reservation per period, each with its own due + payments (user 2026-10-12); display only collapses them
+  - "Continues" rows: the end date is used everywhere (tabs, subscriptions, availability) — 243 imported rows have both (question open)
+- **Pending:** browser check of the list; the "continues" question in Current status; repeat for edits not supported by design
 
 ### PackageModule
 - **Last updated:** 2026-10-11 (extras, data transfer)
@@ -186,6 +199,20 @@
 
 ## Session log
 
+### 2026-10-13 — reservations toolbar simplified + new list columns
+- **Changed:** toolbar = tabs Today | Upcoming | All (count on Today) + one filter row (search, status, space, type, payment, dates, Clear); contracts hidden from Today / Upcoming unless the type filter selects them; banner, Subscriptions tab, datatables.js `slots` removed (their unused code kept, user); columns Member | Space / Unit (two lines) | Plan | Period by type with day names | Status + payment badges | Amount | Paid | Remaining (credit blue) | By; package name + "In package" badge open the package popup; plan doc "CURRENT" sections
+- **Why:** user: simpler toolbar, then exact columns
+- **Affects:** reservations list (account + employee); `row-place` shared with the package view (one line there); CLAUDE.md dependencies (counts / is_contract wording)
+- **Found:** PHP 8.5 pipe operator not available on the local CLI (8.4) — test scripts only
+- **Commit:** see suggested commit (user commits)
+
+### 2026-10-12 — reservations list tabs, Restore, contracts
+- **Changed:** plan `docs/reservations-list-plan.md`; `Reservation` scopes (tabs, overlap, counted first, contracts, subscriptions filter, renewed), range date filters; list tabs + counts + long badge + muted rows; Restore popup + check in `changeStatus()`; Subscriptions tab + contracts summary; Renew pre-fill; `subscription_types.is_contract` (OPTIONS, create migration); reservations create migration indexes; datatables.js json `counts` / `slots`; custom.js tab rules + html status errors; custom.css `.row-muted`, `.contracts-summary`; a separate Subscriptions page was built then replaced by the tab (routes / menu removed)
+- **Why:** ~20k reservations, months ahead, monthly contracts one row per period (user spec + answers)
+- **Affects:** reservations list (account + employee), status menu, reservation form (renew, repeat on unsaved), subscription types form, shared datatables.js / custom.js / custom.css
+- **Found:** 6,110 rows end before start, 243 "continues" rows with an end date, 19,569 repeat copies; renewal = same member + space in 1,092 / 1,113; `--color-slate-200` doesn't exist in app.css
+- **Commit:** see suggested commit (user commits)
+
 ### 2026-10-11 — shift closing + account day closing (two levels)
 - **Changed:** plan `payments-plan.md` §2b; tables `shift_closings`, `shift_events`, `payments.shift_closing_id`, `accounts.shift_reminder_hours` / `shift_snooze_hours`; `ShiftClosingService`, two-level lock in `PaymentService`, day close guard in `DayClosingService`; employee My Shift (+ close popup, logout / reminder popups, still working); account day screen (close on behalf, reopen / close again, confirm popup), long open / reopened shift flags, Shift Reminders settings; employee payments list = own only, "Collected by" in the payments block; `ShiftReminder` middleware; custom.js popups; header / employee layout / both sidebars; `to_run` 3.1, 3.2, 3.15, 3.16, checks 6.11, 6.12; CLAUDE.md dependencies
 - **Why:** the place works 24 h: employees close per shift, the account closes days for reports (user spec + answers)
@@ -241,17 +268,3 @@
 - **Affects:** Reservation / Package / Member models + create migrations; LayoutModule account sidebar; every future payment caller (service rules)
 - **Found:** reservations' creators were already fixed by hand; `to_run` is gitignored; old method 6 "Bank Transfer - CIB" exists (missing from the plan); old category 2 has an Arabic English name
 - **Commit:** `a0be704`, `4395657`, `9dd28e0`, `a7170e8`, `77731d8`, `a02f1fa` (+ docs commits)
-
-### 2026-10-10 — payments, invoices & ETA plan
-- **Changed:** wrote `docs/payments-plan.md` (3 phases: files, DB columns, import SQL, build order, ETA tax formula + worked example); Payments section in this file
-- **Why:** user wants payments for reservations, packages, other income + VAT invoices / e-receipts ready for ETA
-- **Affects:** Reservation, Package, Member, Plan, Company modules; LayoutModule sidebars (when built)
-- **Found:** old DB `dwidar_pivot_res` has payments / incomes / methods / income types (all link to existing rows); ETA rule: VAT base includes table tax; 5-decimal rounding can miss an inclusive price by ≤ 0.00001
-- **Commit:** "docs: payments, invoices & ETA module plan"
-
-### 2026-10-09 — layout notes added to memory (work done 2026-10-05)
-- **Changed:** documented the dagger layout set up on 2026-10-05: Bootstrap layout → Tailwise dagger (main, header, sidebar, flash, footer, login + AdminModule login form), old CSS/JS and commented code removed, full-width content, sidebar open by default + collapse toggle (no hover-expand), logo / favicon, `custom.css` / `custom.js` created
-- **Why:** user requests; the memory files were written in another session without the layout history
-- **Affects:** every module's pages (LayoutModule shell)
-- **Found:** favicon jpg/png mismatch between `main` and `login`; root `views/dashboard.blade.php` probably unused
-- **Commit:** layout code in `ea7738c` ("New Layout") and later commits; this entry: see suggested commit
