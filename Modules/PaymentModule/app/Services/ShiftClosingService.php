@@ -17,14 +17,16 @@ use Modules\PaymentModule\app\Models\ShiftEvent;
 use Modules\UserModule\app\Models\User;
 
 /**
- * Employee shift closing (docs/payments-plan.md §2b): the payments are linked to a closing (payments.shift_closing_id),
- * not taken by a time window (paid_at is a date): an employee's OPEN PERIOD = their payments with shift_closing_id 0.
- * - the employee closes it at any time (a shift over midnight is one closing); the account can close it on their behalf
- * - a closed shift locks its payments (PaymentService::assertPaymentOpen()); only the account reopens it (reason),
- *   its payments stay in it, and the account closes it again (totals recalculated)
- * - the account's own payments are not in a shift: the final day closing locks them
- * - every close / reopen / re-close and the reminder answers are logged (shift_events)
- * - closing sends the highest payment id the employee saw: a payment added meanwhile → refused (review again)
+ * Shift closing, the ONE closing level (docs/payments-plan.md §2b, simplified 2026-10-13): the payments are linked to a closing
+ * (payments.shift_closing_id), not taken by a time window (paid_at is a date): a login's OPEN SHIFT = their payments with
+ * shift_closing_id 0. Every login collects into its own shift: the employees AND the account itself (no reminders for the account).
+ * - the collector closes it at any time (a shift over midnight is one closing); the account can close an employee's on their behalf
+ * - a closed shift keeps its payments; only the account edits / deletes one of them (reason required): paymentChanged()
+ *   recalculates the totals, logs the change (before / after) and marks the shift "Edited after closing"; a refund of one
+ *   of them goes into the refunder's open shift, the closed shift only gets the log entry + the mark
+ * - every close, payment change and reminder answer is logged (shift_events)
+ * - closing sends the highest payment id the collector saw: a payment added meanwhile → refused (review again)
+ * - reminders (employees only): config paymentmodule.shift_reminder_hours / shift_snooze_hours
  */
 class ShiftClosingService
 {
@@ -37,8 +39,14 @@ class ShiftClosingService
         $this->paymentService = $paymentService;
     }
 
-    // an employee login (their payments go into shifts); the account's own payments don't
+    // an employee or an account login: both collect into their own shift
     public function isCollector(?Model $user): bool
+    {
+        return $user?->userable instanceof Employee || $user?->userable instanceof Account;
+    }
+
+    // an employee login (the reminders, still working answers and logout popup are for employees only)
+    public function isEmployee(?Model $user): bool
     {
         return $user?->userable instanceof Employee;
     }
@@ -51,21 +59,31 @@ class ShiftClosingService
             ->select('id');
     }
 
-    // the payments of an employee login (not deleted)
+    // the users.id of every login that collects for the account: its employees + the account itself (a subquery)
+    public function collectorUserIds($accountId)
+    {
+        return User::where(fn ($query) => $query
+            ->where(fn ($query) => $query->where('userable_type', (new Employee)->getMorphClass())
+                ->whereIn('userable_id', Employee::withTrashed()->where('account_id', $accountId)->select('id')))
+            ->orWhere(fn ($query) => $query->where('userable_type', (new Account)->getMorphClass())->where('userable_id', $accountId)))
+            ->select('id');
+    }
+
+    // the payments of a login (not deleted)
     private function paymentsOf($accountId, $userId): Builder
     {
         return Payment::where('account_id', $accountId)
             ->where('creatable_type', (new User)->getMorphClass())->where('creatable_id', $userId);
     }
 
-    // the employee's open period: their payments not in a closing yet
+    // the collector's open shift: their payments not in a closing yet
     public function openPayments($accountId, $userId): Builder
     {
         return $this->paymentsOf($accountId, $userId)->where('shift_closing_id', 0);
     }
 
     /**
-     * The employee's open period: ['payments' (oldest first), 'summary', 'since' (created_at of the oldest payment, null = none),
+     * The collector's open shift: ['payments' (oldest first), 'summary', 'since' (created_at of the oldest payment, null = none),
      * 'last_closing' (their last closing, null = never)]
      */
     public function openPeriod($accountId, $userId): array
@@ -82,14 +100,15 @@ class ShiftClosingService
     }
 
     /**
-     * The totals of some payments (an open period / a closing; saved on the closing):
-     * ['methods' => [method_id => ['name', 'payments', 'refunds', 'net']], 'withholding' => ['count', 'total'],
+     * The totals of some payments (an open shift / a closing; saved on the closing):
+     * ['methods' => [method_id => ['name', 'payments', 'refunds', 'net']], 'refunds' => ['count', 'total'] (all methods, its own
+     *  minus line in the close popup), 'withholding' => ['count', 'total'],
      *  'cash_total' (payments - refunds, withholding apart), 'count', 'max_id', 'first_payment_at', 'last_payment_at']
      */
     public function summary($accountId, Collection $payments): array
     {
         $methodNames = PaymentMethod::withTrashed()->where('account_id', $accountId)->get()->pluck('name', 'id');
-        $summary = ['methods' => [], 'withholding' => ['count' => 0, 'total' => 0.0], 'cash_total' => 0.0, 'count' => 0,
+        $summary = ['methods' => [], 'refunds' => ['count' => 0, 'total' => 0.0], 'withholding' => ['count' => 0, 'total' => 0.0], 'cash_total' => 0.0, 'count' => 0,
             'max_id' => (int) $payments->max('id'),
             'first_payment_at' => $payments->min('created_at')?->format('Y-m-d H:i:s'),
             'last_payment_at' => $payments->max('created_at')?->format('Y-m-d H:i:s')];
@@ -108,6 +127,10 @@ class ShiftClosingService
             $key = $payment->type === 'refund' ? 'refunds' : 'payments';
             $method[$key] = round($method[$key] + $payment->amount, 2);
             $method['net'] = round($method['net'] + $payment->signed_amount, 2);
+            if ($payment->type === 'refund') {
+                $summary['refunds']['count']++;
+                $summary['refunds']['total'] = round($summary['refunds']['total'] + $payment->amount, 2);
+            }
             $summary['cash_total'] = round($summary['cash_total'] + $payment->signed_amount, 2);
             unset($method);
         }
@@ -116,21 +139,21 @@ class ShiftClosingService
     }
 
     /**
-     * Close an employee's open period. $upToId = the highest payment id shown in the confirmation (a newer one = refused).
-     * $by: the employee (close / logout_closed) or the account (close_on_behalf).
+     * Close a collector's open shift. $upToId = the highest payment id shown in the confirmation (a newer one = refused).
+     * $collector: an employee or the account's own login; $by: the collector (close / logout_closed) or the account (close_on_behalf).
      */
-    public function close($accountId, User $employee, int $upToId, Model $by, string $action = 'close'): ShiftClosing
+    public function close($accountId, User $collector, int $upToId, Model $by, string $action = 'close'): ShiftClosing
     {
-        $this->assertEmployeeOf($accountId, $employee);
-        $onBehalf = $by->getKey() !== $employee->getKey();
+        $this->assertCollectorOf($accountId, $collector);
+        $onBehalf = $by->getKey() !== $collector->getKey();
         if ($onBehalf && !$this->paymentService->isOwner($by)) {
             abort(403, 'Only the account can close another employee\'s shift.');
         }
         $action = $onBehalf ? 'close_on_behalf' : (in_array($action, ['close', 'logout_closed'], true) ? $action : 'close');
 
-        return DB::transaction(function () use ($accountId, $employee, $upToId, $by, $action) {
+        return DB::transaction(function () use ($accountId, $collector, $upToId, $by, $action) {
             // locked until the end: a payment can't join / leave the period while it is closed
-            $payments = $this->openPayments($accountId, $employee->getKey())->lockForUpdate()->get();
+            $payments = $this->openPayments($accountId, $collector->getKey())->lockForUpdate()->get();
             if ($payments->isEmpty()) {
                 throw ValidationException::withMessages(['shift' => 'There are no payments to close.']);
             }
@@ -140,52 +163,12 @@ class ShiftClosingService
 
             $closing = $this->saveTotals(new ShiftClosing([
                 'account_id' => $accountId,
-                'user_id' => $employee->getKey(),
-                'status' => 'closed',
+                'user_id' => $collector->getKey(),
                 'closed_by' => $by->getKey(),
                 'closed_at' => now(),
             ]), $accountId, $payments);
             Payment::whereKey($payments->modelKeys())->update(['shift_closing_id' => $closing->id]);
             $this->log($closing, $action, $by);
-
-            return $closing;
-        });
-    }
-
-    // the account opens a closed shift again (its payments can be changed); they stay in it
-    public function reopen($accountId, $id, string $reason, Model $by): ShiftClosing
-    {
-        $this->assertOwner($by);
-        $closing = $this->findOne($accountId, $id);
-        if ($closing->status !== 'closed') {
-            throw ValidationException::withMessages(['reopen_reason' => 'This shift is not closed.']);
-        }
-        if (trim($reason) === '') {
-            throw ValidationException::withMessages(['reopen_reason' => 'Write why the shift is opened again.']);
-        }
-
-        return DB::transaction(function () use ($closing, $reason, $by) {
-            $closing->update(['status' => 'reopened', 'reopened_by' => $by->getKey(), 'reopened_at' => now(), 'reopen_reason' => trim($reason)]);
-            $this->log($closing, 'reopen', $by, trim($reason));
-
-            return $closing;
-        });
-    }
-
-    // the account closes a reopened shift again: its totals from its payments now
-    public function reclose($accountId, $id, Model $by): ShiftClosing
-    {
-        $this->assertOwner($by);
-        $closing = $this->findOne($accountId, $id);
-        if ($closing->status !== 'reopened') {
-            throw ValidationException::withMessages(['shift' => 'This shift is not reopened.']);
-        }
-
-        return DB::transaction(function () use ($accountId, $closing, $by) {
-            $payments = $closing->payments()->lockForUpdate()->get();
-            $closing->fill(['status' => 'closed', 'closed_by' => $by->getKey(), 'closed_at' => now()]);
-            $this->saveTotals($closing, $accountId, $payments);
-            $this->log($closing, 'reclose', $by);
 
             return $closing;
         });
@@ -213,28 +196,39 @@ class ShiftClosingService
     }
 
     /**
-     * The "close your shift" popup is due: the oldest unclosed payment is older than the account's shift_reminder_hours,
-     * and no "still working" answer in the last shift_snooze_hours. No payments → never.
+     * The "close your shift" popup is due (employees only): the oldest unclosed payment is older than
+     * config paymentmodule.shift_reminder_hours, and no "still working" answer in the last shift_snooze_hours. No payments → never.
      */
     public function reminderDue(Account $account, User $employee): bool
     {
         $since = $this->openPayments($account->id, $employee->getKey())->min('created_at');
-        if (!$since || Carbon::parse($since)->gt(now()->subHours($account->shift_reminder_hours ?: 12))) {
+        if (!$since || Carbon::parse($since)->gt(now()->subHours(self::reminderHours()))) {
             return false;
         }
 
         return !ShiftEvent::where('account_id', $account->id)->where('user_id', $employee->getKey())
-            ->where('action', 'still_working')->where('created_at', '>', now()->subHours($account->shift_snooze_hours ?: 4))->exists();
+            ->where('action', 'still_working')->where('created_at', '>', now()->subHours(self::snoozeHours()))->exists();
+    }
+
+    // the reminder hours (config): after this the "close your shift" popup; then again every snoozeHours() after "still working"
+    public static function reminderHours(): int
+    {
+        return (int) config('paymentmodule.shift_reminder_hours', 12) ?: 12;
+    }
+
+    public static function snoozeHours(): int
+    {
+        return (int) config('paymentmodule.shift_snooze_hours', 4) ?: 4;
     }
 
     /**
-     * The open periods of the account's employees (all, or the ones with payments dated $date):
+     * The open shifts of the account's collectors, the account included (all, or the ones with payments dated $date):
      * [user_id => ['user', 'since', 'count', 'cash_total', 'withholding_total', 'dated_count' (payments of $date)]], oldest first
      */
     public function openPeriods($accountId, $date = null): Collection
     {
         $rows = Payment::where('account_id', $accountId)->where('shift_closing_id', 0)
-            ->where('creatable_type', (new User)->getMorphClass())->whereIn('creatable_id', $this->employeeUserIds($accountId))
+            ->where('creatable_type', (new User)->getMorphClass())->whereIn('creatable_id', $this->collectorUserIds($accountId))
             ->groupBy('creatable_id')
             ->selectRaw("creatable_id, MIN(created_at) since, COUNT(*) n,
                 SUM(CASE type WHEN 'payment' THEN amount WHEN 'refund' THEN -amount ELSE 0 END) cash,
@@ -255,13 +249,14 @@ class ShiftClosingService
     }
 
     /**
-     * The account's closing screen flags: open periods older than shift_reminder_hours (oldest first), each with
-     * 'answers' = the "still working" answers since it opened (popup + logout, newest first, with their reasons).
+     * The Daily Summary flags: employees' open shifts older than reminderHours() (oldest first; the account's own has no
+     * reminders), each with 'answers' = the "still working" answers since it opened (popup + logout, newest first, with their reasons).
      */
     public function longOpenPeriods(Account $account): Collection
     {
-        $limit = now()->subHours($account->shift_reminder_hours ?: 12);
-        $periods = $this->openPeriods($account->id)->filter(fn ($period) => $period['since']->lt($limit));
+        $limit = now()->subHours(self::reminderHours());
+        $periods = $this->openPeriods($account->id)
+            ->filter(fn ($period) => $period['since']->lt($limit) && $this->isEmployee($period['user']));
         $answers = ShiftEvent::where('account_id', $account->id)->where('shift_closing_id', 0)
             ->whereIn('action', ['still_working', 'logout_still_working'])->whereIn('user_id', $periods->keys())
             ->latest('id')->get()->groupBy('user_id');
@@ -271,27 +266,7 @@ class ShiftClosingService
         ]);
     }
 
-    // the closings the account reopened and did not close again yet
-    public function reopenedClosings($accountId): Collection
-    {
-        return $this->listQuery($accountId)->where('status', 'reopened')->orderBy('reopened_at')->get();
-    }
-
-    /**
-     * Why a day can't be closed yet: employees' payments dated that day still open (open period / a reopened shift).
-     * [] = nothing blocks. ['open' => openPeriods($date), 'reopened' => the reopened closings with payments of that day]
-     */
-    public function blockingForDate($accountId, $date): array
-    {
-        $date = Carbon::parse($date)->toDateString();
-        $open = $this->openPeriods($accountId, $date);
-        $reopened = ShiftClosing::with('user.userable')->where('account_id', $accountId)->where('status', 'reopened')
-            ->whereHas('payments', fn ($query) => $query->whereDate('paid_at', $date))->get();
-
-        return $open->isEmpty() && $reopened->isEmpty() ? [] : ['open' => $open, 'reopened' => $reopened];
-    }
-
-    // the closings list (paged / ordered by DataTables); $userId: one employee's closings
+    // the closings list (paged / ordered by DataTables); $userId: one collector's closings
     public function listQuery($accountId, $userId = null)
     {
         return ShiftClosing::with('user.userable', 'closedBy.userable')->where('account_id', $accountId)
@@ -301,10 +276,20 @@ class ShiftClosingService
     // 404 when it belongs to another account (or, with $userId, to another employee)
     public function findOne($accountId, $id, $userId = null): ShiftClosing
     {
-        return $this->listQuery($accountId, $userId)->with('events.byUser.userable', 'reopenedBy.userable')->findOrFail($id);
+        return $this->listQuery($accountId, $userId)->findOrFail($id);
     }
 
-    // the closings with payments dated $date (the account's day screen)
+    // the shift popup's payments (Payments list cells): the newest POPUP_LIMIT first (an imported shift holds thousands)
+    const POPUP_LIMIT = 200;
+
+    public function popupPayments(ShiftClosing $closing): Collection
+    {
+        return $closing->payments()->with('member', 'paymentMethod', 'incomeCategory')
+            ->with(['payable' => fn ($morph) => $morph->morphWith([\Modules\ReservationModule\app\Models\Reservation::class => ['space', 'unit.color', 'plan']])])
+            ->latest('created_at')->latest('id')->limit(self::POPUP_LIMIT)->get();
+    }
+
+    // the closings with payments dated $date (the Daily Summary)
     public function closingsForDate($accountId, $date): Collection
     {
         $date = Carbon::parse($date)->toDateString();
@@ -328,24 +313,46 @@ class ShiftClosingService
         return $closing;
     }
 
-    private function log(ShiftClosing $closing, string $action, Model $by, ?string $reason = null): void
+    /**
+     * A payment of a CLOSED shift was changed by the account (PaymentService update / delete), or refunded by anyone (refund):
+     * payment_edit / payment_delete → the totals recalculated from its payments now; payment_refund → totals unchanged (the refund
+     * row is in the refunder's open shift). Always: the log entry (before / after, who, reason) + "Edited after closing".
+     * Call inside the change's transaction.
+     */
+    public function paymentChanged(ShiftClosing $closing, string $action, Payment $payment, Model $by, string $reason, array $changes): void
+    {
+        if (!in_array($action, ['payment_edit', 'payment_delete', 'payment_refund'], true)) {
+            abort(500, 'Unknown shift change.');
+        }
+        if ($action !== 'payment_refund') {
+            $this->saveTotals($closing, $closing->account_id, $closing->payments()->lockForUpdate()->get());
+        }
+        $closing->forceFill(['edited_at' => now(), 'edit_count' => $closing->edit_count + 1])->save();
+        $this->log($closing, $action, $by, $reason, $payment->getKey(), $changes);
+    }
+
+    private function log(ShiftClosing $closing, string $action, Model $by, ?string $reason = null, int $paymentId = 0, ?array $changes = null): void
     {
         ShiftEvent::create([
             'account_id' => $closing->account_id,
             'user_id' => $closing->user_id,
             'shift_closing_id' => $closing->id,
+            'payment_id' => $paymentId,
             'by_user_id' => $by->getKey(),
             'action' => $action,
             'reason' => $reason,
             'totals' => $closing->totals,
+            'changes' => $changes,
         ]);
     }
 
-    private function assertOwner(Model $user): void
+    // a login that collects for this account: one of its employees, or the account itself (404 otherwise)
+    private function assertCollectorOf($accountId, User $user): void
     {
-        if (!$this->paymentService->isOwner($user)) {
-            abort(403, 'Only the account can reopen or close a shift again.');
+        if ($user->userable instanceof Account && (int) $user->userable->getKey() === (int) $accountId) {
+            return;
         }
+        $this->assertEmployeeOf($accountId, $user);
     }
 
     // an employee login of this account (404 otherwise)

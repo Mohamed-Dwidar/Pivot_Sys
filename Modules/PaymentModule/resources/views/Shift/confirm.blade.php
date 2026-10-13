@@ -6,7 +6,8 @@
 
 {{--
     The confirmation of "Close My Shift" (the app popup, not a browser confirm): the totals to hand over.
-    The account: the same for an employee ($employee) = closed on their behalf (logged), ?date= = back to that day screen.
+    The account: its own shift (account.shift.*), or an employee's ($employee) = closed on their behalf (logged),
+    ?date= = back to that Daily Summary day.
     up_to_id = the highest payment shown: a payment added meanwhile → refused (ShiftClosingService::close()).
     $logout: opened from the logout popup → logged out after closing (custom.js, json "logout").
 --}}
@@ -20,7 +21,7 @@
     @else
         <div class="mb-4">
             {{ $period['summary']['count'] }} payments since {{ $period['since']?->format('d-m-Y h:i A') }}.
-            After closing they are locked; only the account can reopen the shift.
+            After closing, only the account can still change them (with a reason, logged on the shift).
             @if ($employee)
                 It is logged as closed by you on their behalf.
             @endif
@@ -28,7 +29,7 @@
 
         @include('paymentmodule::Shift.partials.totals', ['summary' => $period['summary']])
 
-        <form method="POST" action="{{ route($area === 'account' ? 'account.shifts.close' : 'employee.shift.close') }}" data-ajax>
+        <form method="POST" action="{{ route($employee ? 'account.shifts.close' : $area . '.shift.close') }}" data-ajax>
             @csrf
             <input type="hidden" name="up_to_id" value="{{ $period['summary']['max_id'] }}">
             @if ($employee)
@@ -43,7 +44,7 @@
                 @if (request()->ajax())
                     <button type="button" data-tw-dismiss="modal" class="btn btn-secondary">Cancel</button>
                 @else
-                    <a href="{{ $area === 'account' ? (request()->boolean('index') ? route('account.day-closings.index') : route('account.day-closings.create', ['date' => request('date')])) : route('employee.shift.index') }}" class="btn btn-secondary">Cancel</a>
+                    <a href="{{ $employee ? route('account.daily-summary.index', request()->only('date')) : route($area . '.shift.index') }}" class="btn btn-secondary">Cancel</a>
                 @endif
             </div>
         </form>

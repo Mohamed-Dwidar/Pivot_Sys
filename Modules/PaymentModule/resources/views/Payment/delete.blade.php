@@ -4,7 +4,7 @@
     Delete Payment #{{ $payment->payment_no }}
 @endsection
 
-{{-- the owner only: soft delete, the reason + who deleted it are kept (audit report) --}}
+{{-- the owner only: soft delete, the reason + who deleted it are kept (audit report); in a closed shift: logged on it, its totals recalculated --}}
 @section('content')
     <form method="POST" action="{{ route('account.payments.destroy', $payment->id) }}" data-ajax data-row="{{ $payment->id }}"
         data-confirm="Payment #{{ $payment->payment_no }} will be deleted, the paid / remaining of what it pays are calculated again."
@@ -15,6 +15,7 @@
         @method('DELETE')
 
         @include('paymentmodule::Payment.partials.payment-summary', ['payableName' => null])
+        @include('paymentmodule::Payment.partials.closed-shift-note')
 
         <div class="mt-6">
             @include('layoutmodule::partials.field', ['name' => 'delete_reason', 'label' => 'Reason', 'type' => 'textarea', 'required' => true,

@@ -6,8 +6,8 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Modules\PaymentModule\app\Models\Payment;
 
-// the owner's edit of a payment / refund / withholding (the payable, member and type are kept);
-// PaymentService::update() checks the rules again (owner, closed days, refund limit, ownership)
+// the owner's edit of a payment / refund / withholding (the payable, member and type are kept); in a closed shift a reason is
+// required (logged on the shift); PaymentService::update() checks the rules again (owner, reason, refund limit, ownership)
 class PaymentUpdateRequest extends FormRequest
 {
     public function rules(): array
@@ -29,12 +29,14 @@ class PaymentUpdateRequest extends FormRequest
                 : ['required', 'integer', $ownedBy('income_categories')->where(fn ($query) => $query->where('is_active', true)->orWhere('id', (int) $payment?->income_category_id))],
             'reference' => 'nullable|string|max:255',
             'notes' => 'nullable|string|max:5000',
+            // why a payment of a closed shift is changed (kept in the shift's history)
+            'change_reason' => $payment?->shift_closing_id ? 'required|string|max:255' : 'exclude',
         ];
     }
 
     public function attributes(): array
     {
-        return ['payment_method_id' => 'payment method', 'income_category_id' => 'income category', 'paid_at' => 'date'];
+        return ['payment_method_id' => 'payment method', 'income_category_id' => 'income category', 'paid_at' => 'date', 'change_reason' => 'reason'];
     }
 
     public function messages(): array

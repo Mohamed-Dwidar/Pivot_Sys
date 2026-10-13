@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\AccountModule\app\Http\Controllers\Account\AccountAccountModuleController;
+use Modules\AccountModule\app\Http\Controllers\Account\GeneralSettingAccountModuleController;
 use Modules\AccountModule\app\Http\Controllers\Admin\AccountAdminModuleController;
 use Modules\AccountModule\app\Http\Controllers\Guest\AccountGuestModuleController;
 use Modules\AccountModule\app\Models\Account;
@@ -20,6 +21,9 @@ Route::prefix('account')->name('account.')->middleware('guest')->group(function 
 Route::prefix('account')->name('account.')->middleware(['auth', 'user.active:' . Account::class])->group(function () {
     Route::get('profile', [AccountAccountModuleController::class, 'editProfile'])->name('profile.edit');
     Route::put('profile', [AccountAccountModuleController::class, 'updateProfile'])->name('profile.update');
+    // Settings › General: withholding tax / VAT switches
+    Route::get('settings/general', [GeneralSettingAccountModuleController::class, 'edit'])->name('settings.general.edit');
+    Route::put('settings/general', [GeneralSettingAccountModuleController::class, 'update'])->name('settings.general.update');
 });
 
 /**

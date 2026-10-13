@@ -9,20 +9,16 @@ use Modules\AccountModule\app\Models\Account;
 use Modules\UserModule\app\Models\User;
 
 /**
- * An employee's closed shift: the payments they added since their last closing (payments.shift_closing_id), at any time of day.
- * Closed = its payments are locked; only the account reopens it (reason), its payments stay in it and it is closed again.
- * The account's own payments are not in a shift (locked by the day closing). ShiftClosingService.
+ * A closed shift: the payments one login (an employee, or the account itself) added since their last closing
+ * (payments.shift_closing_id), at any time of day. The only closing level (docs/payments-plan.md §2b).
+ * Its payments stay in it for good; the account may still edit / delete one (reason required): the totals are recalculated,
+ * the change is logged (shift_events payment_*) and edited_at / edit_count mark it "Edited after closing". ShiftClosingService.
  */
 class ShiftClosing extends Model
 {
-    const STATUSES = [
-        'closed' => 'Closed',
-        'reopened' => 'Reopened',
-    ];
-
     protected $fillable = [
-        'account_id', 'user_id', 'status', 'first_payment_at', 'last_payment_at', 'count', 'cash_total', 'withholding_total', 'totals', 'notes',
-        'closed_by', 'closed_at', 'reopened_by', 'reopened_at', 'reopen_reason',
+        'account_id', 'user_id', 'first_payment_at', 'last_payment_at', 'count', 'cash_total', 'withholding_total', 'totals', 'notes',
+        'closed_by', 'closed_at', 'edited_at', 'edit_count',
     ];
 
     protected $casts = [
@@ -33,7 +29,8 @@ class ShiftClosing extends Model
         'withholding_total' => 'float',
         'totals' => 'array',
         'closed_at' => 'datetime',
-        'reopened_at' => 'datetime',
+        'edited_at' => 'datetime',
+        'edit_count' => 'integer',
     ];
 
     public function account(): BelongsTo
@@ -41,7 +38,7 @@ class ShiftClosing extends Model
         return $this->belongsTo(Account::class);
     }
 
-    // the employee who collected the payments
+    // who collected the payments (an employee, or the account)
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
@@ -52,25 +49,20 @@ class ShiftClosing extends Model
         return $this->belongsTo(User::class, 'closed_by');
     }
 
-    public function reopenedBy(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'reopened_by');
-    }
-
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
     }
 
-    // every close / reopen / re-close, newest first
+    // the close + every change after it (payment edited / deleted / refunded), newest first
     public function events(): HasMany
     {
         return $this->hasMany(ShiftEvent::class)->latest('id');
     }
 
-    // the closings that lock their payments
-    public function scopeClosed($query)
+    // a payment of it was edited / deleted / refunded after closing (the "Edited after closing" badge)
+    public function isEdited(): bool
     {
-        return $query->where('status', 'closed');
+        return $this->edit_count > 0;
     }
 }

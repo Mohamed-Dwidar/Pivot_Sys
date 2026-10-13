@@ -18,9 +18,8 @@ class ShiftCloseRequest extends FormRequest
             'up_to_id' => 'required|integer|min:1',
             // the account closes an employee's shift on their behalf (users.id; the service checks it is their employee)
             'user_id' => 'nullable|integer',
-            // the account's day screen it was opened from (the answer goes back to it)
+            // the Daily Summary day it was opened from (the answer goes back to it)
             'date' => 'nullable|date',
-            'index' => 'boolean',
             // logout: the closing popup of the logout (logged logout_closed), then the logout
             'logout' => 'boolean',
         ];

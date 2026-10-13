@@ -6,7 +6,8 @@
 
 @section('modal-size', 'lg')
 
-{{-- the owner only (account routes); the payable, member and type are kept: a payment for something else = delete + add --}}
+{{-- the owner only (account routes); the payable, member and type are kept: a payment for something else = delete + add;
+     in a closed shift: a reason is required (logged on the shift, its totals recalculated) --}}
 @section('content')
     <form method="POST" action="{{ route('account.payments.update', $payment->id) }}" data-ajax data-row="{{ $payment->id }}"
         data-confirm="The payment will be changed, the paid / remaining of what it pays are calculated again."
@@ -17,6 +18,7 @@
         @method('PUT')
 
         @include('paymentmodule::Payment.partials.payment-summary')
+        @include('paymentmodule::Payment.partials.closed-shift-note')
 
         <div class="form-section mt-6">Payment</div>
         <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
@@ -39,6 +41,12 @@
         <div class="mt-5">
             @include('layoutmodule::partials.field', ['name' => 'notes', 'label' => 'Notes', 'type' => 'textarea', 'value' => $payment->notes])
         </div>
+        @if ($closedShift)
+            <div class="mt-5">
+                @include('layoutmodule::partials.field', ['name' => 'change_reason', 'label' => 'Reason for the Change', 'type' => 'textarea', 'required' => true,
+                    'attrs' => 'maxlength="255"', 'hint' => 'Kept in the shift\'s history with the values before and after.'])
+            </div>
+        @endif
 
         @include('layoutmodule::partials.form-actions', ['cancel' => route('account.payments.show', $payment->id)])
     </form>

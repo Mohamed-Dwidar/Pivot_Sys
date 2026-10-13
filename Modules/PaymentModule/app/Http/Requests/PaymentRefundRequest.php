@@ -5,7 +5,8 @@ namespace Modules\PaymentModule\app\Http\Requests;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-// the owner's refund of a payment; PaymentService::refund() checks the limit (the money received), closed days, ownership
+// a refund of a payment (the account or an employee; into the refunder's open shift); PaymentService::refund() checks the
+// limit (this payment's amount less its refunds), the reason, ownership
 class PaymentRefundRequest extends FormRequest
 {
     public function rules(): array
@@ -17,6 +18,8 @@ class PaymentRefundRequest extends FormRequest
             // how the money goes back
             'payment_method_id' => ['required', 'integer', Rule::exists('payment_methods', 'id')->where('account_id', $accountId)->where('is_active', true)->whereNull('deleted_at')],
             'paid_at' => 'required|date',
+            // why the money is given back (shown in the Daily Summary)
+            'reason' => 'required|string|max:255',
             'reference' => 'nullable|string|max:255',
             'notes' => 'nullable|string|max:5000',
         ];

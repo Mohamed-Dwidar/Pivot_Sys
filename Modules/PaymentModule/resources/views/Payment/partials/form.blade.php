@@ -43,9 +43,14 @@
 
 <div class="form-section mt-8">Payment</div>
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
-    @include('layoutmodule::partials.field', ['name' => 'type', 'label' => 'Type', 'type' => 'select', 'required' => true,
-        'options' => ['payment' => 'Payment', 'withholding' => 'Withholding'], 'value' => $payment->type,
-        'hint' => 'Withholding: tax withheld by the customer (a certificate instead of money).'])
+    {{-- Settings › General "Withholding tax" off: payments only --}}
+    @if (\Modules\PaymentModule\app\Services\PaymentService::withholdingOn())
+        @include('layoutmodule::partials.field', ['name' => 'type', 'label' => 'Type', 'type' => 'select', 'required' => true,
+            'options' => ['payment' => 'Payment', 'withholding' => 'Withholding'], 'value' => $payment->type,
+            'hint' => 'Withholding: tax withheld by the customer (a certificate instead of money).'])
+    @else
+        <input type="hidden" name="type" value="payment">
+    @endif
     @include('layoutmodule::partials.field', ['name' => 'amount', 'label' => 'Amount', 'type' => 'number', 'required' => true, 'value' => $payment->amount,
         'attrs' => 'min="0.01" step="0.01" max="99999999"'])
     @include('layoutmodule::partials.field', ['name' => 'paid_at', 'label' => 'Date', 'type' => 'date', 'required' => true,

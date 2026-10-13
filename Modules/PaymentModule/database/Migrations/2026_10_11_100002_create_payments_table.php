@@ -27,11 +27,15 @@ return new class extends Migration {
             // 0 for withholding (no money received, a certificate instead)
             $table->bigInteger('payment_method_id')->default(0);
             $table->bigInteger('withholding_certificate_id')->default(0);
-            // the employee's shift closing (0 = their open period; the account's own payments: always 0, locked by the day closing)
+            // a refund: the payment it gives money back for (0 = not a refund, or an imported refund with no link)
+            $table->bigInteger('refund_of')->default(0)->index();
+            // the collector's shift closing (0 = their open shift; the account's own payments too)
             $table->bigInteger('shift_closing_id')->default(0);
             $table->date('paid_at')->index();
             $table->string('reference')->nullable();
             $table->text('notes')->nullable();
+            // a refund: why the money was given back (required)
+            $table->string('reason')->nullable();
 
             $table->string('delete_reason')->nullable();
             $table->bigInteger('deleted_by')->default(0);

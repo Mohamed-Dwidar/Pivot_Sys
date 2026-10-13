@@ -45,14 +45,44 @@ class Account extends Model implements Userable
 
     protected $fillable = [
         'name_ar', 'name_en', 'phone', 'address', 'description_ar', 'description_en', 'logo', 'status', 'approved_at',
-        'shift_reminder_hours', 'shift_snooze_hours',
+        'withholding_enabled', 'vat_enabled',
     ];
 
     protected $casts = [
         'approved_at' => 'datetime',
-        'shift_reminder_hours' => 'integer',
-        'shift_snooze_hours' => 'integer',
+        'withholding_enabled' => 'boolean',
+        'vat_enabled' => 'boolean',
     ];
+
+    // Settings › General, loaded once per request by account id (settingsOf())
+    private static array $settings = [];
+
+    // the account (its settings) by id, loaded once per request — the views / services of its employees ask it too
+    public static function settingsOf($accountId): ?self
+    {
+        return self::$settings[(int) $accountId] ??= static::find((int) $accountId);
+    }
+
+    // after Settings › General is saved: the next settingsOf() reads it again
+    public static function forgetSettings($accountId): void
+    {
+        unset(self::$settings[(int) $accountId]);
+    }
+
+    /**
+     * Withholding tax (Settings › General, default ON). OFF: no new withholding (payment type / method filter option,
+     * certificates page + menu hidden); existing withholding records stay as they are and are still shown (docs/payments-plan.md).
+     */
+    public function withholdingEnabled(): bool
+    {
+        return (bool) ($this->withholding_enabled ?? true);
+    }
+
+    // VAT (Settings › General, default ON): Phase 2 only (OFF = prices tax free, no tax rates / lines; docs/payments-plan.md §3)
+    public function vatEnabled(): bool
+    {
+        return (bool) ($this->vat_enabled ?? true);
+    }
 
     // the account login (email, password)
     public function user(): MorphOne

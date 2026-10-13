@@ -13,10 +13,8 @@ return new class extends Migration {
         Schema::create('shift_closings', function (Blueprint $table) {
             $table->id();
             $table->bigInteger('account_id')->index();
-            // users.id of the employee who collected the payments
+            // users.id of who collected the payments (an employee, or the account itself)
             $table->bigInteger('user_id')->index();
-            // closed = its payments are locked; reopened = the account opened it again (its payments stay in it)
-            $table->enum('status', ['closed', 'reopened'])->default('closed');
             // created_at of its first / last payment (the shift's span)
             $table->dateTime('first_payment_at')->nullable();
             $table->dateTime('last_payment_at')->nullable();
@@ -28,12 +26,12 @@ return new class extends Migration {
             $table->json('totals')->nullable();
             $table->string('notes')->nullable();
 
-            // the employee, or the account (closed on their behalf)
+            // the collector, or the account (closed on their behalf)
             $table->bigInteger('closed_by');
             $table->dateTime('closed_at');
-            $table->bigInteger('reopened_by')->default(0);
-            $table->dateTime('reopened_at')->nullable();
-            $table->string('reopen_reason')->nullable();
+            // the account changed / deleted / refunded one of its payments after closing (badge "Edited after closing")
+            $table->dateTime('edited_at')->nullable();
+            $table->unsignedInteger('edit_count')->default(0);
 
             $table->timestamps();
         });

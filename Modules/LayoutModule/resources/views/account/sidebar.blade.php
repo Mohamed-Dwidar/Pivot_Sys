@@ -1,4 +1,6 @@
 @php
+    // Settings › General: withholding tax off → no Withholding Certificates item
+    $withholdingOn = Auth::user()->userable->withholdingEnabled();
     $items = [
         ['divider' => 'Main'],
         [
@@ -44,17 +46,23 @@
                     'url' => route('account.payments.index'),
                     'active' => request()->routeIs('account.payments.*'),
                 ],
-                [
+                ...($withholdingOn ? [[
                     'title' => 'Withholding Certificates',
                     'icon' => 'file-badge',
                     'url' => route('account.withholding-certificates.index'),
                     'active' => request()->routeIs('account.withholding-certificates.*'),
+                ]] : []),
+                [
+                    'title' => 'My Shift',
+                    'icon' => 'lock',
+                    'url' => route('account.shift.index'),
+                    'active' => request()->routeIs('account.shift.*'),
                 ],
                 [
-                    'title' => 'Day Closing',
-                    'icon' => 'lock',
-                    'url' => route('account.day-closings.index'),
-                    'active' => request()->routeIs('account.day-closings.*'),
+                    'title' => 'Daily Summary',
+                    'icon' => 'calendar-days',
+                    'url' => route('account.daily-summary.index'),
+                    'active' => request()->routeIs('account.daily-summary.*', 'account.shifts.*'),
                 ],
             ],
         ],
@@ -130,6 +138,12 @@
             'icon' => 'settings',
             'children' => [
                 [
+                    'title' => 'General',
+                    'icon' => 'sliders-horizontal',
+                    'url' => route('account.settings.general.edit'),
+                    'active' => request()->routeIs('account.settings.general.*'),
+                ],
+                [
                     'title' => 'Payment Methods',
                     'icon' => 'credit-card',
                     'url' => route('account.payment-methods.index'),
@@ -140,12 +154,6 @@
                     'icon' => 'tags',
                     'url' => route('account.income-categories.index'),
                     'active' => request()->routeIs('account.income-categories.*'),
-                ],
-                [
-                    'title' => 'Shift Reminders',
-                    'icon' => 'alarm-clock',
-                    'url' => route('account.shift-settings.edit'),
-                    'active' => request()->routeIs('account.shift-settings.*'),
                 ],
             ],
         ],

@@ -143,15 +143,6 @@ SELECT IF((SELECT COUNT(*) FROM transfer_precheck WHERE kind = 'BLOCKING' AND fo
 SET @income_offset = (SELECT MAX(id) FROM dwidar_pivot_api.payments);
 
 -- 3.1 new tables (create migrations exist; CREATE IF NOT EXISTS + the migrations rows, so php artisan migrate won't create them again)
-CREATE TABLE IF NOT EXISTS day_closing_logs (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  account_id BIGINT NOT NULL, day_closing_id BIGINT NOT NULL,
-  action ENUM('close', 'reopen') NOT NULL, user_id BIGINT NOT NULL, reason VARCHAR(255) NULL,
-  cash_total DECIMAL(12,2) NOT NULL DEFAULT 0, withholding_total DECIMAL(12,2) NOT NULL DEFAULT 0, totals JSON NULL,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  INDEX day_closing_logs_account_id_index (account_id), INDEX day_closing_logs_day_closing_id_index (day_closing_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 CREATE TABLE IF NOT EXISTS extras (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   account_id BIGINT NOT NULL,
@@ -172,29 +163,30 @@ SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEM
   'ALTER TABLE income_categories ADD is_revenue TINYINT(1) NOT NULL DEFAULT 1 AFTER is_active', 'SELECT ''is_revenue exists''');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
--- shift closing (payments-plan.md §2b): shift_closings, shift_events, payments.shift_closing_id, accounts reminder settings
+-- shift closing, the ONE closing level (payments-plan.md §2b, 2026-10-13): shift_closings, shift_events, payments.shift_closing_id,
+-- payments.refund_of / reason (a refund's payment + why); no day closing tables, reminder hours in config (not in accounts)
 CREATE TABLE IF NOT EXISTS shift_closings (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
   account_id BIGINT NOT NULL, user_id BIGINT NOT NULL,
-  status ENUM('closed', 'reopened') NOT NULL DEFAULT 'closed',
   first_payment_at DATETIME NULL, last_payment_at DATETIME NULL,
   count INT UNSIGNED NOT NULL DEFAULT 0,
   cash_total DECIMAL(12,2) NOT NULL DEFAULT 0, withholding_total DECIMAL(12,2) NOT NULL DEFAULT 0, totals JSON NULL,
   notes VARCHAR(255) NULL,
   closed_by BIGINT NOT NULL, closed_at DATETIME NOT NULL,
-  reopened_by BIGINT NOT NULL DEFAULT 0, reopened_at DATETIME NULL, reopen_reason VARCHAR(255) NULL,
+  edited_at DATETIME NULL, edit_count INT UNSIGNED NOT NULL DEFAULT 0,
   created_at TIMESTAMP NULL, updated_at TIMESTAMP NULL,
   INDEX shift_closings_account_id_index (account_id), INDEX shift_closings_user_id_index (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS shift_events (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  account_id BIGINT NOT NULL, user_id BIGINT NOT NULL, shift_closing_id BIGINT NOT NULL DEFAULT 0, by_user_id BIGINT NOT NULL,
-  action ENUM('close', 'close_on_behalf', 'reopen', 'reclose', 'logout_closed', 'logout_still_working', 'still_working') NOT NULL,
-  reason VARCHAR(255) NULL, totals JSON NULL,
+  account_id BIGINT NOT NULL, user_id BIGINT NOT NULL, shift_closing_id BIGINT NOT NULL DEFAULT 0, payment_id BIGINT NOT NULL DEFAULT 0,
+  by_user_id BIGINT NOT NULL,
+  action ENUM('close', 'close_on_behalf', 'logout_closed', 'logout_still_working', 'still_working', 'payment_edit', 'payment_delete', 'payment_refund') NOT NULL,
+  reason VARCHAR(255) NULL, totals JSON NULL, changes JSON NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX shift_events_account_id_index (account_id), INDEX shift_events_user_id_index (user_id),
-  INDEX shift_events_shift_closing_id_index (shift_closing_id)
+  INDEX shift_events_shift_closing_id_index (shift_closing_id), INDEX shift_events_payment_id_index (payment_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'payments' AND COLUMN_NAME = 'shift_closing_id') = 0,
@@ -202,14 +194,14 @@ SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEM
   'SELECT ''shift_closing_id exists''');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
-SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accounts' AND COLUMN_NAME = 'shift_reminder_hours') = 0,
-  'ALTER TABLE accounts ADD shift_reminder_hours SMALLINT UNSIGNED NOT NULL DEFAULT 12 AFTER approved_at, ADD shift_snooze_hours SMALLINT UNSIGNED NOT NULL DEFAULT 4 AFTER shift_reminder_hours',
-  'SELECT ''shift_reminder_hours exists''');
+SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'payments' AND COLUMN_NAME = 'refund_of') = 0,
+  'ALTER TABLE payments ADD refund_of BIGINT NOT NULL DEFAULT 0 AFTER withholding_certificate_id, ADD reason VARCHAR(255) NULL AFTER notes, ADD INDEX payments_refund_of_index (refund_of)',
+  'SELECT ''refund_of exists''');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
 INSERT INTO migrations (migration, batch)
 SELECT m.migration, (SELECT MAX(batch) + 1 FROM migrations) FROM (
-  SELECT '2026_10_11_100005_create_day_closing_logs_table' migration UNION ALL SELECT '2026_10_11_100006_create_extras_table'
+  SELECT '2026_10_11_100006_create_extras_table' migration
   UNION ALL SELECT '2026_10_11_100007_create_shift_closings_table' UNION ALL SELECT '2026_10_11_100008_create_shift_events_table'
 ) m WHERE m.migration NOT IN (SELECT migration FROM migrations);
 
@@ -225,8 +217,6 @@ TRUNCATE TABLE extras;
 TRUNCATE TABLE payment_methods;
 TRUNCATE TABLE income_categories;
 TRUNCATE TABLE withholding_certificates;
-TRUNCATE TABLE day_closings;
-TRUNCATE TABLE day_closing_logs;
 TRUNCATE TABLE shift_closings;
 TRUNCATE TABLE shift_events;
 -- employees / logins that are not an old user (same id + same name / email) = the 2 test employees of the first run; on a re-run: nothing
@@ -402,21 +392,26 @@ SET @sql = CONCAT('ALTER TABLE employees AUTO_INCREMENT = ', (SELECT MAX(id) + 1
 SET @sql = CONCAT('ALTER TABLE income_categories AUTO_INCREMENT = ', (SELECT MAX(id) + 1 FROM income_categories)); PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 SET @sql = CONCAT('ALTER TABLE payment_methods AUTO_INCREMENT = ', (SELECT GREATEST(MAX(id) + 1, 7) FROM payment_methods)); PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
--- 3.15 imported payments of each old employee = ONE closed shift closing per employee (else years of open period → the
---      "close your shift" popup at once). Payments of the account login (1) are not in a shift (locked by the day closing).
---      totals = ShiftClosingService::summary() shape: methods {id: {name, payments, refunds, net}}, withholding {count, total}, cash_total, count
-INSERT INTO shift_closings (account_id, user_id, status, first_payment_at, last_payment_at, count, cash_total, withholding_total, totals, notes,
+-- 3.15 imported payments of each old login = ONE closed shift closing per login: every old employee AND the account login (1)
+--      (2026-10-13: the account collects into its own shift too) — else years of open shift (the "close your shift" popup at once,
+--      the account's My Shift full of old payments). Only imported payments (id < 100001): app payments stay in the open shift.
+--      closed_at = the shift's LAST payment (created_at), not the run time; its "close" event at the same time (user 2026-10-13).
+--      totals = ShiftClosingService::summary() shape: methods {id: {name, payments, refunds, net}}, refunds {count, total},
+--      withholding {count, total}, cash_total, count
+INSERT INTO shift_closings (account_id, user_id, first_payment_at, last_payment_at, count, cash_total, withholding_total, totals, notes,
   closed_by, closed_at, created_at, updated_at)
-SELECT 1, t.user_id, 'closed', t.first_at, t.last_at, t.n, t.cash, t.wh,
-  JSON_OBJECT('methods', COALESCE(m.methods, JSON_OBJECT()), 'withholding', JSON_OBJECT('count', t.wh_n, 'total', t.wh),
+SELECT 1, t.user_id, t.first_at, t.last_at, t.n, t.cash, t.wh,
+  JSON_OBJECT('methods', COALESCE(m.methods, JSON_OBJECT()), 'refunds', JSON_OBJECT('count', t.rf_n, 'total', t.rf),
+    'withholding', JSON_OBJECT('count', t.wh_n, 'total', t.wh),
     'cash_total', t.cash, 'count', t.n),
-  'Imported from the old system', 1, NOW(), NOW(), NOW()
+  'Imported from the old system', 1, t.last_at, NOW(), NOW()
 FROM (
   SELECT p.creatable_id user_id, MIN(p.created_at) first_at, MAX(p.created_at) last_at, COUNT(*) n,
     ROUND(SUM(CASE p.type WHEN 'payment' THEN p.amount WHEN 'refund' THEN -p.amount ELSE 0 END), 2) cash,
-    ROUND(SUM(IF(p.type = 'withholding', p.amount, 0)), 2) wh, SUM(p.type = 'withholding') wh_n
-  FROM payments p JOIN users u ON u.id = p.creatable_id AND u.userable_type = 'Modules\\EmployeeModule\\app\\Models\\Employee'
-  WHERE p.account_id = 1 AND p.deleted_at IS NULL AND p.shift_closing_id = 0
+    ROUND(SUM(IF(p.type = 'withholding', p.amount, 0)), 2) wh, SUM(p.type = 'withholding') wh_n,
+    ROUND(SUM(IF(p.type = 'refund', p.amount, 0)), 2) rf, SUM(p.type = 'refund') rf_n
+  FROM payments p JOIN users u ON u.id = p.creatable_id AND u.userable_type IN ('Modules\\EmployeeModule\\app\\Models\\Employee', 'Modules\\AccountModule\\app\\Models\\Account')
+  WHERE p.account_id = 1 AND p.id < 100001 AND p.deleted_at IS NULL AND p.shift_closing_id = 0
   GROUP BY p.creatable_id
 ) t
 LEFT JOIN (
@@ -425,9 +420,9 @@ LEFT JOIN (
     SELECT p.creatable_id user_id, p.payment_method_id, COALESCE(pm.name_en, pm.name_ar, CONCAT('Method #', p.payment_method_id)) name,
       ROUND(SUM(IF(p.type = 'payment', p.amount, 0)), 2) payments, ROUND(SUM(IF(p.type = 'refund', p.amount, 0)), 2) refunds,
       ROUND(SUM(IF(p.type = 'refund', -p.amount, p.amount)), 2) net
-    FROM payments p JOIN users u ON u.id = p.creatable_id AND u.userable_type = 'Modules\\EmployeeModule\\app\\Models\\Employee'
+    FROM payments p JOIN users u ON u.id = p.creatable_id AND u.userable_type IN ('Modules\\EmployeeModule\\app\\Models\\Employee', 'Modules\\AccountModule\\app\\Models\\Account')
     LEFT JOIN payment_methods pm ON pm.id = p.payment_method_id
-    WHERE p.account_id = 1 AND p.deleted_at IS NULL AND p.shift_closing_id = 0 AND p.type <> 'withholding'
+    WHERE p.account_id = 1 AND p.id < 100001 AND p.deleted_at IS NULL AND p.shift_closing_id = 0 AND p.type <> 'withholding'
     GROUP BY p.creatable_id, p.payment_method_id, pm.name_en, pm.name_ar
   ) x GROUP BY x.user_id
 ) m ON m.user_id = t.user_id;
@@ -435,69 +430,70 @@ LEFT JOIN (
 UPDATE payments p
 JOIN shift_closings s ON s.account_id = p.account_id AND s.user_id = p.creatable_id AND s.notes = 'Imported from the old system'
 SET p.shift_closing_id = s.id
-WHERE p.account_id = 1 AND p.deleted_at IS NULL AND p.shift_closing_id = 0;
+WHERE p.account_id = 1 AND p.id < 100001 AND p.deleted_at IS NULL AND p.shift_closing_id = 0;
 
-INSERT INTO shift_events (account_id, user_id, shift_closing_id, by_user_id, action, reason, totals)
-SELECT account_id, user_id, id, 1, 'close', 'Imported from the old system', totals FROM shift_closings WHERE notes = 'Imported from the old system';
+INSERT INTO shift_events (account_id, user_id, shift_closing_id, by_user_id, action, reason, totals, created_at)
+SELECT account_id, user_id, id, 1, 'close', 'Imported from the old system', totals, closed_at FROM shift_closings WHERE notes = 'Imported from the old system';
 
--- 3.16 every imported date BEFORE today = a closed day (all history locked; the account can reopen a day with a reason),
---      logged "Imported from the old system". Today stays open: the first app payments of the go-live day must be allowed
---      (the account closes it as usual). totals = DayClosingService::summary() shape:
---      employees {user_id: {name, methods {id: {payments, refunds, net}}, net}}, methods {id: {name, net}}, withholding {count, total}, cash_total, count
--- a normal helper table (MySQL can't read a TEMPORARY table twice in one query), dropped below
-DROP TABLE IF EXISTS tmp_import_days;
-CREATE TABLE tmp_import_days (paid_at DATE PRIMARY KEY)
-SELECT DISTINCT paid_at FROM payments WHERE account_id = 1 AND id < 100001 AND paid_at < CURDATE();
 
-INSERT INTO day_closings (account_id, date, status, cash_total, withholding_total, totals, closed_by, closed_at, created_at, updated_at)
-SELECT 1, d.paid_at, 'closed', d.cash, d.wh,
-  JSON_OBJECT('employees', COALESCE(e.employees, JSON_OBJECT()), 'methods', COALESCE(m.methods, JSON_OBJECT()),
-    'withholding', JSON_OBJECT('count', d.wh_n, 'total', d.wh), 'cash_total', d.cash, 'count', d.n),
-  1, NOW(), NOW(), NOW()
+-----
+STEP 3.15b — ONE TIME on the already imported DB (2026-10-13; NOT for a fresh go-live run: 3.15 does both there).
+A: the account login's imported payments (1,848, ids < 100001, still open) → one closed "Imported from the old system" shift, closed at
+   its last payment (04-10-2026 23:50:30), closed by the account login; app payments (id >= 100001) stay open.
+B: every imported shift (the 14 employees' were closed at the transfer time 11-10-2026 19:39) → closed_at / last_payment_at = its last
+   payment, its "close" event at the same time.
+Dry-run in a rolled back transaction: owner shift 1,848 / 1,346,429.92, withholding 2,786.00; then check 6.11 = all 0.
+
+-- A. the account login's imported payments (id < 100001, still open) → ONE closed "Imported from the old system" shift,
+--    closed at its last payment (created_at), closed by the account login (1); app payments (id >= 100001) stay open
+INSERT INTO shift_closings (account_id, user_id, first_payment_at, last_payment_at, count, cash_total, withholding_total, totals, notes,
+  closed_by, closed_at, created_at, updated_at)
+SELECT 1, t.user_id, t.first_at, t.last_at, t.n, t.cash, t.wh,
+  JSON_OBJECT('methods', COALESCE(m.methods, JSON_OBJECT()), 'refunds', JSON_OBJECT('count', t.rf_n, 'total', t.rf),
+    'withholding', JSON_OBJECT('count', t.wh_n, 'total', t.wh), 'cash_total', t.cash, 'count', t.n),
+  'Imported from the old system', 1, t.last_at, NOW(), NOW()
 FROM (
-  SELECT p.paid_at, COUNT(*) n,
+  SELECT p.creatable_id user_id, MIN(p.created_at) first_at, MAX(p.created_at) last_at, COUNT(*) n,
     ROUND(SUM(CASE p.type WHEN 'payment' THEN p.amount WHEN 'refund' THEN -p.amount ELSE 0 END), 2) cash,
-    ROUND(SUM(IF(p.type = 'withholding', p.amount, 0)), 2) wh, SUM(p.type = 'withholding') wh_n
-  FROM payments p JOIN tmp_import_days t ON t.paid_at = p.paid_at
-  WHERE p.account_id = 1 AND p.deleted_at IS NULL GROUP BY p.paid_at
-) d
+    ROUND(SUM(IF(p.type = 'withholding', p.amount, 0)), 2) wh, SUM(p.type = 'withholding') wh_n,
+    ROUND(SUM(IF(p.type = 'refund', p.amount, 0)), 2) rf, SUM(p.type = 'refund') rf_n
+  FROM payments p JOIN users u ON u.id = p.creatable_id AND u.userable_type = 'Modules\\AccountModule\\app\\Models\\Account'
+  WHERE p.account_id = 1 AND p.id < 100001 AND p.deleted_at IS NULL AND p.shift_closing_id = 0
+  GROUP BY p.creatable_id
+) t
 LEFT JOIN (
-  SELECT u.paid_at, JSON_OBJECTAGG(u.user_id, JSON_OBJECT('name', u.name, 'methods', u.methods, 'net', u.net)) employees
+  SELECT x.user_id, JSON_OBJECTAGG(x.payment_method_id, JSON_OBJECT('name', x.name, 'payments', x.payments, 'refunds', x.refunds, 'net', x.net)) methods
   FROM (
-    SELECT x.paid_at, x.user_id, x.name,
-      JSON_OBJECTAGG(x.payment_method_id, JSON_OBJECT('payments', x.payments, 'refunds', x.refunds, 'net', x.net)) methods, ROUND(SUM(x.net), 2) net
-    FROM (
-      SELECT p.paid_at, p.creatable_id user_id, COALESCE(e.name, NULLIF(a.name_en, ''), a.name_ar, CONCAT('User #', p.creatable_id)) name,
-        p.payment_method_id,
-        ROUND(SUM(IF(p.type = 'payment', p.amount, 0)), 2) payments, ROUND(SUM(IF(p.type = 'refund', p.amount, 0)), 2) refunds,
-        ROUND(SUM(IF(p.type = 'refund', -p.amount, p.amount)), 2) net
-      FROM payments p JOIN tmp_import_days t ON t.paid_at = p.paid_at
-      LEFT JOIN users us ON us.id = p.creatable_id
-      LEFT JOIN employees e ON us.userable_type = 'Modules\\EmployeeModule\\app\\Models\\Employee' AND e.id = us.userable_id
-      LEFT JOIN accounts a ON us.userable_type = 'Modules\\AccountModule\\app\\Models\\Account' AND a.id = us.userable_id
-      WHERE p.account_id = 1 AND p.deleted_at IS NULL AND p.type <> 'withholding'
-      GROUP BY p.paid_at, p.creatable_id, e.name, a.name_en, a.name_ar, p.payment_method_id
-    ) x GROUP BY x.paid_at, x.user_id, x.name
-  ) u GROUP BY u.paid_at
-) e ON e.paid_at = d.paid_at
-LEFT JOIN (
-  SELECT y.paid_at, JSON_OBJECTAGG(y.payment_method_id, JSON_OBJECT('name', y.name, 'net', y.net)) methods
-  FROM (
-    SELECT p.paid_at, p.payment_method_id, COALESCE(NULLIF(pm.name_en, ''), pm.name_ar, CONCAT('Method #', p.payment_method_id)) name,
+    SELECT p.creatable_id user_id, p.payment_method_id, COALESCE(pm.name_en, pm.name_ar, CONCAT('Method #', p.payment_method_id)) name,
+      ROUND(SUM(IF(p.type = 'payment', p.amount, 0)), 2) payments, ROUND(SUM(IF(p.type = 'refund', p.amount, 0)), 2) refunds,
       ROUND(SUM(IF(p.type = 'refund', -p.amount, p.amount)), 2) net
-    FROM payments p JOIN tmp_import_days t ON t.paid_at = p.paid_at
+    FROM payments p JOIN users u ON u.id = p.creatable_id AND u.userable_type = 'Modules\\AccountModule\\app\\Models\\Account'
     LEFT JOIN payment_methods pm ON pm.id = p.payment_method_id
-    WHERE p.account_id = 1 AND p.deleted_at IS NULL AND p.type <> 'withholding'
-    GROUP BY p.paid_at, p.payment_method_id, pm.name_en, pm.name_ar
-  ) y GROUP BY y.paid_at
-) m ON m.paid_at = d.paid_at;
+    WHERE p.account_id = 1 AND p.id < 100001 AND p.deleted_at IS NULL AND p.shift_closing_id = 0 AND p.type <> 'withholding'
+    GROUP BY p.creatable_id, p.payment_method_id, pm.name_en, pm.name_ar
+  ) x GROUP BY x.user_id
+) m ON m.user_id = t.user_id;
 
-INSERT INTO day_closing_logs (account_id, day_closing_id, action, user_id, reason, cash_total, withholding_total, totals)
-SELECT c.account_id, c.id, 'close', 1, 'Imported from the old system', c.cash_total, c.withholding_total, c.totals
-FROM day_closings c JOIN tmp_import_days t ON t.paid_at = c.date
-WHERE c.account_id = 1 AND c.id NOT IN (SELECT day_closing_id FROM day_closing_logs);
+UPDATE payments p
+JOIN users u ON u.id = p.creatable_id AND u.userable_type = 'Modules\\AccountModule\\app\\Models\\Account'
+JOIN shift_closings s ON s.account_id = p.account_id AND s.user_id = p.creatable_id AND s.notes = 'Imported from the old system'
+SET p.shift_closing_id = s.id
+WHERE p.account_id = 1 AND p.id < 100001 AND p.deleted_at IS NULL AND p.shift_closing_id = 0;
 
-DROP TABLE tmp_import_days;
+INSERT INTO shift_events (account_id, user_id, shift_closing_id, by_user_id, action, reason, totals, created_at)
+SELECT s.account_id, s.user_id, s.id, 1, 'close', 'Imported from the old system', s.totals, s.closed_at FROM shift_closings s
+WHERE s.notes = 'Imported from the old system' AND s.id NOT IN (SELECT shift_closing_id FROM shift_events WHERE action = 'close');
+
+-- B. every imported shift (the employees' too): closed at its last payment, its "close" event at the same time
+UPDATE shift_closings s
+JOIN (SELECT shift_closing_id, MAX(created_at) last_at FROM payments WHERE deleted_at IS NULL AND shift_closing_id > 0 GROUP BY shift_closing_id) p
+  ON p.shift_closing_id = s.id
+SET s.closed_at = p.last_at, s.last_payment_at = p.last_at
+WHERE s.notes = 'Imported from the old system';
+
+UPDATE shift_events e JOIN shift_closings s ON s.id = e.shift_closing_id
+SET e.created_at = s.closed_at
+WHERE s.notes = 'Imported from the old system' AND e.action = 'close';
 
 -----
 STEP 4 — recalculate the packages (terminal): price / net from the reservations, then paid / remaining (net + extras − payments)
@@ -591,21 +587,18 @@ UNION ALL SELECT 'reservations credit', COUNT(*), SUM(remaining) FROM reservatio
 UNION ALL SELECT 'packages owed', COUNT(*), SUM(remaining) FROM packages WHERE remaining > 0
 UNION ALL SELECT 'packages credit', COUNT(*), SUM(remaining) FROM packages WHERE remaining < 0;
 
--- 6.11 shift closings (after 3.15): every employee payment is in its imported closing; the closings' totals = their payments
-SELECT 'employee payments without a closing (0)' t, COUNT(*) n FROM payments p JOIN users u ON u.id = p.creatable_id
-  AND u.userable_type = 'Modules\\EmployeeModule\\app\\Models\\Employee' WHERE p.deleted_at IS NULL AND p.shift_closing_id = 0
+-- 6.11 shift closings (after 3.15 / 3.15b): every imported payment (employees + the account) is in its imported closing; the closings'
+--      totals = their payments; every imported closing is closed at its last payment, its "close" event at the same time — all 0
+SELECT 'imported payments without a closing (0)' t, COUNT(*) n FROM payments p
+  WHERE p.id < 100001 AND p.deleted_at IS NULL AND p.shift_closing_id = 0
 UNION ALL SELECT 'closings whose totals differ (0)', COUNT(*) FROM shift_closings s
   JOIN (SELECT shift_closing_id, COUNT(*) n, ROUND(SUM(CASE type WHEN 'payment' THEN amount WHEN 'refund' THEN -amount ELSE 0 END), 2) cash
         FROM payments WHERE deleted_at IS NULL AND shift_closing_id > 0 GROUP BY shift_closing_id) p ON p.shift_closing_id = s.id
-  WHERE p.n <> s.count OR p.cash <> s.cash_total;
-
--- 6.12 day closings (after 3.16): every imported date before the import day is closed; its totals = its payments
-SELECT 'imported dates before today not closed (0)' t, COUNT(DISTINCT p.paid_at) n FROM payments p
-  LEFT JOIN day_closings c ON c.account_id = p.account_id AND c.date = p.paid_at AND c.status = 'closed'
-  WHERE p.id < 100001 AND p.paid_at < CURDATE() AND c.id IS NULL
-UNION ALL SELECT 'closed days whose cash total differs (0)', COUNT(*) FROM day_closings c
-  JOIN (SELECT paid_at, ROUND(SUM(CASE type WHEN 'payment' THEN amount WHEN 'refund' THEN -amount ELSE 0 END), 2) cash
-        FROM payments WHERE deleted_at IS NULL GROUP BY paid_at) p ON p.paid_at = c.date
-  WHERE p.cash <> c.cash_total
-UNION ALL SELECT 'closed days without a log (0)', COUNT(*) FROM day_closings c
-  WHERE c.id NOT IN (SELECT day_closing_id FROM day_closing_logs);
+  WHERE p.n <> s.count OR p.cash <> s.cash_total
+UNION ALL SELECT 'imported closings not closed at their last payment (0)', COUNT(*) FROM shift_closings s
+  JOIN (SELECT shift_closing_id, MAX(created_at) last_at FROM payments WHERE deleted_at IS NULL AND shift_closing_id > 0 GROUP BY shift_closing_id) p
+    ON p.shift_closing_id = s.id
+  WHERE s.notes = 'Imported from the old system' AND (s.closed_at <> p.last_at OR s.last_payment_at <> p.last_at)
+UNION ALL SELECT 'imported closings whose close event is not at closed_at (0)', COUNT(*) FROM shift_closings s
+  LEFT JOIN shift_events e ON e.shift_closing_id = s.id AND e.action = 'close'
+  WHERE s.notes = 'Imported from the old system' AND (e.id IS NULL OR e.created_at <> s.closed_at);

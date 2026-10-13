@@ -12,9 +12,10 @@ use Symfony\Component\HttpFoundation\Response;
 /**
  * The shift reminders of a logged in EMPLOYEE (docs/payments-plan.md §2b), never a block (added to the "web" group by
  * PaymentModuleServiceProvider; it does nothing for other users):
- * - a full page: $shiftOpen (their open period has payments → the logout popup, employee layout) and $shiftReminderUrl
- *   (the open period is older than the account's shift_reminder_hours, no "still working" in the last shift_snooze_hours
+ * - a full page: $shiftOpen (their open shift has payments → the logout popup, employee layout) and $shiftReminderUrl
+ *   (the open shift is older than config paymentmodule.shift_reminder_hours, no "still working" in the last shift_snooze_hours
  *   → the employee layout opens the "close your shift" popup, custom.js)
+ * The account's own shift has no reminders / logout popup (user, 2026-10-13).
  * - an ajax action (not GET): the X-Shift-Reminder header with the popup url (custom.js opens it after the action)
  * The shift pages / popups themselves are left out.
  */

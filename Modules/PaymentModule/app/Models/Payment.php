@@ -5,6 +5,7 @@ namespace Modules\PaymentModule\app\Models;
 use App\Helpers\SafeMorphHelper;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
@@ -55,7 +56,7 @@ class Payment extends Model
 
     protected $fillable = [
         'account_id', 'payment_no', 'payable_type', 'payable_id', 'income_category_id', 'member_id',
-        'type', 'amount', 'payment_method_id', 'withholding_certificate_id', 'paid_at', 'reference', 'notes',
+        'type', 'amount', 'payment_method_id', 'withholding_certificate_id', 'refund_of', 'paid_at', 'reference', 'notes', 'reason',
         'delete_reason', 'deleted_by',
     ];
 
@@ -64,6 +65,7 @@ class Payment extends Model
         'amount' => 'float',
         'paid_at' => 'date',
         'shift_closing_id' => 'integer',
+        'refund_of' => 'integer',
     ];
 
     public function account(): BelongsTo
@@ -97,7 +99,7 @@ class Payment extends Model
         return $this->belongsTo(WithholdingCertificate::class);
     }
 
-    // the employee's shift closing (not fillable: set by ShiftClosingService only; 0 = open period / the account's own payment)
+    // the collector's shift closing (not fillable: set by ShiftClosingService only; 0 = the collector's open shift)
     public function shiftClosing(): BelongsTo
     {
         return $this->belongsTo(ShiftClosing::class);
@@ -107,6 +109,18 @@ class Payment extends Model
     public function creatable(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    // a refund: the payment it gives money back for (0 = an imported refund with no link)
+    public function refundOf(): BelongsTo
+    {
+        return $this->belongsTo(Payment::class, 'refund_of')->withTrashed();
+    }
+
+    // a payment: its refunds (refund_of)
+    public function refunds(): HasMany
+    {
+        return $this->hasMany(Payment::class, 'refund_of');
     }
 
     public function deletedBy(): BelongsTo

@@ -4,13 +4,13 @@ namespace Modules\PaymentModule\app\Services;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Modules\AccountModule\app\Models\Account;
 use Modules\MemberModule\app\Models\Member;
 use Modules\PackageModule\app\Models\Package;
 use Modules\PaymentModule\app\Contracts\Payable;
-use Modules\PaymentModule\app\Models\DayClosing;
 use Modules\PaymentModule\app\Models\IncomeCategory;
 use Modules\PaymentModule\app\Models\Payment;
 use Modules\PaymentModule\app\Models\PaymentMethod;
@@ -21,8 +21,9 @@ use Modules\ReservationModule\app\Models\Reservation;
 /**
  * Payments of an account: every method takes the owner account id, so an account can only reach its own payments.
  * - amount always positive, type gives the sign (Payment::PAID_SQL); paid_amount / remaining of the payable kept by refresh()
- * - a payment dated on a closed day can't be added (assertDayOpen()); a payment in a closed shift or on a closed day
- *   can't be changed / deleted (assertPaymentOpen()) — two levels, docs/payments-plan.md §2b
+ * - ONE closing level, the shift (docs/payments-plan.md §2b, 2026-10-13): no day lock; a payment of a CLOSED shift can still be
+ *   edited / deleted by the account with a reason (ShiftClosingService::paymentChanged(): totals recalculated, logged, marked);
+ *   refunds by any login (reason, not more than that payment's amount - its refunds), into the refunder's open shift
  * - payment_no: per account, MAX + 1 inside the transaction (locked), from config paymentmodule.number_start
  * The rules errors are thrown as ValidationException (422, shown under the fields by custom.js).
  * The service checks the account ownership itself (method, category, member, payable): it is also called by imports / invoices.
@@ -31,6 +32,16 @@ class PaymentService
 {
     // the payable kinds of the payment form => their models
     const PAYABLES = Payment::SOURCES;
+
+    /**
+     * Settings › General "Withholding tax" of the account (default the logged in user's account): OFF = no new withholding
+     * (type / filter options, certificates page hidden); existing withholding records stay and are shown.
+     */
+    public static function withholdingOn($accountId = null): bool
+    {
+        $accountId ??= Auth::user()?->userable?->ownerAccountId();
+        return $accountId ? (Account::settingsOf($accountId)?->withholdingEnabled() ?? true) : true;
+    }
 
     private $paymentRepository;
 
@@ -137,6 +148,9 @@ class PaymentService
         if (!in_array($type, ['payment', 'withholding'], true)) {
             throw ValidationException::withMessages(['type' => 'Only a payment or a withholding can be added here.']);
         }
+        if ($type === 'withholding' && !self::withholdingOn($accountId)) {
+            throw ValidationException::withMessages(['type' => 'Withholding tax is turned off (Settings › General).']);
+        }
 
         $payable = !empty($data['payable']) ? $this->findPayable($accountId, $data['payable'], $data['payable_id'] ?? 0) : null;
         if ($payable && !$payable->canTakePayments()) {
@@ -155,7 +169,6 @@ class PaymentService
         }
 
         $paidAt = Carbon::parse($data['paid_at'] ?? today())->startOfDay();
-        $this->assertDayOpen($accountId, $paidAt);
 
         return DB::transaction(function () use ($accountId, $data, $creator, $type, $payable, $amount, $paidAt) {
             $payment = new Payment([
@@ -188,7 +201,7 @@ class PaymentService
     /**
      * The owner's edit: amount, date, method, income category (other income), reference, notes.
      * The payable / member / type are kept (a payment for another reservation = delete it and add a new one).
-     * Both the old and the new date must be open days.
+     * In a CLOSED shift: $data['change_reason'] required; the shift's totals are recalculated and the change logged (before / after).
      */
     public function update($accountId, $id, array $data, Model $user): Payment
     {
@@ -204,14 +217,15 @@ class PaymentService
             $this->assertCategory($accountId, $data['income_category_id'] ?? 0);
         }
         $paidAt = Carbon::parse($data['paid_at'] ?? $payment->paid_at)->startOfDay();
-        $this->assertPaymentOpen($payment);
-        $this->assertDayOpen($accountId, $paidAt);
-        // a refund of a reservation / package: still not more than the money received (other income refunds are not linked)
-        if ($payment->type === 'refund' && $payment->payable_type) {
-            $this->assertRefundable($payment, $amount, $payment);
+        $closing = $this->closedShiftOf($payment);
+        $reason = $closing ? $this->assertReason($data['change_reason'] ?? '', 'change_reason', 'Write why this payment of a closed shift is changed.') : null;
+        // a refund: still not more than its payment's amount (linked), or the money received of its reservation / package (imported)
+        if ($payment->type === 'refund' && ($payment->refund_of || $payment->payable_type)) {
+            $this->assertRefundable($payment->refund_of ? Payment::withTrashed()->find($payment->refund_of) ?? $payment : $payment, $amount, $payment);
         }
 
-        return DB::transaction(function () use ($payment, $data, $amount, $paidAt) {
+        return DB::transaction(function () use ($payment, $data, $amount, $paidAt, $closing, $reason, $user) {
+            $before = $this->snapshot($payment);
             $payment->update([
                 'amount' => $amount,
                 'paid_at' => $paidAt,
@@ -221,39 +235,44 @@ class PaymentService
                 'notes' => $data['notes'] ?? null,
             ]);
             $this->refreshPayableOf($payment);
+            if ($closing) {
+                $this->shifts()->paymentChanged($closing, 'payment_edit', $payment, $user, $reason, ['before' => $before, 'after' => $this->snapshot($payment)]);
+            }
 
             return $payment;
         });
     }
 
-    // the owner's delete: soft delete with the reason and who deleted it (kept for the audit report)
+    // the owner's delete: soft delete with the reason and who deleted it (kept for the audit report); in a closed shift:
+    // its totals recalculated without it + logged
     public function delete($accountId, $id, string $reason, Model $user): Payment
     {
         $this->assertOwner($user);
         $payment = $this->findOne($accountId, $id);
-        $this->assertPaymentOpen($payment, 'delete_reason');
-        if (trim($reason) === '') {
-            throw ValidationException::withMessages(['delete_reason' => 'Write why this payment is deleted.']);
-        }
+        $reason = $this->assertReason($reason, 'delete_reason', 'Write why this payment is deleted.');
+        $closing = $this->closedShiftOf($payment);
 
-        return DB::transaction(function () use ($payment, $reason, $user) {
-            $payment->update(['delete_reason' => trim($reason), 'deleted_by' => $user->getKey()]);
+        return DB::transaction(function () use ($payment, $reason, $user, $closing) {
+            $payment->update(['delete_reason' => $reason, 'deleted_by' => $user->getKey()]);
             $payment->delete();
             $this->refreshPayableOf($payment);
+            if ($closing) {
+                $this->shifts()->paymentChanged($closing, 'payment_delete', $payment, $user, $reason, ['before' => $this->snapshot($payment), 'after' => null]);
+            }
 
             return $payment;
         });
     }
 
     /**
-     * The owner's refund of a payment: a new refund record (positive amount, type refund) for the same payable / income,
-     * paid back with a method. Not more than the money received: a reservation / package = its payments - its refunds
-     * (withholding is not money received); other income = this payment - nothing (refunds of income are not linked).
-     * $data: amount, payment_method_id, paid_at, reference, notes
+     * A refund of a payment, by the account OR an employee (2026-10-13): a new refund record (positive amount, type refund,
+     * refund_of = the payment) for the same payable / income, paid back with a method, created by the refunder → it joins THEIR
+     * open shift (the cash leaves their drawer). Reason required. Not more than this payment's amount - its earlier refunds.
+     * The payment in a closed shift: that shift gets the log entry + "Edited after closing" only (its totals don't change).
+     * $data: amount, payment_method_id, paid_at, reason, reference, notes
      */
     public function refund($accountId, $id, array $data, Model $user): Payment
     {
-        $this->assertOwner($user);
         $payment = $this->findOne($accountId, $id);
         if ($payment->type !== 'payment') {
             throw ValidationException::withMessages(['amount' => 'Only a payment can be refunded (not a refund or a withholding).']);
@@ -261,11 +280,12 @@ class PaymentService
 
         $amount = $this->assertAmount($data['amount'] ?? 0);
         $this->assertMethod($accountId, $data['payment_method_id'] ?? 0);
+        $reason = $this->assertReason($data['reason'] ?? '', 'reason', 'Write why the money is given back.');
         $this->assertRefundable($payment, $amount);
         $paidAt = Carbon::parse($data['paid_at'] ?? today())->startOfDay();
-        $this->assertDayOpen($accountId, $paidAt);
+        $closing = $this->closedShiftOf($payment);
 
-        return DB::transaction(function () use ($accountId, $payment, $data, $user, $amount, $paidAt) {
+        return DB::transaction(function () use ($accountId, $payment, $data, $user, $amount, $paidAt, $reason, $closing) {
             $refund = new Payment([
                 'account_id' => $accountId,
                 'payment_no' => $this->nextNumber($accountId),
@@ -276,28 +296,42 @@ class PaymentService
                 'type' => 'refund',
                 'amount' => $amount,
                 'payment_method_id' => (int) $data['payment_method_id'],
+                'refund_of' => $payment->getKey(),
                 'paid_at' => $paidAt,
                 'reference' => ($data['reference'] ?? null) ?: 'Refund of #' . $payment->payment_no,
                 'notes' => $data['notes'] ?? null,
+                'reason' => $reason,
             ]);
             $refund->creatable()->associate($user);
             $refund->save();
             $this->refreshPayableOf($refund);
+            if ($closing) {
+                $this->shifts()->paymentChanged($closing, 'payment_refund', $payment, $user, $reason, ['before' => $this->snapshot($payment), 'after' => $this->snapshot($refund)]);
+            }
 
             return $refund;
         });
     }
 
-    // the most that can be refunded now (the refund form); $except: a refund being edited (its amount is not counted)
+    /**
+     * The most that can be refunded now (the refund form); $except: a refund being edited (its amount is not counted).
+     * A payment: its amount - its refunds (refund_of). An imported refund with no link (edited): the money received of its
+     * reservation / package (payments - refunds), or its own amount for other income.
+     */
     public function refundable(Payment $payment, ?Payment $except = null): float
     {
-        $query = Payment::where('account_id', $payment->account_id)->whereIn('type', ['payment', 'refund'])
-            ->when($except, fn ($query) => $query->whereKeyNot($except->getKey()));
+        if ($payment->type === 'payment') {
+            $refunded = Payment::where('refund_of', $payment->getKey())
+                ->when($except, fn ($query) => $query->whereKeyNot($except->getKey()))->sum('amount');
+            return round($payment->amount - (float) $refunded, 2);
+        }
+
         $query = $payment->payable_type
-            ? $query->where('payable_type', $payment->payable_type)->where('payable_id', $payment->payable_id)
+            ? Payment::where('account_id', $payment->account_id)->whereIn('type', ['payment', 'refund'])
+                ->where('payable_type', $payment->payable_type)->where('payable_id', $payment->payable_id)
+                ->when($except, fn ($query) => $query->whereKeyNot($except->getKey()))
             : null;
 
-        // other income: the payment amount (its refunds are not linked to it)
         return round($query ? Payment::paidTotal($query) : $payment->amount, 2);
     }
 
@@ -407,7 +441,7 @@ class PaymentService
     {
         $max = $this->refundable($payment, $except);
         if ($amount > $max) {
-            throw ValidationException::withMessages(['amount' => 'Not more than ' . number_format(max(0, $max), 2) . ' can be refunded (the money received).']);
+            throw ValidationException::withMessages(['amount' => 'Not more than ' . number_format(max(0, $max), 2) . ' can be refunded (what was paid on this payment, less its refunds).']);
         }
     }
 
@@ -420,28 +454,43 @@ class PaymentService
         }
     }
 
-    // a payment can be changed / deleted: not in a closed shift (the account reopens the shift), not on a closed day
-    public function assertPaymentOpen(Payment $payment, string $field = 'paid_at'): void
+    // the CLOSED shift a payment is in (null = an open shift): changing it needs a reason and is logged on that shift
+    public function closedShiftOf(Payment $payment): ?ShiftClosing
     {
-        if ($payment->shift_closing_id && ShiftClosing::closed()->whereKey($payment->shift_closing_id)->exists()) {
-            $closing = ShiftClosing::with('user.userable')->find($payment->shift_closing_id);
-            throw ValidationException::withMessages([
-                $field => 'This payment is in a closed shift of ' . ($closing->user?->userable?->displayName() ?? 'an employee')
-                    . ' (closed ' . $closing->closed_at->format(Reservation::DATE_FORMAT . ' ' . Reservation::TIME_FORMAT) . '). Reopen the shift first.',
-            ]);
-        }
-        $this->assertDayOpen($payment->account_id, $payment->paid_at, $field);
+        return $payment->shift_closing_id ? ShiftClosing::find($payment->shift_closing_id) : null;
     }
 
-    // a closed day locks its payments: no add / edit / delete dated on it
-    public function assertDayOpen($accountId, $date, string $field = 'paid_at'): void
+    // a required reason, trimmed (422 under $field when empty)
+    private function assertReason($reason, string $field, string $message): string
     {
-        $date = Carbon::parse($date);
-        if (DayClosing::closed()->where('account_id', $accountId)->whereDate('date', $date)->exists()) {
-            throw ValidationException::withMessages([
-                $field => 'The day ' . $date->format(Reservation::DATE_FORMAT) . ' is closed, its payments can\'t be changed.',
-            ]);
+        $reason = trim((string) $reason);
+        if ($reason === '') {
+            throw ValidationException::withMessages([$field => $message]);
         }
+        return $reason;
+    }
+
+    // what the shift log keeps of a payment (before / after a change)
+    private function snapshot(Payment $payment): array
+    {
+        return [
+            'id' => $payment->getKey(),
+            'payment_no' => $payment->payment_no,
+            'type' => $payment->type,
+            'amount' => (float) $payment->amount,
+            'payment_method_id' => (int) $payment->payment_method_id,
+            'method' => $payment->paymentMethod?->name,
+            'income_category_id' => (int) $payment->income_category_id,
+            'paid_at' => $payment->paid_at?->format('Y-m-d'),
+            'reference' => $payment->reference,
+            'notes' => $payment->notes,
+        ];
+    }
+
+    // ShiftClosingService needs this service (constructor): resolved when used, not injected
+    private function shifts(): ShiftClosingService
+    {
+        return app(ShiftClosingService::class);
     }
 
     // the next payment number of the account (call inside a transaction: the rows read are locked until it ends);

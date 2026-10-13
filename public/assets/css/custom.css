@@ -1365,3 +1365,8 @@ input:disabled:not([type="checkbox"]):not([type="radio"]) {
     border-color: transparent;
     box-shadow: -5px 0 0 rgb(var(--color-primary) / 0.1), 5px 0 0 rgb(var(--color-primary) / 0.1);
 }
+
+/* a totals table: the line that starts the sum under the per-method rows (shift / Daily Summary totals) */
+.data-table tr.row-total > td {
+    border-top: 2px solid rgb(203 213 225);
+}

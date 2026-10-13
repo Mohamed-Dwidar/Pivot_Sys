@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Modules\MemberModule\app\Services\MemberService;
+use Modules\PaymentModule\app\Http\Requests\PaymentRefundRequest;
 use Modules\PaymentModule\app\Http\Requests\PaymentRequest;
 use Modules\PaymentModule\app\Models\Payment;
 use Modules\PaymentModule\app\Services\IncomeCategoryService;
@@ -16,8 +17,8 @@ use niklasravnsborg\LaravelPdf\Facades\Pdf;
 use Yajra\DataTables\Facades\DataTables;
 
 /**
- * Payments actions shared by the account and the employee controllers (both add and view payments;
- * edit / delete / refund = the account only, Payments phase 1 step 6).
+ * Payments actions shared by the account and the employee controllers (both add, view and REFUND payments — a refund goes
+ * into the refunder's own open shift, 2026-10-13; edit / delete = the account only).
  * An employee's list shows only the payments they added (never colleagues' collections as a whole, payments-plan.md §2b);
  * one payment of a reservation / package opens for everyone (its payments block lists them all, with the collector).
  * The controller gives area(): "account" | "employee" (route names {area}.payments.*), the views read it from the route.
@@ -108,23 +109,29 @@ trait PaymentActions
 
     /**
      * The list columns (docs/payments-plan.md "Payments list", 2026-10-13), for data() and for one row after a change (row()):
-     * Member (phone, payment no.) | Date (time) | For (the reservation / package / income category) | Method | Amount | By (account only)
+     * Member (payment no.) | For (the reservation / package / income category) | Date (time) | Method | Amount | By (account only).
+     * shift=open (My Shift, 2026-10-13): the SAME list for the logged in login's open shift only — their own payments not closed
+     * yet, whatever their dates (no tab / date rule, no summary line).
      */
     private function table(array $filters, $id = null)
     {
-        $tab = $this->tab($filters);
+        $openShift = ($filters['shift'] ?? '') === 'open';
+        $tab = $openShift ? 'all' : $this->tab($filters);
         $query = $this->paymentService->listQuery($this->accountId())
             ->with('creatable.userable')
             // the reservation's place + start (the For column)
             ->with(['payable' => fn ($morph) => $morph->morphWith([Reservation::class => ['space', 'unit.color', 'plan']])])
-            ->when($this->collectorId(), fn ($query, $userId) => $query->collectedBy($userId));
+            ->when($this->collectorId(), fn ($query, $userId) => $query->collectedBy($userId))
+            ->when($openShift, fn ($query) => $query->collectedBy(Auth::id())->where('shift_closing_id', 0));
         if ($id) {
             $query->whereKey($id);
         }
 
         $table = DataTables::eloquent($query)
             // inside filter() so "of N total" counts all the payments
-            ->filter(fn ($query) => $query->filter($this->listFilters($filters))->tab($tab))
+            ->filter(fn ($query) => $openShift
+                ? $query->filter(['search' => trim((string) ($filters['search'] ?? ''))])
+                : $query->filter($this->listFilters($filters))->tab($tab))
             ->setRowId(fn ($payment) => 'row-' . $payment->id)
             ->orderColumn('paid_at', fn ($query, $order) => $query->orderBy('paid_at', $order)->orderBy('payment_no', $order))
             ->addColumn('member_html', fn ($payment) => view('paymentmodule::Payment.partials.row-member', compact('payment'))->render())
@@ -139,7 +146,7 @@ trait PaymentActions
             ->rawColumns(['member_html', 'paid_at', 'source', 'amount', 'actions'])
             ->only(['DT_RowId', 'member_html', 'paid_at', 'source', 'method', 'amount', 'by', 'actions']);
 
-        if ($id) {
+        if ($id || $openShift) {
             return $table;
         }
 
@@ -202,11 +209,11 @@ trait PaymentActions
         $payment = $this->paymentService->create($this->accountId(), $request->validated(), Auth::user());
         // a reservation / package payment: back to its view (popup or full page), with the new payment in its block
         $payableUrl = $request->validated('payable') ? route($this->area() . '.' . $request->validated('payable') . 's.show', $payment->payable_id) : null;
-        // a missed payment added from "My Shift": that page again (its open period with the new payment)
-        if ($this->area() === 'employee' && $request->boolean('back_to_shift')) {
+        // a missed payment added from "My Shift": that page again (its open shift with the new payment)
+        if ($request->boolean('back_to_shift')) {
             return response()->json([
                 'message' => 'Payment #' . $payment->payment_no . ' has been added to your shift.',
-                'redirect' => route('employee.shift.index'),
+                'redirect' => route($this->area() . '.shift.index'),
             ]);
         }
 
@@ -241,6 +248,32 @@ trait PaymentActions
         return response($pdf, 200, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'inline; filename="receipt-' . $payment->payment_no . '.pdf"',
+        ]);
+    }
+
+    // the refund popup (account + employees; an employee: a payment they can open): reason required, not more than this payment less its refunds
+    public function refundForm($id)
+    {
+        $payment = $this->findForViewer($id);
+        return view('paymentmodule::Payment.refund', [
+            'payment' => $payment,
+            'payableName' => $this->paymentService->payableName($payment->payable),
+            'refundable' => $this->paymentService->refundable($payment),
+            'closedShift' => $this->paymentService->closedShiftOf($payment),
+            'methods' => $this->methodService->options($this->accountId()),
+        ]);
+    }
+
+    public function refund(PaymentRefundRequest $request, $id)
+    {
+        $payment = $this->findForViewer($id);
+        $refund = $this->paymentService->refund($this->accountId(), $payment->id, $request->validated(), Auth::user());
+
+        return response()->json([
+            'message' => 'Refund #' . $refund->payment_no . ' has been added to your shift.',
+            'reload' => true,
+            'modal' => $this->route('show', $refund->id),
+            'redirect' => $this->route('show', $refund->id),
         ]);
     }
 }

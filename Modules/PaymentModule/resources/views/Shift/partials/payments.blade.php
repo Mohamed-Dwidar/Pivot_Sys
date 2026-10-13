@@ -1,27 +1,32 @@
-{{-- the payments of a shift (open period / a closing), oldest first; $payments --}}
-@php
-    $area = request()->routeIs('employee.*') ? 'employee' : 'account';
-    $dateFormat = \Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT;
-@endphp
+{{--
+    The payments of a closed shift (the shift popup), newest first, at most ShiftClosingService::POPUP_LIMIT (+ a note): the same columns and cells as the Payments list
+    (Payment/partials/row-*): Member | For | Date (time) | Method | Amount | row menu. Rendered here (a popup has no DataTables).
+    $payments: with payable (+ space / unit.color / plan of a reservation), member, paymentMethod, incomeCategory
+--}}
+@php($dateFormat = \Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT)
+@php($timeFormat = \Modules\ReservationModule\app\Models\Reservation::TIME_FORMAT)
 
+@if (isset($closing) && $closing->count > $payments->count())
+    <div class="mb-2 text-xs text-slate-500">The newest {{ $payments->count() }} of {{ number_format($closing->count) }} payments.</div>
+@endif
 <div class="table-wrap">
     <table class="data-table">
         <thead>
-            <tr><th>No.</th><th>Added At</th><th>Date</th><th>For</th><th>Member</th><th>Type</th><th>Method</th><th>Amount</th></tr>
+            <tr><th>Member</th><th>For</th><th>Date</th><th>Method</th><th>Amount</th><th></th></tr>
         </thead>
         <tbody>
-            @foreach ($payments as $payment)
-                <tr>
-                    <td><a href="{{ route($area . '.payments.show', $payment->id) }}" data-modal class="font-medium">#{{ $payment->payment_no }}</a></td>
-                    <td class="whitespace-nowrap">{{ $payment->created_at?->format('d-m-Y h:i A') }}</td>
-                    <td class="whitespace-nowrap">{{ $payment->paid_at?->format($dateFormat) }}</td>
+            @forelse ($payments as $payment)
+                <tr id="row-{{ $payment->id }}">
+                    <td>@include('paymentmodule::Payment.partials.row-member')</td>
                     <td>@include('paymentmodule::Payment.partials.row-source')</td>
-                    <td>{{ $payment->member?->name ?? '-' }}</td>
-                    <td><span class="badge {{ $payment->type_badge_class }}">{{ $payment->type_label }}</span></td>
+                    <td class="whitespace-nowrap">{{ $payment->paid_at?->format($dateFormat) ?? '-' }}<div class="text-xs text-slate-500">{{ $payment->created_at?->format($timeFormat) }}</div></td>
                     <td>{{ $payment->paymentMethod?->name ?? '-' }}</td>
-                    <td class="{{ $payment->type === 'refund' ? 'text-danger' : '' }}">{{ number_format($payment->signed_amount, 2) }}</td>
+                    <td class="whitespace-nowrap">@include('paymentmodule::Payment.partials.row-amount')</td>
+                    <td>@include('paymentmodule::Payment.partials.row-actions')</td>
                 </tr>
-            @endforeach
+            @empty
+                <tr><td colspan="6" class="empty-state">No payments in this shift.</td></tr>
+            @endforelse
         </tbody>
     </table>
 </div>

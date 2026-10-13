@@ -6,11 +6,10 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
 use Modules\PaymentModule\app\Http\Controllers\Concerns\PaymentActions;
 use Modules\PaymentModule\app\Http\Requests\PaymentDeleteRequest;
-use Modules\PaymentModule\app\Http\Requests\PaymentRefundRequest;
 use Modules\PaymentModule\app\Http\Requests\PaymentUpdateRequest;
 
-// logged in account: the account's payments (add / view in PaymentActions) + the owner's edit / delete (reason) / refund
-// (PaymentService checks the owner again: the routes are account only)
+// logged in account: the account's payments (add / view / refund in PaymentActions) + the owner's edit / delete
+// (a payment of a closed shift: reason required, logged on the shift; PaymentService checks the owner again: the routes are account only)
 class PaymentAccountModuleController extends Controller
 {
     use PaymentActions;
@@ -32,6 +31,7 @@ class PaymentAccountModuleController extends Controller
         return view('paymentmodule::Payment.edit', [
             'payment' => $payment,
             'payableName' => $this->paymentService->payableName($payment->payable),
+            'closedShift' => $this->paymentService->closedShiftOf($payment),
             'methods' => $this->methodService->options($this->accountId(), $payment->payment_method_id),
             'categories' => $this->categoryService->options($this->accountId(), $payment->income_category_id),
         ]);
@@ -53,7 +53,7 @@ class PaymentAccountModuleController extends Controller
     public function deleteForm($id)
     {
         $payment = $this->paymentService->findOne($this->accountId(), $id);
-        return view('paymentmodule::Payment.delete', compact('payment'));
+        return view('paymentmodule::Payment.delete', ['payment' => $payment, 'closedShift' => $this->paymentService->closedShiftOf($payment)]);
     }
 
     public function destroy(PaymentDeleteRequest $request, $id)
@@ -67,29 +67,6 @@ class PaymentAccountModuleController extends Controller
             'reload' => true,
             'modal' => $payableUrl,
             'redirect' => $payableUrl ?? route('account.payments.index'),
-        ]);
-    }
-
-    public function refundForm($id)
-    {
-        $payment = $this->paymentService->findOne($this->accountId(), $id);
-        return view('paymentmodule::Payment.refund', [
-            'payment' => $payment,
-            'payableName' => $this->paymentService->payableName($payment->payable),
-            'refundable' => $this->paymentService->refundable($payment),
-            'methods' => $this->methodService->options($this->accountId()),
-        ]);
-    }
-
-    public function refund(PaymentRefundRequest $request, $id)
-    {
-        $refund = $this->paymentService->refund($this->accountId(), $id, $request->validated(), Auth::user());
-
-        return response()->json([
-            'message' => 'Refund #' . $refund->payment_no . ' has been added successfully.',
-            'reload' => true,
-            'modal' => route('account.payments.show', $refund->id),
-            'redirect' => route('account.payments.show', $refund->id),
         ]);
     }
 }

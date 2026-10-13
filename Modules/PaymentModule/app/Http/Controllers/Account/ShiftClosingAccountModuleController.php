@@ -5,16 +5,15 @@ namespace Modules\PaymentModule\app\Http\Controllers\Account;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
-use Modules\PaymentModule\app\Http\Requests\DayReopenRequest;
 use Modules\PaymentModule\app\Http\Requests\ShiftCloseRequest;
 use Modules\PaymentModule\app\Services\ShiftClosingService;
 use Modules\UserModule\app\Models\User;
 
 /**
- * The account and its employees' shifts (docs/payments-plan.md §2b), from the day screen (DayClosing create):
- * view a closing, close an open period on the employee's behalf (confirmation popup), reopen (reason) / close again.
- * ?date= / date: the day screen it was opened from, ?index= / index: the closings list (long open / reopened shifts);
- * the answers go back to it.
+ * The account and its employees' shifts (docs/payments-plan.md §2b), from the Daily Summary: view any closing (its payments,
+ * totals and history: the close + every payment changed after it), close an employee's open shift on their behalf
+ * (confirmation popup, logged). ?date= / date: the Daily Summary day it was opened from, the answer goes back to it.
+ * The account's OWN shift: My Shift (MyShiftAccountModuleController).
  */
 class ShiftClosingAccountModuleController extends Controller
 {
@@ -30,27 +29,23 @@ class ShiftClosingAccountModuleController extends Controller
         return Auth::user()->userable->ownerAccountId();
     }
 
-    // back to the day screen / the closings list it came from, else the closing
-    private function back(Request $request, $closingId = null): string
+    // back to the Daily Summary day it came from, else the closing
+    private function back(Request $request, $closingId): string
     {
-        if ($request->boolean('index')) {
-            return route('account.day-closings.index');
-        }
-
         return $request->filled('date')
-            ? route('account.day-closings.create', ['date' => $request->input('date')])
+            ? route('account.daily-summary.index', ['date' => $request->input('date')])
             : route('account.shifts.show', $closingId);
     }
 
     public function show($id)
     {
         $closing = $this->shiftService->findOne($this->accountId(), $id);
-        $closing->load(['payments' => fn ($query) => $query->with('payable', 'member', 'paymentMethod', 'incomeCategory')->orderBy('created_at')]);
+        $closing->setRelation('payments', $this->shiftService->popupPayments($closing));
 
         return view('paymentmodule::Shift.show', compact('closing'));
     }
 
-    // close on behalf: the employee's open period + "Confirm closing" (?user_id=&date=)
+    // close on behalf: the employee's open shift + "Confirm closing" (?user_id=&date=)
     public function confirm(Request $request)
     {
         $employee = $this->employee($request->input('user_id'));
@@ -69,32 +64,6 @@ class ShiftClosingAccountModuleController extends Controller
 
         return response()->json([
             'message' => 'The shift of ' . $employee->userable->displayName() . ' has been closed: ' . number_format($closing->cash_total, 2) . ' collected.',
-            'redirect' => $this->back($request, $closing->id),
-        ]);
-    }
-
-    public function reopenForm($id)
-    {
-        $closing = $this->shiftService->findOne($this->accountId(), $id);
-        return view('paymentmodule::Shift.reopen', compact('closing'));
-    }
-
-    public function reopen(DayReopenRequest $request, $id)
-    {
-        $closing = $this->shiftService->reopen($this->accountId(), $id, $request->validated('reopen_reason'), Auth::user());
-
-        return response()->json([
-            'message' => 'The shift is open again, its payments can be changed. Close it again when they are checked.',
-            'redirect' => $this->back($request, $closing->id),
-        ]);
-    }
-
-    public function reclose(Request $request, $id)
-    {
-        $closing = $this->shiftService->reclose($this->accountId(), $id, Auth::user());
-
-        return response()->json([
-            'message' => 'The shift has been closed again: ' . number_format($closing->cash_total, 2) . ' collected.',
             'redirect' => $this->back($request, $closing->id),
         ]);
     }
