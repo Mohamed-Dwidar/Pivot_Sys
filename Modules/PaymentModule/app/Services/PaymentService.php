@@ -45,6 +45,35 @@ class PaymentService
         return $this->paymentRepository->forAccount($accountId)->filter($filters);
     }
 
+    /**
+     * The summary line of the payments list for a filtered query: the payments by method, refunds, withholding.
+     * total = payments − refunds (cash); withholding apart (not cash). Methods in the account's order, only those used.
+     * ['total' => float, 'methods' => [name => amount], 'refunds' => float, 'withholding' => float]
+     */
+    public function listSummary($query): array
+    {
+        $rows = (clone $query)->reorder()->setEagerLoads([])->toBase()
+            ->selectRaw('type, payment_method_id, SUM(amount) AS total')->groupBy('type', 'payment_method_id')->get();
+
+        $payments = $rows->where('type', 'payment');
+        $methods = PaymentMethod::withTrashed()->whereIn('id', $payments->pluck('payment_method_id'))->ordered()->get();
+        $byMethod = $methods->mapWithKeys(fn ($method) => [$method->name => round((float) $payments->where('payment_method_id', $method->id)->sum('total'), 2)]);
+        // a payment whose method is gone / unknown (imported data)
+        $other = round((float) $payments->whereNotIn('payment_method_id', $methods->pluck('id'))->sum('total'), 2);
+        if ($other) {
+            $byMethod['Other'] = $other;
+        }
+
+        $refunds = round((float) $rows->where('type', 'refund')->sum('total'), 2);
+
+        return [
+            'total' => round((float) $payments->sum('total') - $refunds, 2),
+            'methods' => $byMethod->all(),
+            'refunds' => $refunds,
+            'withholding' => round((float) $rows->where('type', 'withholding')->sum('total'), 2),
+        ];
+    }
+
     // 404 when the payment belongs to another account
     public function findOne($accountId, $id): Payment
     {

@@ -244,6 +244,18 @@ class Reservation extends Model implements Payable
     ];
 
     /**
+     * The list date field of each tab (layoutmodule::partials.date-range-filter): select = the days it shows (Y-m-d, "from,to";
+     * picking them highlights the tab), label = the text of a tab with its own rule (no days selected). All = empty.
+     */
+    public static function tabDates(): array
+    {
+        return [
+            'today' => ['select' => today()->toDateString()],
+            'upcoming' => ['label' => 'From ' . today()->addDay()->format(self::DATE_FORMAT)],
+        ];
+    }
+
+    /**
      * Running at some moment of [from, to): starts before "to" and ends after "from".
      * An end before the start (old same-day rows) = it ends at its start: it counts on its start day.
      * Plain ranges (no whereDate), so the (account_id, start_at) / (account_id, end_at) indexes can be used.
@@ -258,14 +270,16 @@ class Reservation extends Model implements Payable
      * The rows of a list tab (an unknown tab = all). Today / Upcoming leave the contract periods out (one row per month)
      * unless the type filter ($filters['subscription_type_id']) is chosen: then that type's rows show on any tab.
      */
+    // + 'days' (not a tab button): days picked in the list date field (filters date_from / date_to) = the Today rule for those days
     public function scopeTab($query, ?string $tab, array $filters = [])
     {
-        if (in_array($tab, ['today', 'upcoming'], true) && empty($filters['subscription_type_id'])) {
+        if (in_array($tab, ['today', 'upcoming', 'days'], true) && empty($filters['subscription_type_id'])) {
             $query->notContracts();
         }
 
         return match ($tab) {
             'today' => $query->runningBetween(today(), today()->addDay()),
+            'days' => $query->runningBetween(...self::pickedDays($filters)),
             'upcoming' => $query->where('start_at', '>=', today()->addDay()),
             default => $query,
         };
@@ -273,13 +287,21 @@ class Reservation extends Model implements Payable
 
     // the default order of a tab (until a column is clicked): today = starting today first (by start time), then the
     // ones already running (long ones); upcoming = nearest first; all = newest first
-    public function scopeTabOrder($query, ?string $tab)
+    // the days picked in the list date field: [first day 00:00, the day after the last 00:00)
+    public static function pickedDays(array $filters): array
     {
-        if ($tab === 'today') {
-            $query->orderByRaw('start_at >= ? DESC', [today()]);
+        $from = Carbon::parse($filters['date_from'])->startOfDay();
+        return [$from, Carbon::parse($filters['date_to'] ?? null ?: $from)->addDay()->startOfDay()];
+    }
+
+    public function scopeTabOrder($query, ?string $tab, array $filters = [])
+    {
+        // starting in the period first, then the running ones
+        if (in_array($tab, ['today', 'days'], true)) {
+            $query->orderByRaw('start_at >= ? DESC', [$tab === 'days' ? self::pickedDays($filters)[0] : today()]);
         }
 
-        return in_array($tab, ['today', 'upcoming'], true)
+        return in_array($tab, ['today', 'upcoming', 'days'], true)
             ? $query->orderBy('start_at')->orderBy('id')
             : $query->orderByDesc('start_at')->orderByDesc('id');
     }

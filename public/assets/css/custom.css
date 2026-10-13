@@ -1302,3 +1302,66 @@ input:disabled:not([type="checkbox"]):not([type="radio"]) {
     color: rgb(0 0 0);
     font-weight: 700;
 }
+
+/* a small badge next to a value (payments list: "Withholding" by the amount) */
+.badge-small {
+    padding: 0.05rem 0.4rem;
+    font-size: 0.65rem;
+    margin-left: 0.25rem;
+}
+
+/* the summary line above a list (payments list: total by method, refunds, withholding — filled by datatables.js json "html") */
+.list-summary {
+    margin-top: 1rem;
+    font-size: 0.875rem;
+}
+
+.list-summary:empty {
+    display: none;
+}
+
+/* ONE date field of a list (layoutmodule::partials.date-range-filter, flatpickr range): × inside the field on the right */
+.date-range-filter {
+    position: relative;
+}
+
+.filter-bar .date-range-filter input {
+    min-width: 230px;
+    padding-right: 2rem;
+    cursor: pointer;
+}
+
+.date-range-filter__clear {
+    position: absolute;
+    top: 50%;
+    right: 0.5rem;
+    transform: translateY(-50%);
+    display: inline-flex;
+    color: rgb(100 116 139);
+}
+
+.date-range-filter__clear svg {
+    width: 1rem;
+    height: 1rem;
+}
+
+.date-range-filter__clear:hover {
+    color: rgb(var(--color-danger));
+}
+
+/* flatpickr: the theme color for the picked days */
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange,
+.flatpickr-day.selected:hover,
+.flatpickr-day.startRange:hover,
+.flatpickr-day.endRange:hover {
+    background: rgb(var(--color-primary));
+    border-color: rgb(var(--color-primary));
+}
+
+.flatpickr-day.inRange {
+    background: rgb(var(--color-primary) / 0.1);
+    border-color: transparent;
+    box-shadow: -5px 0 0 rgb(var(--color-primary) / 0.1), 5px 0 0 rgb(var(--color-primary) / 0.1);
+}

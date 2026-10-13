@@ -34,6 +34,22 @@ class Payment extends Model
         'package' => Package::class,
     ];
 
+    // the list tabs (docs/payments-plan.md "Payments list"): today (default) | this month | all, on paid_at
+    const TABS = [
+        'today' => 'Today',
+        'month' => 'This Month',
+        'all' => 'All',
+    ];
+
+    // the list date field of each tab (layoutmodule::partials.date-range-filter): the days each tab shows ("from,to"; All = empty)
+    public static function tabDates(): array
+    {
+        return [
+            'today' => ['select' => today()->toDateString()],
+            'month' => ['select' => today()->startOfMonth()->toDateString() . ',' . today()->endOfMonth()->toDateString()],
+        ];
+    }
+
     // the signed amount in SQL: payments + withholding - refunds (paid totals)
     const PAID_SQL = "IF(type = 'refund', -amount, amount)";
 
@@ -139,6 +155,20 @@ class Payment extends Model
         return $query->whereNull('payable_type');
     }
 
+    public function scopeTab($query, ?string $tab)
+    {
+        return match ($tab) {
+            'today' => $query->where('paid_at', today()->toDateString()),
+            'month' => $query->whereBetween('paid_at', [today()->startOfMonth()->toDateString(), today()->endOfMonth()->toDateString()]),
+            default => $query,
+        };
+    }
+
+    /**
+     * The list filters: search, for, method, dates (+ the older keys source / type / payment_method_id / income_category_id).
+     * for = reservation | package | income (all other income) | category-{id} (one income category);
+     * method = a payment method id | refund | withholding (the two types without their own method).
+     */
     public function scopeFilter($query, array $filters = [])
     {
         if (!empty($filters['search'])) {
@@ -157,6 +187,23 @@ class Payment extends Model
             $query->where('payable_type', (new (self::SOURCES[$filters['source']]))->getMorphClass());
         }
 
+        $for = (string) ($filters['for'] ?? '');
+        if (str_starts_with($for, 'category-')) {
+            $filters['income_category_id'] = (int) substr($for, 9);
+            $query->income();
+        } elseif ($for === 'income') {
+            $query->income();
+        } elseif (isset(self::SOURCES[$for])) {
+            $query->where('payable_type', (new (self::SOURCES[$for]))->getMorphClass());
+        }
+
+        $method = (string) ($filters['method'] ?? '');
+        if (in_array($method, ['refund', 'withholding'], true)) {
+            $filters['type'] = $method;
+        } elseif (ctype_digit($method)) {
+            $filters['payment_method_id'] = (int) $method;
+        }
+
         foreach (['type', 'payment_method_id', 'income_category_id', 'member_id'] as $field) {
             if (!empty($filters[$field])) {
                 $query->where($field, $filters[$field]);
@@ -164,11 +211,11 @@ class Payment extends Model
         }
 
         if (!empty($filters['date_from'])) {
-            $query->whereDate('paid_at', '>=', $filters['date_from']);
+            $query->where('paid_at', '>=', $filters['date_from']);
         }
 
         if (!empty($filters['date_to'])) {
-            $query->whereDate('paid_at', '<=', $filters['date_to']);
+            $query->where('paid_at', '<=', $filters['date_to']);
         }
 
         return $query;

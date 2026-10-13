@@ -20,7 +20,7 @@ Then suggest a commit message.
 - Frontend: Blade + Tailwise "dagger" template (compiled `public/assets/css/app.css`, theme class `theme-6` on `<html>`), vanilla JS in `public/assets/js/custom.js`; jQuery only for DataTables (`jQuery.noConflict`). Vite/Tailwind 4 in package.json is NOT used by the pages.
 - Auth: custom, 2 guards — `admin` (table `admins`, login `/admin`) and `web` (table `users`, morph `userable` → Account | Employee, login `/login`)
 - Permissions: none (user type checked by middleware `user.active:{Model}`)
-- Key packages: prettus/l5-repository (repositories), yajra/laravel-datatables-oracle 12 (server-side lists), intervention/image 2.7 (uploads), maatwebsite/excel, niklasravnsborg/laravel-pdf; CDN: DataTables 2.1.8, SweetAlert2, template Tom Select, Lucide icons
+- Key packages: prettus/l5-repository (repositories), yajra/laravel-datatables-oracle 12 (server-side lists), intervention/image 2.7 (uploads), maatwebsite/excel, niklasravnsborg/laravel-pdf; CDN: DataTables 2.1.8, SweetAlert2; local: flatpickr 4.6.13 (MIT, list date fields, `public/assets/vendor/flatpickr/`), template Tom Select, Lucide icons
 
 ## Commands
 - Dev server: `php artisan serve` (user runs http://127.0.0.1:8000; Apache also serves `/mdwidar_dev/Pivot/Pivot_Sys_New/public`)
@@ -66,7 +66,8 @@ Then suggest a commit message.
   - area layouts / sidebars use named routes from Admin/Account/Employee/User modules — renaming those routes breaks every page of that area
   - Login / register pages (AdminModule `login`, UserModule `user/login`, AccountModule `Guest/register`) → `layoutmodule::login`
   - `custom.js` must load before `themes/dagger.js` (sidebar default / overrides); DataTables' jQuery must stay `noConflict` (template `$` = `dom.js`)
-  - `datatables.js` reads json `counts` {name: n} sent with the rows → `[data-counter]` (reservations Today tab)
+  - `datatables.js` reads json `counts` {name: n} sent with the rows → `[data-counter]` (reservations Today tab) and json `html` {name: html} → `[data-html]` (payments summary line)
+  - List toolbars: `partials/filter-tabs` + `partials/date-range-filter` (ONE date field, flatpickr range, local copy `public/assets/vendor/flatpickr/`, custom.js `dateRange*` syncs it with the tabs via `Model::tabDates()`; reservations, packages, payments); filter order on every list = search | date | selects | Clear
   - `header` optional `$logoutPrompt` (popup url instead of logging out at once) and `employee/main` (`$shiftOpen`, `$shiftReminderUrl` shared by PaymentModule `ShiftReminder`) — employee shift popups
 - **SpaceModule** ↔ UnitModule, PlanModule, ReservationModule: spaces ↔ subscription types (`can_repeat`, `auto_renew`, `is_contract` = contract periods hidden from the reservations Today / Upcoming tabs unless the type filter selects them) ↔ plans (`plan_space`); unit form picks from its space's types / plans
 - **UnitModule** ↔ ReservationModule: unit `subscription_type_id`, `capacity`, `concurrent_usage`, `color` used by the reservation form + availability check

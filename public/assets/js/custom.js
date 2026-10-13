@@ -344,25 +344,107 @@ document.addEventListener("DOMContentLoaded", function () {
     if (reminder) appModal.open(reminder.dataset.shiftReminder);
 });
 
-// Reservations list tabs (form[data-reservation-tabs]): a date range switches to the "All" tab, another tab clears the dates.
-// Capture phase: runs before datatables.js reloads the list (it reads the filters at once).
-function reservationTab(form, value) {
-    form.querySelector('input[name="tab"]').value = value;
-    form.querySelectorAll('[data-filter-tab][data-name="tab"]').forEach(function (tab) {
-        tab.classList.toggle("active", tab.dataset.value === value);
-    });
+// ONE date field synced with the list tabs (layoutmodule::partials.date-range-filter + partials.filter-tabs; reservations,
+// packages, payments lists). flatpickr range mode (MIT): one day clicked = that day, two = the range; × clears it.
+// - a tab click: no dates sent (the tab has its own rule), the field shows the tab's days (data-date-select "Y-m-d[,Y-m-d]")
+//   or its text (data-date-label, e.g. "From 14-10-2026"); All = empty
+// - days picked: the tab with exactly those days is clicked (today → Today, this month → This Month, cleared → All);
+//   other days = the All tab with date_from / date_to, no tab highlighted
+// - data-date-default (a list without tabs: the employees' payments): starts on that day, × / Clear go back to it, never empty
+// Capture phase: runs before datatables.js reads the filters and reloads the list.
+function dateRangeYmd(date) {
+    return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
 }
-document.addEventListener("change", function (e) {
-    var form = e.target.closest && e.target.closest("form[data-reservation-tabs]");
-    if (form && ["date_from", "date_to"].indexOf(e.target.name) !== -1 && e.target.value) {
-        reservationTab(form, "all");
+function dateRangeTabs(form) {
+    return Array.prototype.slice.call(form.querySelectorAll('[data-filter-tab][data-name="tab"]'));
+}
+// a list without tabs: back to the default day (sent as date_from / date_to)
+function dateRangeShowDefault(box) {
+    var day = box.dataset.dateDefault;
+    box.querySelector('[name="date_from"]').value = day;
+    box.querySelector('[name="date_to"]').value = day;
+    box._picker.setDate(day, false, "Y-m-d");
+    // × only when another day is shown
+    box.querySelector("[data-date-range-clear]").hidden = true;
+}
+// the field shows a tab (its days / its text), sends no dates
+function dateRangeShowTab(box, tab) {
+    if (box.dataset.dateDefault) return dateRangeShowDefault(box);
+    var input = box.querySelector("[data-date-range-input]");
+    box.querySelector('[name="date_from"]').value = "";
+    box.querySelector('[name="date_to"]').value = "";
+    var days = tab ? tab.dataset.dateSelect : "";
+    box._picker.setDate(days ? days.split(",") : [], false, "Y-m-d");
+    if (!days) input.value = tab ? tab.dataset.dateLabel || "" : "";
+    box.querySelector("[data-date-range-clear]").hidden = !input.value;
+}
+// days picked in the calendar (or cleared by ×)
+function dateRangeApply(box, dates) {
+    var form = box.closest("form");
+    if (!dates.length && box.dataset.dateDefault) {
+        box._picker.setDate(box.dataset.dateDefault, false, "Y-m-d");
+        dates = box._picker.selectedDates;
     }
-}, true);
+    var from = dates.length ? dateRangeYmd(dates[0]) : "";
+    var to = dates.length > 1 ? dateRangeYmd(dates[1]) : from;
+    var key = from ? from + (to !== from ? "," + to : "") : "";
+    var tab = dateRangeTabs(form).find(function (tab) {
+        return key ? tab.dataset.dateSelect === key : tab.dataset.tab === "all";
+    });
+    if (tab) {
+        tab.click();
+        return;
+    }
+    // other days: the All tab with the range, no tab highlighted
+    var all = dateRangeTabs(form).find(function (tab) { return tab.dataset.tab === "all"; });
+    var tabInput = form.querySelector('input[name="tab"]');
+    if (tabInput) tabInput.value = all ? all.dataset.value : "all";
+    dateRangeTabs(form).forEach(function (tab) { tab.classList.remove("active"); });
+    box.querySelector('[name="date_from"]').value = from;
+    box.querySelector('[name="date_to"]').value = to;
+    box.querySelector("[data-date-range-clear]").hidden = from === box.dataset.dateDefault;
+    // datatables.js reloads the list on a change in the form
+    box.querySelector('[name="date_from"]').dispatchEvent(new Event("change", { bubbles: true }));
+}
+document.addEventListener("DOMContentLoaded", function () {
+    if (!window.flatpickr) return;
+    var arabic = document.documentElement.lang === "ar" && flatpickr.l10ns.ar;
+    document.querySelectorAll("[data-date-range]").forEach(function (box) {
+        var changed = false;
+        box._picker = flatpickr(box.querySelector("[data-date-range-input]"), {
+            // data-date-single: one day only (the employees' payments list)
+            mode: box.hasAttribute("data-date-single") ? "single" : "range",
+            dateFormat: "d-m-Y",
+            locale: Object.assign({}, arabic || {}, { rangeSeparator: " → " }),
+            onChange: function () { changed = true; },
+            onClose: function (dates) {
+                if (changed) dateRangeApply(box, dates);
+                changed = false;
+            },
+        });
+        var form = box.closest("form");
+        // flatpickr's own change of the shown text: not a filter change (datatables.js reloads only on dateRangeApply())
+        box.querySelector("[data-date-range-input]").addEventListener("change", function (e) { e.stopPropagation(); });
+        dateRangeShowTab(box, form.querySelector('[data-filter-tab][data-name="tab"].active'));
+        box.querySelector("[data-date-range-clear]").addEventListener("click", function () {
+            box._picker.clear(false);
+            dateRangeApply(box, []);
+        });
+        // the Clear button: back to the default tab / day (datatables.js empties the hidden inputs after the browser reset,
+        // then reloads; the server uses the same default day for an empty one)
+        form.addEventListener("reset", function () {
+            setTimeout(function () {
+                dateRangeShowTab(box, form.querySelector('[data-filter-tab][data-name="tab"][data-value=""]'));
+                // datatables.js: recount the Clear button
+                form.dispatchEvent(new Event("input"));
+            });
+        });
+    });
+});
 document.addEventListener("click", function (e) {
-    var tab = e.target.closest && e.target.closest("form[data-reservation-tabs] [data-filter-tab]");
-    if (tab && tab.dataset.value !== "all") {
-        tab.form.querySelectorAll('[name="date_from"], [name="date_to"]').forEach(function (input) { input.value = ""; });
-    }
+    var tab = e.target.closest && e.target.closest('[data-filter-tab][data-name="tab"]');
+    var box = tab && tab.form && tab.form.querySelector("[data-date-range]");
+    if (box && box._picker) dateRangeShowTab(box, tab);
 }, true);
 
 // Row toggles (layoutmodule::partials.row-toggle): save as soon as the switch is clicked

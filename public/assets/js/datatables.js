@@ -170,9 +170,13 @@
         });
 
         // counts sent with the rows (json "counts": {name: n}) → [data-counter="name"] (e.g. the reservations Today tab)
+        // html sent with the rows (json "html": {name: html}) → [data-html="name"] (e.g. the payments summary line)
         table.on('xhr', function (e, settings, json) {
             Object.keys((json && json.counts) || {}).forEach(function (name) {
                 document.querySelectorAll('[data-counter="' + name + '"]').forEach(function (el) { el.textContent = json.counts[name]; });
+            });
+            Object.keys((json && json.html) || {}).forEach(function (name) {
+                document.querySelectorAll('[data-html="' + name + '"]').forEach(function (el) { el.innerHTML = json.html[name]; });
             });
         });
 
@@ -192,7 +196,14 @@
             }
             var count = (searchInput && searchInput.value.trim() ? 1 : 0);
             var values = filterValues();
+            // the date field (layoutmodule::partials.date-range-filter) = ONE filter: date_from only (with the tab it set to All),
+            // not counted while on its default day (a list without tabs)
+            var dateBox = form.querySelector('[data-date-range]');
+            var dateSet = !!values.date_from && !(dateBox && values.date_from === dateBox.dataset.dateDefault && values.date_to === values.date_from);
             Object.keys(values).forEach(function (name) {
+                if (name === 'date_to' || (name === 'date_from' && !dateSet) || (name === 'tab' && dateSet)) {
+                    return;
+                }
                 count += values[name] !== '' ? 1 : 0;
             });
             clearButton.disabled = count === 0;

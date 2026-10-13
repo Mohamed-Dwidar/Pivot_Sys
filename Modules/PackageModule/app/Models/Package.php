@@ -167,6 +167,15 @@ class Package extends Model implements Payable
         'all' => 'All',
     ];
 
+    // the list date field of each tab (layoutmodule::partials.date-range-filter): Current / Past keep their own rule (label only)
+    public static function tabDates(): array
+    {
+        return [
+            'current' => ['label' => 'From ' . today()->format(Reservation::DATE_FORMAT)],
+            'past' => ['label' => 'Until ' . today()->subDay()->format(Reservation::DATE_FORMAT)],
+        ];
+    }
+
     // current = its period includes today or later (no end yet / no reservations yet too); past = it ended before today
     public function scopeTab($query, ?string $tab)
     {
@@ -213,6 +222,17 @@ class Package extends Model implements Payable
         // unpaid / partial / paid / credit / nothing_due
         if (!empty($filters['payment_status'])) {
             $query->paymentStatus($filters['payment_status']);
+        }
+
+        // the period overlaps the range: from <= range end and (no end yet or end >= range start); no period = left out
+        if (!empty($filters['date_from']) || !empty($filters['date_to'])) {
+            $query->whereNotNull('date_from');
+        }
+        if (!empty($filters['date_to'])) {
+            $query->where('date_from', '<=', $filters['date_to']);
+        }
+        if (!empty($filters['date_from'])) {
+            $query->where(fn ($query) => $query->whereNull('date_to')->orWhere('date_to', '>=', $filters['date_from']));
         }
 
         return $query;

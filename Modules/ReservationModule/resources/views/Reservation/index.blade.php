@@ -13,23 +13,14 @@
     {{--
         Toolbar (docs/reservations-list-plan.md, simplified 2026-10-13): tabs Today (default, value '', running today,
         count of the counted ones) | Upcoming | All; under them ONE row of filters, all visible:
-        search | status | space | type | payment | date from | date to | Clear.
+        search | date (one field: Today / All synced, Upcoming = "From <tomorrow>"; picked days = running on them, the Today rule) | status | space | type | payment | Clear.
         Today / Upcoming hide the contract periods unless the type filter is chosen (a contract type shows its rows).
-        A date range switches to All, another tab clears the dates. Not counted reservations (cancelled ...) = muted, last.
+        Not counted reservations (cancelled ...) = muted, last.
     --}}
-    <form id="reservations-filters" class="filter-bar" data-reservation-tabs>
-        <input type="hidden" name="tab" value="">
-        <div class="status-tabs filter-bar__tabs">
-            @foreach (\Modules\ReservationModule\app\Models\Reservation::TABS as $value => $label)
-                <button type="button" data-filter-tab data-name="tab" data-value="{{ $value === 'today' ? '' : $value }}" class="{{ $value === 'today' ? 'active' : '' }}">
-                    {{ $label }}
-                    @if (isset($counts['reservations-' . $value]))
-                        (<span data-counter="reservations-{{ $value }}">{{ $counts['reservations-' . $value] }}</span>)
-                    @endif
-                </button>
-            @endforeach
-        </div>
+    <form id="reservations-filters" class="filter-bar">
+        @include('layoutmodule::partials.filter-tabs', ['tabs' => \Modules\ReservationModule\app\Models\Reservation::TABS, 'default' => 'today', 'dates' => \Modules\ReservationModule\app\Models\Reservation::tabDates(), 'counts' => $counts, 'counter' => 'reservations-'])
         <input type="search" name="search" class="{{ config('layoutmodule.form.input') }}" placeholder="Member name or phone" autocomplete="off">
+        @include('layoutmodule::partials.date-range-filter')
         <select name="reservation_status_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Status">
             <option value="">All Statuses</option>
             @foreach ($statuses as $id => $name)
@@ -49,8 +40,6 @@
             @endforeach
         </select>
         @include('paymentmodule::Payment.partials.status-filter', ['statuses' => \Modules\ReservationModule\app\Models\Reservation::PAYMENT_STATUSES])
-        <input type="date" name="date_from" class="{{ config('layoutmodule.form.input') }} field-short" aria-label="Start from" title="Start from">
-        <input type="date" name="date_to" class="{{ config('layoutmodule.form.input') }} field-short" aria-label="Start to" title="Start to">
         @include('layoutmodule::partials.datatable-clear')
     </form>
 

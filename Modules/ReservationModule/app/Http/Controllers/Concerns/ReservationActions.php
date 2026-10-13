@@ -103,8 +103,12 @@ trait ReservationActions
     }
 
     // the list tab: today (default, also '') | upcoming | all (docs/reservations-list-plan.md)
+    // days picked in the date field (date_from / date_to) = 'days': the Today rule (running, no contracts) for those days
     private function tab(array $filters): string
     {
+        if (!empty($filters['date_from']) && strtotime($filters['date_from'])) {
+            return 'days';
+        }
         $tab = (string) ($filters['tab'] ?? '');
         return isset(Reservation::TABS[$tab]) ? $tab : 'today';
     }
@@ -135,14 +139,14 @@ trait ReservationActions
             $query->whereKey($id);
         } elseif (!request()->filled('order')) {
             // the tab's order until a column is clicked (the list has data-order='[]')
-            $query->tabOrder($tab);
+            $query->tabOrder($tab, Arr::only($filters, ['date_from', 'date_to']));
         }
 
         $table = DataTables::eloquent($query)
             // inside filter() so "of N total" counts all the reservations
             ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))]
-                + Arr::only($filters, ['reservation_status_id', 'space_id', 'subscription_type_id', 'date_from', 'date_to', 'payment_status']))
-                ->tab($tab, Arr::only($filters, ['subscription_type_id'])))
+                + Arr::only($filters, ['reservation_status_id', 'space_id', 'subscription_type_id', 'payment_status']))
+                ->tab($tab, Arr::only($filters, ['subscription_type_id', 'date_from', 'date_to'])))
             ->setRowId(fn ($reservation) => 'row-' . $reservation->id)
             // not counted (cancelled, pending ...): muted (custom.css)
             ->setRowClass(fn ($reservation) => $reservation->isCounted() ? '' : 'row-muted')

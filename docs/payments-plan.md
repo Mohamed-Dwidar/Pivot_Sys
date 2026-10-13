@@ -294,6 +294,34 @@ Steps 1–6 go into `to_run`.
 9. Package / reservation hooks (`recalculate` → `refresh`, `movePayments`)
 10. Sidebar items (shared layout — confirm) + import SQL + checks
 
+### Payments list (user, 2026-10-13 — simplified; built)
+- **Tabs:** Today (default, `paid_at` = today) | This Month | All (`Payment::TABS`, `scopeTab`).
+- **Filters, one row:** search (no., reference, member name or phone) | **date** | **For** | **Method** | Clear.
+  - Date = ONE date field (shared, 2026-10-13): `layoutmodule::partials.date-range-filter` right after search — flatpickr 4.6.13 range mode (MIT,
+  Arabic locale `l10n/ar`; local copy `public/assets/vendor/flatpickr/` + its LICENSE, no CDN), one shared init in custom.js; one day clicked = that day, two = the range; shows `13-10-2026` /
+  `01-10-2026 → 13-10-2026` + × (clear = All). Synced with the tabs both ways (`partials.filter-tabs`, `Model::tabDates()`): Today → today, This Month → first → last day, All → empty;
+    picking today / this month's full range / nothing highlights that tab (the tab's own rule is sent, no dates); other days = the All
+    tab + `date_from` / `date_to`, no tab highlighted.
+  - **Employees: NO tabs, one day only** (user, 2026-10-13): only the date field, starting on today (`default` → `data-date-default`),
+    one click picks and closes (`single` → flatpickr single mode); × and Clear go back to TODAY, never empty (× hidden while on today),
+    so an employee can never list all their payments at once. Server (`PaymentActions::listFilters()` / `tab()`): employees = tab `all`
+    + date_from = date_to = the picked day; no date / not a date → today; a range → its first day; `tab` ignored.
+    Ranges / tabs = the account only; the reservations / packages lists keep the range for everyone.
+  - Clear button count (datatables.js): the date field = ONE filter (date_from only; the `tab` it set to All not counted with it);
+    not counted while on its default day.
+  - For (`for`) = Reservations (`reservation`) | Packages (`package`) | group "Other income": All other income (`income`) + each category (`category-{id}`)
+    — replaces the Sources + Categories filters.
+  - Method (`method`) = each payment method (id), then **Refunds** (`refund`) and **Withholding** (`withholding`) — the Type filter is gone.
+  - `Payment::scopeFilter` reads `for` / `method` (the older keys `source`, `type`, `payment_method_id`, `income_category_id` still work).
+- **Summary line** above the table, for the current tab + filters (employees: their own payments):
+  `Total: <net> — <method> <amount> · … · Refunds −<amount> · Withholding <amount>`; total = payments − refunds, withholding NOT in it
+  (`PaymentService::listSummary()`, partial `Payment/partials/list-summary`, sent with the rows as json `html` → `[data-html]`, datatables.js).
+- **Columns (order updated 2026-10-13):** Member (name → the payment view popup, payment no. small; no phone, no No. column) |
+  For (link: reservation → unit color + `Space › Unit` (`row-place`) + its start under it, package → name, other income → category) |
+  Date (date, the time it was added small) | Method |
+  Amount (bold; refund = minus in red; withholding + small "Withholding" badge; no Type column) | Created By (collector, account only) | row menu (as before).
+  Default order: Date newest first. Partials `row-member`, `row-amount`, `row-source`.
+
 ---
 
 ## 2b. Shift closing + account day closing (two levels) — approved 2026-10-11

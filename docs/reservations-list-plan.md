@@ -10,10 +10,18 @@
      (counted reservations, same filters).
    - Upcoming = `start_at >= tomorrow`, nearest first. All = everything, newest first (date range applies).
 2. **Filters, all visible, one row under the tabs** (no "Filters" button):
-   search (member name or phone) | status | space | **type** | payment | date from | date to | Clear.
+   search (member name or phone) | **date** | status | space | **type** | payment | Clear
+   (the same order on the reservations, packages and payments lists — search, date, then the selects).
+   - Date = ONE date field (shared, 2026-10-13): `layoutmodule::partials.date-range-filter` right after search — flatpickr 4.6.13 range mode (MIT,
+     Arabic locale `l10n/ar`, local copy `public/assets/vendor/flatpickr/`), one shared init in custom.js; one day clicked = that day, two = the range; shows `13-10-2026` /
+     `01-10-2026 → 13-10-2026` + × (clear = All). Synced with the tabs both ways (`partials.filter-tabs`, `Model::tabDates()`): Today ↔ today, All ↔ empty; Upcoming keeps its rule and shows
+     "From <tomorrow>"; other days picked = the TODAY RULE for those days (user, 2026-10-13: running on them, overlap, contracts hidden
+     unless the type filter, starting in them first): internal tab `days` (`ReservationActions::tab()` when `date_from` is sent,
+     `scopeTab('days')` / `scopeTabOrder('days')`, `Reservation::pickedDays()`), no tab highlighted. Today tab = today picked by hand
+     (same rows, same order — tested).
    - **type** = subscription type (`subscription_type_id`: Day Use / Meeting / Subscriptions …). Choosing a contract type
      (`is_contract`) shows its rows on ANY tab, Today and Upcoming included.
-   - Choosing a date range switches to All (as before); another tab clears the dates.
+   - Picked days (not today) = running on those days (above); a tab click clears the dates (the tab's rule only).
 3. Kept: overlap rule for Today; contract periods hidden from Today / Upcoming unless the type filter selects them (any type
    chosen = that type only, so no hiding needed); cancelled-like rows visible but muted + last; Restore (+ the status menu check);
    Renew in the row menu of contract rows; long badge in the Period column.
@@ -46,7 +54,10 @@
 ## Packages list (user, 2026-10-13) — the same style; same for employees (shared `PackageActions`)
 - **Tabs:** Current (default: `date_to` NULL — no end / no reservations yet — or `date_to >= today`) | Past (`date_to < today`) | All
   (`Package::TABS`, `scopeTab`). Default order: Period (start) newest first.
-- **Filters, all visible:** search (package, member name or phone) | status (active) | payment | Clear. The "All Members" select was removed.
+- **Filters, all visible:** search (package, member name or phone) | date | status (active) | payment | Clear. The "All Members" select was removed.
+  - Date = the shared one-field date (see the reservations toolbar): All ↔ empty; Current shows "From <today>", Past "Until <yesterday>"
+    (their own rules); picked days = the All tab + a package whose period overlaps them (`date_from <= to AND (date_to IS NULL OR
+    date_to >= from)`; no period = left out), no tab highlighted.
 - **Columns (order updated 2026-10-13):** Package (name → view popup; member name small under it, always) | Period (`From 14-10-2024` / `Ends 03-12-2024`,
   no end = "Continues", none = "-") | Reservations, two lines: the counted ones (cancelled like excluded) / the booked hours of the TIMED ones in brackets
   `91` / `(124.5 h)`; full day / contract types count but add no hours; no hours = count only (`scopeWithReservationStats`:

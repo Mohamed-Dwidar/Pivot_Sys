@@ -13,16 +13,13 @@
     {{--
         Packages list (docs/reservations-list-plan.md, packages list 2026-10-13), the reservations list style:
         tabs Current (default, value '': its period includes today or later) | Past | All; one row of filters, all visible:
-        search (package, member name or phone) | status | payment | Clear.
+        search (package, member name or phone) | date (one field: All synced, Current = "From <today>", Past = "Until <yesterday>";
+        picked days = the period overlaps them, the All tab) | status | payment | Clear.
     --}}
     <form id="packages-filters" class="filter-bar">
-        <input type="hidden" name="tab" value="">
-        <div class="status-tabs filter-bar__tabs">
-            @foreach (\Modules\PackageModule\app\Models\Package::TABS as $value => $label)
-                <button type="button" data-filter-tab data-name="tab" data-value="{{ $value === 'current' ? '' : $value }}" class="{{ $value === 'current' ? 'active' : '' }}">{{ $label }}</button>
-            @endforeach
-        </div>
+        @include('layoutmodule::partials.filter-tabs', ['tabs' => \Modules\PackageModule\app\Models\Package::TABS, 'default' => 'current', 'dates' => \Modules\PackageModule\app\Models\Package::tabDates()])
         <input type="search" name="search" class="{{ config('layoutmodule.form.input') }}" placeholder="Package, member name or phone" autocomplete="off">
+        @include('layoutmodule::partials.date-range-filter')
         <select name="is_active" class="{{ config('layoutmodule.form.select') }}" aria-label="Status">
             <option value="">All Statuses</option>
             <option value="1">Active</option>

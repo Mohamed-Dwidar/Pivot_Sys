@@ -73,41 +73,82 @@ trait PaymentActions
         $accountId = $this->accountId();
         return view('paymentmodule::Payment.index', [
             'methods' => $this->methodService->filterOptions($accountId),
+            // the "For" drop menu: Reservations, Packages, then the "Other income" group (each category)
             'categories' => $this->categoryService->filterOptions($accountId),
         ]);
     }
 
-    // DataTables server side: search (number, reference, member) + for / type / method / category / dates filters
+    // the list tab: today (default, also '') | month | all (on the payment date); employees have no tabs (one day: listFilters())
+    private function tab(array $filters): string
+    {
+        if ($this->collectorId()) {
+            return 'all';
+        }
+        $tab = (string) ($filters['tab'] ?? '');
+        return isset(Payment::TABS[$tab]) ? $tab : 'today';
+    }
+
+    // the list filters of a request: search (number, reference, member) + for / method / dates (Payment::scopeFilter)
+    private function listFilters(array $filters): array
+    {
+        // employees: always ONE day (the date from; none / not a date = today), never a period or all their payments
+        if ($this->collectorId()) {
+            $day = (string) ($filters['date_from'] ?? '');
+            $filters['date_from'] = $filters['date_to'] = preg_match('/^\d{4}-\d{2}-\d{2}$/', $day) && strtotime($day) ? $day : today()->toDateString();
+        }
+
+        return ['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['for', 'method', 'date_from', 'date_to']);
+    }
+
+    // DataTables server side: tab + search + for / method / dates filters, + the summary line of those rows
     public function data(Request $request)
     {
         return $this->table(['search' => $request->input('search.value')] + $request->all())->toJson();
     }
 
-    // the list columns, for data() and for one row after a change (row(), steps 6+)
+    /**
+     * The list columns (docs/payments-plan.md "Payments list", 2026-10-13), for data() and for one row after a change (row()):
+     * Member (phone, payment no.) | Date (time) | For (the reservation / package / income category) | Method | Amount | By (account only)
+     */
     private function table(array $filters, $id = null)
     {
+        $tab = $this->tab($filters);
         $query = $this->paymentService->listQuery($this->accountId())
+            ->with('creatable.userable')
+            // the reservation's place + start (the For column)
+            ->with(['payable' => fn ($morph) => $morph->morphWith([Reservation::class => ['space', 'unit.color', 'plan']])])
             ->when($this->collectorId(), fn ($query, $userId) => $query->collectedBy($userId));
         if ($id) {
             $query->whereKey($id);
         }
 
-        return DataTables::eloquent($query)
+        $table = DataTables::eloquent($query)
             // inside filter() so "of N total" counts all the payments
-            ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))]
-                + Arr::only($filters, ['source', 'type', 'payment_method_id', 'income_category_id', 'date_from', 'date_to'])))
+            ->filter(fn ($query) => $query->filter($this->listFilters($filters))->tab($tab))
             ->setRowId(fn ($payment) => 'row-' . $payment->id)
             ->orderColumn('paid_at', fn ($query, $order) => $query->orderBy('paid_at', $order)->orderBy('payment_no', $order))
-            ->addColumn('number_html', fn ($payment) => '<a href="' . $this->route('show', $payment->id) . '" data-modal class="font-medium">#' . $payment->payment_no . '</a>')
-            ->editColumn('paid_at', fn ($payment) => $payment->paid_at?->format(Reservation::DATE_FORMAT))
-            ->addColumn('member', fn ($payment) => e($payment->member?->name ?? '-'))
+            ->addColumn('member_html', fn ($payment) => view('paymentmodule::Payment.partials.row-member', compact('payment'))->render())
+            // the date + the time it was added (paid_at has no time)
+            ->editColumn('paid_at', fn ($payment) => e($payment->paid_at?->format(Reservation::DATE_FORMAT) ?? '-')
+                . '<div class="text-xs text-slate-500">' . e($payment->created_at?->format(Reservation::TIME_FORMAT)) . '</div>')
             ->addColumn('source', fn ($payment) => view('paymentmodule::Payment.partials.row-source', compact('payment'))->render())
-            ->addColumn('type_html', fn ($payment) => '<span class="badge ' . $payment->type_badge_class . '">' . e($payment->type_label) . '</span>')
             ->addColumn('method', fn ($payment) => e($payment->paymentMethod?->name ?? '-'))
-            ->editColumn('amount', fn ($payment) => number_format($payment->signed_amount, 2))
+            ->editColumn('amount', fn ($payment) => view('paymentmodule::Payment.partials.row-amount', compact('payment'))->render())
+            ->addColumn('by', fn ($payment) => e($payment->creatable?->userable?->displayName() ?? '-'))
             ->addColumn('actions', fn ($payment) => view('paymentmodule::Payment.partials.row-actions', compact('payment'))->render())
-            ->rawColumns(['number_html', 'source', 'type_html', 'actions'])
-            ->only(['DT_RowId', 'number_html', 'paid_at', 'member', 'source', 'type_html', 'method', 'amount', 'actions']);
+            ->rawColumns(['member_html', 'paid_at', 'source', 'amount', 'actions'])
+            ->only(['DT_RowId', 'member_html', 'paid_at', 'source', 'method', 'amount', 'by', 'actions']);
+
+        if ($id) {
+            return $table;
+        }
+
+        // the summary line above the table, for the same rows (datatables.js json "html" → [data-html])
+        $summaryQuery = $this->paymentService->listQuery($this->accountId(), $this->listFilters($filters))->tab($tab)
+            ->when($this->collectorId(), fn ($query, $userId) => $query->collectedBy($userId));
+        $summary = $this->paymentService->listSummary($summaryQuery);
+
+        return $table->with('html', ['payments-summary' => view('paymentmodule::Payment.partials.list-summary', compact('summary'))->render()]);
     }
 
     // the updated row with the list filters (list[...]), null when it does not match them any more (or deleted)

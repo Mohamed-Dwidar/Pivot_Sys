@@ -53,7 +53,7 @@ trait PackageActions
         return isset(\Modules\PackageModule\app\Models\Package::TABS[$tab]) ? $tab : 'current';
     }
 
-    // DataTables server side: tab + search (package, member name / phone) + status / payment filters
+    // DataTables server side: tab + search (package, member name / phone) + dates (period overlaps) / status / payment filters
     public function data(Request $request)
     {
         return $this->table(['search' => $request->input('search.value')] + $request->all())->toJson();
@@ -75,7 +75,7 @@ trait PackageActions
 
         return DataTables::eloquent($query)
             // inside filter() so "of N total" counts all the packages
-            ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['is_active', 'payment_status']))->tab($tab))
+            ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['is_active', 'payment_status', 'date_from', 'date_to']))->tab($tab))
             ->setRowId(fn ($package) => 'row-' . $package->id)
             ->addColumn('name_html', fn ($package) => view('packagemodule::Package.partials.row-package', compact('package'))->render())
             ->addColumn('period', fn ($package) => view('packagemodule::Package.partials.row-period', compact('package'))->render())
