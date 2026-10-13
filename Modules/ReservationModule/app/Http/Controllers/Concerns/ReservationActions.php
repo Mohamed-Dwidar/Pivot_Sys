@@ -146,7 +146,7 @@ trait ReservationActions
             ->setRowId(fn ($reservation) => 'row-' . $reservation->id)
             // not counted (cancelled, pending ...): muted (custom.css)
             ->setRowClass(fn ($reservation) => $reservation->isCounted() ? '' : 'row-muted')
-            // the columns (docs/reservations-list-plan.md, 2026-10-13): Member | Space › Unit | Plan | Period | Status | Amount | Paid | Remaining | By
+            // the columns (docs/reservations-list-plan.md, 2026-10-13): Member | Space › Unit | Plan | Period | Amount | Paid | Remaining | Created By | Status
             ->addColumn('member_html', fn ($reservation) => view('reservationmodule::Reservation.partials.row-member', compact('reservation'))->render())
             // (the unit color) space / › unit (two lines)
             ->addColumn('place', fn ($reservation) => view('reservationmodule::Reservation.partials.row-place', ['reservation' => $reservation, 'stacked' => true])->render())

@@ -10,7 +10,7 @@
         @if ($reservation->package_id && $reservation->package)
             <a href="{{ route($area . '.packages.show', $reservation->package_id) }}" data-modal class="badge {{ $reservation->payment_status_badge_class }}" title="Open the package {{ $reservation->package->name }}"><i data-lucide="package" class="inline h-3 w-3"></i> {{ $reservation->payment_status_label }}</a>
         @else
-            <span class="badge {{ $reservation->payment_status_badge_class }}">{{ $reservation->payment_status === 'partial' ? 'Partial' : $reservation->payment_status_label }}</span>
+            @include('paymentmodule::Payment.partials.payment-badge', ['payable' => $reservation])
         @endif
     </div>
 @endif

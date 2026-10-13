@@ -10,14 +10,19 @@
 @endsection
 
 @section('content')
+    {{--
+        Packages list (docs/reservations-list-plan.md, packages list 2026-10-13), the reservations list style:
+        tabs Current (default, value '': its period includes today or later) | Past | All; one row of filters, all visible:
+        search (package, member name or phone) | status | payment | Clear.
+    --}}
     <form id="packages-filters" class="filter-bar">
-        <input type="search" name="search" class="{{ config('layoutmodule.form.input') }}" placeholder="Package, member name or phone" autocomplete="off">
-        <select name="member_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Member">
-            <option value="">All Members</option>
-            @foreach ($members as $id => $name)
-                <option value="{{ $id }}">{{ Str::humanize($name) }}</option>
+        <input type="hidden" name="tab" value="">
+        <div class="status-tabs filter-bar__tabs">
+            @foreach (\Modules\PackageModule\app\Models\Package::TABS as $value => $label)
+                <button type="button" data-filter-tab data-name="tab" data-value="{{ $value === 'current' ? '' : $value }}" class="{{ $value === 'current' ? 'active' : '' }}">{{ $label }}</button>
             @endforeach
-        </select>
+        </div>
+        <input type="search" name="search" class="{{ config('layoutmodule.form.input') }}" placeholder="Package, member name or phone" autocomplete="off">
         <select name="is_active" class="{{ config('layoutmodule.form.select') }}" aria-label="Status">
             <option value="">All Statuses</option>
             <option value="1">Active</option>
@@ -30,18 +35,16 @@
 
     <div class="table-wrap mt-5">
         <table class="data-table" data-datatable data-url="{{ route($area . '.packages.data') }}"
-            data-filters="#packages-filters" data-order='[[0, "asc"]]' data-empty="No packages yet.">
+            data-filters="#packages-filters" data-order='[[1, "desc"]]' data-empty="No packages here.">
             <thead>
                 <tr>
                     <th data-data="name_html" data-name="name">Package</th>
-                    <th data-data="member">Member</th>
                     <th data-data="period" data-name="date_from" data-class="whitespace-nowrap">Period</th>
-                    <th data-data="amount" data-name="amount">Price</th>
-                    <th data-data="discount" data-name="discount_percentage">Discount</th>
-                    <th data-data="after_discount" data-name="after_discount">Net</th>
-                    <th data-data="paid_amount" data-name="paid_amount">Paid</th>
-                    <th data-data="remaining_html" data-name="remaining">Remaining</th>
-                    <th data-data="reservations_count" data-name="reservations_count">Reservations</th>
+                    <th data-data="reservations" data-name="counted_reservations" data-class="whitespace-nowrap">Reservations</th>
+                    <th data-data="after_discount" data-name="after_discount" data-class="whitespace-nowrap">Amount</th>
+                    <th data-data="paid_amount" data-name="paid_amount" data-class="whitespace-nowrap">Paid</th>
+                    <th data-data="remaining_html" data-name="remaining" data-class="whitespace-nowrap">Remaining</th>
+                    <th data-data="by">Created By</th>
                     <th data-data="status" data-name="is_active">Status</th>
                     <th data-data="actions"></th>
                 </tr>

@@ -16,6 +16,7 @@ use Modules\PaymentModule\app\Models\Concerns\HasPayments;
 use Modules\PaymentModule\app\Services\PaymentService;
 use Modules\ReservationModule\app\Models\Reservation;
 use Modules\ReservationModule\app\Models\ReservationStatus;
+use Modules\SpaceModule\app\Models\SubscriptionType;
 
 /**
  * A package of a member: its price (amount) = the net amounts of its reservations,
@@ -157,6 +158,38 @@ class Package extends Model implements Payable
         return $this->date_to
             ? $this->date_from->format($format) . ' → ' . $this->date_to->format($format)
             : 'From ' . $this->date_from->format($format) . ' (continues)';
+    }
+
+    // the list tabs (docs/reservations-list-plan.md, packages list): current (default) | past | all
+    const TABS = [
+        'current' => 'Current',
+        'past' => 'Past',
+        'all' => 'All',
+    ];
+
+    // current = its period includes today or later (no end yet / no reservations yet too); past = it ended before today
+    public function scopeTab($query, ?string $tab)
+    {
+        return match ($tab) {
+            'current' => $query->where(fn ($query) => $query->whereNull('date_to')->orWhere('date_to', '>=', today())),
+            'past' => $query->where('date_to', '<', today()),
+            default => $query,
+        };
+    }
+
+    /**
+     * + counted_reservations (its counted reservations: not cancelled like) and booked_minutes (end - start of the counted
+     * TIMED ones: not a full day / contract subscription type, end after start) — the list "Reservations" column.
+     */
+    public function scopeWithReservationStats($query)
+    {
+        $notCounted = implode(',', array_map('intval', ReservationStatus::notCountedIds()) ?: [0]);
+        $noHours = implode(',', SubscriptionType::where('full_day', true)->orWhere('is_contract', true)->pluck('id')->map(fn ($id) => (int) $id)->all() ?: [0]);
+        $counted = "FROM reservations r WHERE r.package_id = packages.id AND r.deleted_at IS NULL AND r.reservation_status_id NOT IN ($notCounted)";
+
+        return $query->selectRaw("(SELECT COUNT(*) $counted) AS counted_reservations")
+            ->selectRaw("(SELECT COALESCE(SUM(CEIL(TIMESTAMPDIFF(SECOND, r.start_at, r.end_at) / 60)), 0) $counted"
+                . " AND r.subscription_type_id NOT IN ($noHours) AND r.end_at > r.start_at) AS booked_minutes");
     }
 
     public function scopeFilter($query, array $filters = [])

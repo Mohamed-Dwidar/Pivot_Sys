@@ -12,6 +12,8 @@
 @section('actions')
     <a href="{{ route($area . '.packages.edit', $package->id) }}" data-modal class="btn btn-secondary"><i
             data-lucide="pencil"></i> Edit</a>
+    {{-- the customer package statement (PDF, new tab) --}}
+    <a href="{{ route($area . '.packages.statement', $package->id) }}" target="_blank" class="btn btn-secondary"><i data-lucide="file-down"></i> Export PDF</a>
     @include('packagemodule::Package.partials.delete-form')
 @endsection
 

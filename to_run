@@ -1,0 +1,611 @@
+=====================================================================
+ DATA TRANSFER  dwidar_pivot_api (old, up to date, READ ONLY)  →  dwidar_res_portal (new)
+ Written 2026-10-11. account_id = 1 everywhere. Nothing in dwidar_pivot_api is ever written or truncated.
+ Run the steps in order. Steps 1–2 = terminal, step 3 = SQL (one session), steps 4–5 = terminal, step 6 = SQL checks.
+ RE-RUNNABLE: run it again on go-live day (after stopping the old system) — same result for the same source data.
+   Each run empties and reloads members, packages, reservations, extras, payments, payment methods, income categories,
+   withholding certificates, day closings: don't enter real data in those in the new system before go-live.
+   Employees + their logins are upserted (kept on a re-run: positions / shifts / passwords you set stay).
+ (The previous to_run is kept in storage/app/backups/to_run.before-2026-10-11.)
+=====================================================================
+
+-----
+STEP 1 — backup of the NEW database (terminal, before anything else)
+-----
+mkdir -p storage/app/backups
+mysqldump -h 127.0.0.1 -u root -p --single-transaction --routines dwidar_res_portal > storage/app/backups/dwidar_res_portal-$(date +%Y%m%d-%H%M).sql
+# restore if needed:  mysql -h 127.0.0.1 -u root -p dwidar_res_portal < storage/app/backups/dwidar_res_portal-YYYYMMDD-HHMM.sql
+
+-----
+STEP 2 — remove the 2 test employees' files (terminal)
+-----
+rm -rf storage/app/private/employees/1 storage/app/private/employees/2 public/uploads/employees/1 public/uploads/employees/2
+
+-----
+STEP 3 — SQL (run as one script in dwidar_res_portal)
+-----
+USE dwidar_res_portal;
+SET NAMES utf8mb4;
+
+-- 3.0 the source must look like this (stop if not): 13054 payments (max id 13444), 736 incomes (max id 776), 19823 reservations, 2932 members, 220 packages, 180 extras, 15 users
+SELECT (SELECT COUNT(*) FROM dwidar_pivot_api.payments) payments, (SELECT MAX(id) FROM dwidar_pivot_api.payments) max_payment_id,
+       (SELECT COUNT(*) FROM dwidar_pivot_api.incomes) incomes, (SELECT MAX(id) FROM dwidar_pivot_api.incomes) max_income_id,
+       (SELECT COUNT(*) FROM dwidar_pivot_api.reservations) reservations, (SELECT COUNT(*) FROM dwidar_pivot_api.members) members,
+       (SELECT COUNT(*) FROM dwidar_pivot_api.packages) packages, (SELECT COUNT(*) FROM dwidar_pivot_api.extras) extras,
+       (SELECT COUNT(*) FROM dwidar_pivot_api.users) users;
+-- (more rows since 2026-10-11 is fine)
+
+-- 3.0b STOP CHECK: the old payment + income ids must fit below the app range (100001); an error here = stop
+SELECT IF((SELECT MAX(id) FROM dwidar_pivot_api.payments) + (SELECT MAX(id) FROM dwidar_pivot_api.incomes) < 100001, 'ok',
+          (SELECT 'STOP: old ids reach 100001' UNION ALL SELECT 'STOP')) AS id_range_check;
+
+-- 3.0c old extras items not in the lists of 3.10 (they would NOT be imported): must be empty — else add them to 3.10 first
+SELECT x.item, COUNT(*) n, SUM(x.amount) total FROM dwidar_pivot_api.extras x
+WHERE x.item NOT IN ('تصوير', 'PAPER', 'شحن رصيد', 'ايصالات', 'ايصالات = 5', 'ايصالات حجوزات (4)', 'تحصيل لعمل ايصال',
+  'shared space', 'work space', 'روم', '150Room', 'روم من 11-12', 'Locker 10/11/12/1/2/3',
+  'بوفيه', 'pofee', 'poffe', 'حساب بوفيه', 'حساب البوفيه', 'عم امير بوفيه', 'عدد ساعات بريك', 'تقفيل الحساب بساعات اضافية',
+  'ترحيل حساب من الشهر اللي فات', 'ترحيل حساب من الشهر الحالى للشهر القادم', 'ترحيل الباكدج القديمة', 'ترحيل حساب من الشهر الماضي',
+  'حساب من الشهر القديم', 'ترحيل باكدج قديمة', 'حساب مرحل من الباكدج القديمة 10/2024', 'مرحل للباكدج الجديده (11/2024)',
+  'حساب باقى من باكدج قديمة', 'حساب قديم', 'حساب قديم من باكدج شهر 11', 'ترحيل من باكدج الشهر الفات',
+  'ترحيل حساب من الشهر اللي فات الى الشهر الحالى', 'ترحيل حساب من الشهر الى البكدج الجديدة', 'ترحيل حساب', 'old package',
+  'تقفيل حساب', 'تقفيل الباكدج', 'تقفيل حساب قديم', 'تصفير الحساب', 'تسويه', 'خصم', 'استرداد لدكتور محمد جمال من شركته')
+GROUP BY x.item;
+
+-- 3.0d PRE-CHECK of every source row that feeds an insert (NULL into NOT NULL, too long / too big values, enum values, unknown ids).
+--      BLOCKING = no safe default: listed, then the STOP CHECK below fails BEFORE any TRUNCATE.
+--      fallback = a safe default is used in the insert (or a warning only: the value is kept) — listed so you know.
+--      (a temporary table: nothing is written to either database)
+SET SESSION group_concat_max_len = 1000000;
+DROP TEMPORARY TABLE IF EXISTS transfer_precheck;
+CREATE TEMPORARY TABLE transfer_precheck (check_name VARCHAR(120), kind VARCHAR(10), fallback VARCHAR(120), found INT, sample_ids TEXT);
+INSERT INTO transfer_precheck
+SELECT 'members.name empty', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.members WHERE name IS NULL OR TRIM(name) = ''
+UNION ALL SELECT 'members.phone NULL', 'fallback', ''''' (empty phone)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.members WHERE phone IS NULL
+UNION ALL SELECT 'members.company_id NULL', 'fallback', '0 (no company)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.members WHERE company_id IS NULL
+UNION ALL SELECT 'members.job_id NULL', 'fallback', '0 (no job)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.members WHERE job_id IS NULL
+UNION ALL SELECT 'members.created_by NULL', 'fallback', '1', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.members WHERE created_by IS NULL
+UNION ALL SELECT 'members.company_id unknown', 'fallback', '0 (no company)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.members WHERE company_id > 0 AND company_id NOT IN (SELECT id FROM dwidar_res_portal.companies)
+UNION ALL SELECT 'members.job_id unknown', 'fallback', '0 (no job)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.members WHERE job_id > 0 AND job_id NOT IN (SELECT id FROM dwidar_res_portal.job_positions)
+UNION ALL SELECT 'members.name longer than 255', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.members WHERE CHAR_LENGTH(name) > 255
+UNION ALL SELECT 'members.phone longer than 255', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.members WHERE CHAR_LENGTH(phone) > 255
+UNION ALL SELECT 'members.email longer than 255', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.members WHERE CHAR_LENGTH(email) > 255
+UNION ALL SELECT 'members.notes longer than 255', 'fallback', 'cut to 255 characters', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.members WHERE CHAR_LENGTH(notes) > 255
+UNION ALL SELECT 'members.from_where longer than 191', 'fallback', 'cut to 191 characters', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.members WHERE CHAR_LENGTH(from_where) > 191
+UNION ALL SELECT 'members.push_token longer than 255', 'fallback', 'cut to 255 characters', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.members WHERE CHAR_LENGTH(push_token) > 255
+UNION ALL SELECT 'packages.member_id NULL / unknown', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.packages WHERE member_id IS NULL OR member_id NOT IN (SELECT id FROM dwidar_pivot_api.members)
+UNION ALL SELECT 'packages.name empty', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.packages WHERE name IS NULL OR TRIM(name) = ''
+UNION ALL SELECT 'packages.name longer than 255', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.packages WHERE CHAR_LENGTH(name) > 255
+UNION ALL SELECT 'packages.notes longer than 255', 'fallback', 'cut to 255 characters', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.packages WHERE CHAR_LENGTH(notes) > 255
+UNION ALL SELECT 'packages.is_active NULL', 'fallback', '1', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.packages WHERE is_active IS NULL
+UNION ALL SELECT 'packages.discount_percentage NULL', 'fallback', '0', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.packages WHERE discount_percentage IS NULL
+UNION ALL SELECT 'packages.total_amount NULL', 'fallback', '0 (recalculated in step 4)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.packages WHERE total_amount IS NULL
+UNION ALL SELECT 'packages.total_amount too big', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.packages WHERE ABS(total_amount) > 9999999999.99
+UNION ALL SELECT 'packages.amount NULL', 'fallback', '0 (recalculated in step 4)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.packages WHERE amount IS NULL
+UNION ALL SELECT 'packages.amount too big', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.packages WHERE ABS(amount) > 9999999999.99
+UNION ALL SELECT 'packages.after_discount NULL', 'fallback', '0 (recalculated in step 4)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.packages WHERE after_discount IS NULL
+UNION ALL SELECT 'packages.after_discount too big', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.packages WHERE ABS(after_discount) > 9999999999.99
+UNION ALL SELECT 'packages.remaining NULL', 'fallback', '0 (recalculated in step 4)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.packages WHERE remaining IS NULL
+UNION ALL SELECT 'packages.remaining too big', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.packages WHERE ABS(remaining) > 9999999999.99
+UNION ALL SELECT 'reservations.member_id NULL', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE member_id IS NULL
+UNION ALL SELECT 'reservations.member_id unknown (member deleted in the old system)', 'fallback', 'kept (warning only: no member)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE member_id NOT IN (SELECT id FROM dwidar_pivot_api.members)
+UNION ALL SELECT 'reservations.space_id NULL / unknown', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE space_id IS NULL OR space_id NOT IN (SELECT id FROM dwidar_res_portal.spaces)
+UNION ALL SELECT 'reservations.unit_id NULL / unknown', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE unit_id IS NULL OR unit_id NOT IN (SELECT id FROM dwidar_res_portal.units)
+UNION ALL SELECT 'reservations.plan_id NULL / unknown', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE plan_id IS NULL OR plan_id NOT IN (SELECT id FROM dwidar_res_portal.plans)
+UNION ALL SELECT 'reservations.package_id unknown (package deleted in the old system)', 'fallback', 'package 0 + status Cancelled', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE package_id > 0 AND package_id NOT IN (SELECT id FROM dwidar_pivot_api.packages)
+UNION ALL SELECT 'reservations.package_id NULL', 'fallback', '0 (no package)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE package_id IS NULL
+UNION ALL SELECT 'reservations.subscription_id NULL', 'fallback', '0', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE subscription_id IS NULL
+UNION ALL SELECT 'reservations.subscription_id unknown', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE subscription_id > 0 AND subscription_id NOT IN (SELECT id FROM dwidar_res_portal.subscription_types)
+UNION ALL SELECT 'reservations.subscription_id 0 (no type)', 'fallback', 'kept as 0 (warning only: no subscription type)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE subscription_id = 0
+UNION ALL SELECT 'reservations.repeat_id unknown', 'fallback', 'kept (warning only: the original is gone)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE repeat_id > 0 AND repeat_id NOT IN (SELECT id FROM dwidar_pivot_api.reservations)
+UNION ALL SELECT 'reservations.date_from NULL', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE date_from IS NULL
+UNION ALL SELECT 'reservations.date_to before date_from', 'fallback', 'kept (warning only)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE date_to < date_from
+UNION ALL SELECT 'reservations.type_repeat not daily/weekly/monthly/yearly', 'fallback', 'NULL (no repeat frequency)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE type_repeat IS NOT NULL AND type_repeat NOT IN ('daily', 'weekly', 'monthly', 'yearly')
+UNION ALL SELECT 'reservations.subscription_day NULL', 'fallback', '0', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE subscription_day IS NULL
+UNION ALL SELECT 'reservations.is_continue NULL', 'fallback', '0', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE is_continue IS NULL
+UNION ALL SELECT 'reservations.all_day NULL', 'fallback', '0', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE all_day IS NULL
+UNION ALL SELECT 'reservations.repeat_id NULL', 'fallback', '0', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE repeat_id IS NULL
+UNION ALL SELECT 'reservations.is_repeat NULL', 'fallback', '0', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE is_repeat IS NULL
+UNION ALL SELECT 'reservations.number_of_peoples NULL', 'fallback', '1', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE number_of_peoples IS NULL
+UNION ALL SELECT 'reservations.status_id NULL', 'fallback', '1', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE status_id IS NULL
+UNION ALL SELECT 'reservations.created_by NULL', 'fallback', '1', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE created_by IS NULL
+UNION ALL SELECT 'reservations.is_cancelled NULL', 'fallback', '0', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE is_cancelled IS NULL
+UNION ALL SELECT 'reservations.amount NULL', 'fallback', '0', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE amount IS NULL
+UNION ALL SELECT 'reservations.amount too big', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE ABS(amount) > 9999999999.99
+UNION ALL SELECT 'reservations.number_of_peoples < 1', 'fallback', 'kept (warning only)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE number_of_peoples < 1
+UNION ALL SELECT 'extras.package NULL / unknown (package deleted in the old system)', 'fallback', 'skipped (not imported)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.extras WHERE addable_id IS NULL OR addable_type NOT LIKE '%Package%' OR addable_id NOT IN (SELECT id FROM dwidar_pivot_api.packages)
+UNION ALL SELECT 'extras.item empty', 'fallback', '''-''', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.extras WHERE item IS NULL OR TRIM(item) = ''
+UNION ALL SELECT 'extras.item longer than 255', 'fallback', 'cut to 255 characters', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.extras WHERE CHAR_LENGTH(item) > 255
+UNION ALL SELECT 'extras.amount NULL / 0', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.extras WHERE amount IS NULL OR amount = 0
+UNION ALL SELECT 'extras.amount too big', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.extras WHERE ABS(amount) > 9999999999.99
+UNION ALL SELECT 'extras.date NULL', 'fallback', 'DATE(created_at)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.extras WHERE date IS NULL
+UNION ALL SELECT 'extras.date and created_at NULL', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.extras WHERE date IS NULL AND created_at IS NULL
+UNION ALL SELECT 'payments.payable NULL / unknown', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.payments WHERE paymentable_id IS NULL OR NOT ((paymentable_type LIKE '%Reservation%' AND paymentable_id IN (SELECT id FROM dwidar_pivot_api.reservations)) OR (paymentable_type LIKE '%Package%' AND paymentable_id IN (SELECT id FROM dwidar_pivot_api.packages)))
+UNION ALL SELECT 'payments.amount NULL', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.payments WHERE amount IS NULL
+UNION ALL SELECT 'payments.amount too big', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.payments WHERE ABS(amount) > 9999999999.99
+UNION ALL SELECT 'payments.amount 0', 'fallback', 'kept as 0.00 (warning only)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.payments WHERE amount = 0
+UNION ALL SELECT 'payments.payment_method NULL / unknown', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.payments WHERE payment_method IS NULL OR payment_method NOT IN (SELECT id FROM dwidar_pivot_api.payment_methods)
+UNION ALL SELECT 'payments.date NULL', 'fallback', 'DATE(created_at)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.payments WHERE date IS NULL
+UNION ALL SELECT 'payments.date and created_at NULL', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.payments WHERE date IS NULL AND created_at IS NULL
+UNION ALL SELECT 'payments.negative withholding with a positive one on the same reservation', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.payments WHERE payment_method = 5 AND amount < 0 AND EXISTS (SELECT 1 FROM dwidar_pivot_api.payments w WHERE w.paymentable_type = payments.paymentable_type AND w.paymentable_id = payments.paymentable_id AND w.payment_method = 5 AND w.amount > 0)
+UNION ALL SELECT 'incomes.type NULL / unknown', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.incomes WHERE type_id IS NULL OR type_id NOT IN (SELECT id FROM dwidar_pivot_api.income_types)
+UNION ALL SELECT 'incomes.amount NULL / <= 0', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.incomes WHERE amount IS NULL OR amount <= 0
+UNION ALL SELECT 'incomes.amount too big', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.incomes WHERE ABS(amount) > 9999999999.99
+UNION ALL SELECT 'incomes.payment_method NULL / unknown / withholding (5)', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.incomes WHERE payment_method_id IS NULL OR payment_method_id = 5 OR payment_method_id NOT IN (SELECT id FROM dwidar_pivot_api.payment_methods)
+UNION ALL SELECT 'incomes.date NULL', 'fallback', 'DATE(created_at)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.incomes WHERE date IS NULL
+UNION ALL SELECT 'incomes.date and created_at NULL', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.incomes WHERE date IS NULL AND created_at IS NULL
+UNION ALL SELECT 'users.email empty / duplicate', 'BLOCKING', '-', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.users WHERE email IS NULL OR TRIM(email) = '' OR email IN (SELECT email FROM dwidar_pivot_api.users GROUP BY email HAVING COUNT(*) > 1) OR email IN (SELECT email FROM dwidar_res_portal.users WHERE id = 1);
+SELECT check_name, kind, fallback, found, sample_ids AS first_ids FROM transfer_precheck WHERE found > 0 ORDER BY kind, check_name;
+-- STOP CHECK: an error here = a BLOCKING row was found (see the list above): fix it in the source / decide, then run again
+SELECT IF((SELECT COUNT(*) FROM transfer_precheck WHERE kind = 'BLOCKING' AND found > 0) = 0, 'ok',
+          (SELECT 'STOP: blocking rows found' UNION ALL SELECT 'STOP')) AS precheck_result;
+
+-- the incomes' ids / numbers start after the highest old payment id
+SET @income_offset = (SELECT MAX(id) FROM dwidar_pivot_api.payments);
+
+-- 3.1 new tables (create migrations exist; CREATE IF NOT EXISTS + the migrations rows, so php artisan migrate won't create them again)
+CREATE TABLE IF NOT EXISTS day_closing_logs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  account_id BIGINT NOT NULL, day_closing_id BIGINT NOT NULL,
+  action ENUM('close', 'reopen') NOT NULL, user_id BIGINT NOT NULL, reason VARCHAR(255) NULL,
+  cash_total DECIMAL(12,2) NOT NULL DEFAULT 0, withholding_total DECIMAL(12,2) NOT NULL DEFAULT 0, totals JSON NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX day_closing_logs_account_id_index (account_id), INDEX day_closing_logs_day_closing_id_index (day_closing_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS extras (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  account_id BIGINT NOT NULL,
+  extrable_type VARCHAR(255) NOT NULL, extrable_id BIGINT NOT NULL,
+  type ENUM('extra', 'adjustment') NOT NULL DEFAULT 'extra',
+  income_category_id BIGINT NOT NULL DEFAULT 0,
+  item VARCHAR(255) NOT NULL,
+  quantity DECIMAL(10,2) NOT NULL DEFAULT 1, unit_price DECIMAL(12,2) NOT NULL DEFAULT 0, amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  date DATE NOT NULL, notes TEXT NULL,
+  creatable_type VARCHAR(255) NOT NULL, creatable_id BIGINT UNSIGNED NOT NULL,
+  created_at TIMESTAMP NULL, updated_at TIMESTAMP NULL, deleted_at TIMESTAMP NULL,
+  INDEX extras_account_id_index (account_id), INDEX extras_extrable_type_extrable_id_index (extrable_type, extrable_id),
+  INDEX extras_creatable_type_creatable_id_index (creatable_type, creatable_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- income_categories.is_revenue (also in its create migration): 0 = not income (VAT collected ...), left out of the income reports
+SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'income_categories' AND COLUMN_NAME = 'is_revenue') = 0,
+  'ALTER TABLE income_categories ADD is_revenue TINYINT(1) NOT NULL DEFAULT 1 AFTER is_active', 'SELECT ''is_revenue exists''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
+-- shift closing (payments-plan.md §2b): shift_closings, shift_events, payments.shift_closing_id, accounts reminder settings
+CREATE TABLE IF NOT EXISTS shift_closings (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  account_id BIGINT NOT NULL, user_id BIGINT NOT NULL,
+  status ENUM('closed', 'reopened') NOT NULL DEFAULT 'closed',
+  first_payment_at DATETIME NULL, last_payment_at DATETIME NULL,
+  count INT UNSIGNED NOT NULL DEFAULT 0,
+  cash_total DECIMAL(12,2) NOT NULL DEFAULT 0, withholding_total DECIMAL(12,2) NOT NULL DEFAULT 0, totals JSON NULL,
+  notes VARCHAR(255) NULL,
+  closed_by BIGINT NOT NULL, closed_at DATETIME NOT NULL,
+  reopened_by BIGINT NOT NULL DEFAULT 0, reopened_at DATETIME NULL, reopen_reason VARCHAR(255) NULL,
+  created_at TIMESTAMP NULL, updated_at TIMESTAMP NULL,
+  INDEX shift_closings_account_id_index (account_id), INDEX shift_closings_user_id_index (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS shift_events (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  account_id BIGINT NOT NULL, user_id BIGINT NOT NULL, shift_closing_id BIGINT NOT NULL DEFAULT 0, by_user_id BIGINT NOT NULL,
+  action ENUM('close', 'close_on_behalf', 'reopen', 'reclose', 'logout_closed', 'logout_still_working', 'still_working') NOT NULL,
+  reason VARCHAR(255) NULL, totals JSON NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX shift_events_account_id_index (account_id), INDEX shift_events_user_id_index (user_id),
+  INDEX shift_events_shift_closing_id_index (shift_closing_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'payments' AND COLUMN_NAME = 'shift_closing_id') = 0,
+  'ALTER TABLE payments ADD shift_closing_id BIGINT NOT NULL DEFAULT 0 AFTER withholding_certificate_id, ADD INDEX payments_account_id_creatable_id_shift_closing_id_index (account_id, creatable_id, shift_closing_id)',
+  'SELECT ''shift_closing_id exists''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
+SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accounts' AND COLUMN_NAME = 'shift_reminder_hours') = 0,
+  'ALTER TABLE accounts ADD shift_reminder_hours SMALLINT UNSIGNED NOT NULL DEFAULT 12 AFTER approved_at, ADD shift_snooze_hours SMALLINT UNSIGNED NOT NULL DEFAULT 4 AFTER shift_reminder_hours',
+  'SELECT ''shift_reminder_hours exists''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
+INSERT INTO migrations (migration, batch)
+SELECT m.migration, (SELECT MAX(batch) + 1 FROM migrations) FROM (
+  SELECT '2026_10_11_100005_create_day_closing_logs_table' migration UNION ALL SELECT '2026_10_11_100006_create_extras_table'
+  UNION ALL SELECT '2026_10_11_100007_create_shift_closings_table' UNION ALL SELECT '2026_10_11_100008_create_shift_events_table'
+) m WHERE m.migration NOT IN (SELECT migration FROM migrations);
+
+-- 3.2 empty the target tables (new DB only; TRUNCATE = no rollback, the backup of step 1 is the way back)
+--     kept as they are: spaces, subscription_types, space_subscription_type, units, plans, plan_unit, plan_space, colors,
+--     reservation_statuses, companies, job_positions, emp_positions, emp_shifts, accounts, admins, users id 1 (the account login);
+--     employees + their logins: upserted in 3.5 / 3.6 (only rows that are not an old user are removed here)
+TRUNCATE TABLE members;
+TRUNCATE TABLE packages;
+TRUNCATE TABLE reservations;
+TRUNCATE TABLE payments;
+TRUNCATE TABLE extras;
+TRUNCATE TABLE payment_methods;
+TRUNCATE TABLE income_categories;
+TRUNCATE TABLE withholding_certificates;
+TRUNCATE TABLE day_closings;
+TRUNCATE TABLE day_closing_logs;
+TRUNCATE TABLE shift_closings;
+TRUNCATE TABLE shift_events;
+-- employees / logins that are not an old user (same id + same name / email) = the 2 test employees of the first run; on a re-run: nothing
+DELETE e FROM employees e LEFT JOIN dwidar_pivot_api.users u ON u.id = e.id AND u.name = e.name WHERE u.id IS NULL;
+DELETE x FROM users x LEFT JOIN dwidar_pivot_api.users u ON u.id = x.id AND u.email = x.email
+WHERE x.userable_type = 'Modules\\EmployeeModule\\app\\Models\\Employee' AND u.id IS NULL;
+DELETE a FROM employee_attachments a LEFT JOIN employees e ON e.id = a.employee_id WHERE e.id IS NULL;
+DROP TABLE IF EXISTS creatable_backup;
+
+-- 3.3 payment methods (old 5 "إشعار خصم" = withholding, not a method)
+INSERT INTO payment_methods (id, account_id, name_ar, name_en, is_active, sort_order, created_at, updated_at)
+SELECT id, 1,
+  CASE name WHEN 'cash' THEN 'نقدي' WHEN 'visa' THEN 'فيزا' WHEN 'instapay' THEN 'إنستاباي' WHEN 'vodafone_cash' THEN 'فودافون كاش'
+            WHEN 'Bank Transfer - CIB' THEN 'تحويل بنكي - CIB' ELSE name END,
+  CASE name WHEN 'cash' THEN 'Cash' WHEN 'visa' THEN 'Visa' WHEN 'instapay' THEN 'InstaPay' WHEN 'vodafone_cash' THEN 'Vodafone Cash' ELSE name END,
+  1, id, created_at, updated_at
+FROM dwidar_pivot_api.payment_methods WHERE id <> 5;
+
+-- 3.4 income categories: the old ones (same ids; 6 = VAT: inactive + not revenue) + 101 Buffet, 102 Break Hours, 103 Extra Hours
+--     (ids 101+ so a new old income type never clashes with them)
+INSERT INTO income_categories (id, account_id, name_ar, name_en, is_active, is_revenue, sort_order, created_at, updated_at)
+SELECT id, 1, name_ar, name_en, IF(id = 6, 0, 1), IF(id = 6, 0, 1), id, created_at, updated_at FROM dwidar_pivot_api.income_types;
+INSERT INTO income_categories (id, account_id, name_ar, name_en, is_active, is_revenue, sort_order, created_at, updated_at) VALUES
+  (101, 1, 'بوفيه', 'Buffet', 1, 1, 101, NOW(), NOW()),
+  (102, 1, 'ساعات بريك', 'Break Hours', 1, 1, 102, NOW(), NOW()),
+  (103, 1, 'ساعات إضافية', 'Extra Hours', 1, 1, 103, NOW(), NOW());
+
+-- 3.5 employees = the old users (employee id = user id = old user id) — upsert: a re-run only adds new old users and updates the name
+--     active (login): 3, 7, 10, 12, 13, 14, 15, 16; inactive (leave_date = last login / created → login refused): 2, 4, 5, 6, 8, 9, 11
+--     position: old user 3 (role accountant) → 3 Accountant, the others none (0, set them in Employees)
+INSERT INTO employees (id, account_id, name, position_id, shift_id, join_date, leave_date, created_at, updated_at)
+SELECT u.id, 1, u.name, IF(u.id = 3, 3, 0), 0, DATE(u.created_at),
+  IF(u.id IN (2, 4, 5, 6, 8, 9, 11),
+     COALESCE((SELECT DATE(MAX(t.created_at)) FROM dwidar_pivot_api.oauth_access_tokens t WHERE t.user_id = u.id), DATE(u.created_at), CURDATE()),
+     NULL),
+  COALESCE(u.created_at, NOW()), NOW()
+FROM dwidar_pivot_api.users u
+ON DUPLICATE KEY UPDATE name = u.name;
+
+-- 3.6 their logins (users id = old user id; the account login id 1 is not touched) — upsert: a re-run keeps the password, updates the email
+--     the old bcrypt passwords are kept; 12, 13, 15 had plain passwords → the same password, hashed (weak: ask them to change it);
+--     the inactive ones without bcrypt get an unusable random hash
+INSERT INTO users (id, email, password, userable_type, userable_id, created_at, updated_at)
+SELECT u.id, u.email,
+  CASE u.id
+    WHEN 4 THEN '$2y$12$lKvFswR4bwgwig1H7TXYfeBhH/O1dg.UMCyLxPu6Od24WqiN4x0bK'
+    WHEN 5 THEN '$2y$12$SKwL0a9tuVHTwo.dBWPIfuJVtWAVJO6c9ey2o4KMyza1THw3VL3Xi'
+    WHEN 6 THEN '$2y$12$P2Pxn6QOEp.IK.1aF5lzjuzA8WkiJtnU.zF0CMp9zfry09qIbBk/O'
+    WHEN 8 THEN '$2y$12$N6FPytTgiiPVl3/fM0XOEuGEQ9K4BfFNmDV6ClaPjO4JuuZAOXPLK'
+    WHEN 9 THEN '$2y$12$7y80aZAtY1QkAc9pMkhf4OTGyPqqI3SxNER3USKwUwXE.aUgdvP.6'
+    WHEN 11 THEN '$2y$12$qNiyX4mW6LuzVN4QQqqZVu.yxam8vr8HuQYqjl3zkfmUuqGFEGa1i'
+    WHEN 12 THEN '$2y$12$h2eADbcrXNKXHQTN8g3vN.DTIaoMgKrnBTUgUXVdvQAikj.y7ufp6'
+    WHEN 13 THEN '$2y$12$G.7SP5ER32eCDXfeb99SU.z7Z5o8gBFhC0q15Cf7LwzK9.g6L0k3a'
+    WHEN 15 THEN '$2y$12$763WtBWUoAkBoLD1KP31H.7fniz6759UEQ4Hm3kpHYIH8pm3RdHae'
+    ELSE u.password END,
+  'Modules\\EmployeeModule\\app\\Models\\Employee', u.id, COALESCE(u.created_at, NOW()), NOW()
+FROM dwidar_pivot_api.users u
+ON DUPLICATE KEY UPDATE email = u.email;
+
+-- creator of the old rows: an old user → that user (same id); old Admin 1 / empty → the account login (1)
+-- (used below as: CASE WHEN x.creatable_type LIKE '%UserModule%' AND x.creatable_id IN (SELECT id FROM dwidar_pivot_api.users) THEN x.creatable_id ELSE 1 END)
+
+-- 3.7 members
+INSERT INTO members (id, account_id, name, company_id, job_id, phone, email, national_number, notes, from_where, push_token, created_by,
+  creatable_type, creatable_id, created_at, updated_at)
+SELECT m.id, 1, m.name,
+  IF(m.company_id > 0 AND m.company_id IN (SELECT id FROM companies), m.company_id, 0),
+  IF(m.job_id > 0 AND m.job_id IN (SELECT id FROM job_positions), m.job_id, 0),
+  COALESCE(m.phone, ''), m.email, m.national_number, LEFT(m.notes, 255), LEFT(m.from_where, 191), LEFT(m.push_token, 255), COALESCE(m.created_by, 1),
+  'Modules\\UserModule\\app\\Models\\User',
+  CASE WHEN m.creatable_type LIKE '%UserModule%' AND m.creatable_id IN (SELECT id FROM dwidar_pivot_api.users) THEN m.creatable_id ELSE 1 END,
+  m.created_at, m.updated_at
+FROM dwidar_pivot_api.members m;
+
+-- 3.8 packages (price / net / paid / remaining are calculated again in step 4)
+INSERT INTO packages (id, account_id, member_id, name, date_from, date_to, is_active, discount_percentage, total_amount, amount, after_discount,
+  paid_amount, remaining, notes, creatable_type, creatable_id, created_at, updated_at)
+SELECT k.id, 1, k.member_id, k.name, k.date_from, k.date_to, COALESCE(k.is_active, 1), COALESCE(k.discount_percentage, 0),
+  ROUND(COALESCE(k.total_amount, 0), 2), ROUND(COALESCE(k.amount, 0), 2), ROUND(COALESCE(k.after_discount, 0), 2), 0, ROUND(COALESCE(k.remaining, 0), 2), LEFT(k.notes, 255),
+  'Modules\\UserModule\\app\\Models\\User',
+  CASE WHEN k.creatable_type LIKE '%UserModule%' AND k.creatable_id IN (SELECT id FROM dwidar_pivot_api.users) THEN k.creatable_id ELSE 1 END,
+  k.created_at, k.updated_at
+FROM dwidar_pivot_api.packages k;
+
+-- 3.9 reservations: status 3 Cancelled (is_cancelled) else 2 Confirmed; subscription_id → subscription_type_id; date_from / date_to → start_at / end_at;
+--     type_repeat → repeat_frequency; no discount in the old system: net = amount (the old columns are copied too);
+--     a member deleted in the old system: kept as it is (no member, user decision); a package deleted in the old system: no package + Cancelled
+INSERT INTO reservations (id, account_id, member_id, space_id, unit_id, plan_id, package_id, subscription_type_id, reservation_status_id,
+  start_at, end_at, subscription_day, is_continue, all_day, repeat_id, is_repeat, repeat_frequency, repeat_interval, number_of_peoples,
+  amount, discount_percentage, discount_value, net_amount, paid_amount, remaining, notes, creatable_type, creatable_id,
+  created_at, updated_at, deleted_at, status_id, subscription_id, created_by, date_from, date_to, type_repeat, is_cancelled)
+SELECT r.id, 1, r.member_id, r.space_id, r.unit_id, r.plan_id,
+  -- a package deleted in the old system: no package, and the reservation is Cancelled (user decision 2026-10-11)
+  IF(r.package_id > 0 AND r.package_id NOT IN (SELECT id FROM dwidar_pivot_api.packages), 0, COALESCE(r.package_id, 0)),
+  COALESCE(r.subscription_id, 0),
+  IF(r.is_cancelled = 1 OR (r.package_id > 0 AND r.package_id NOT IN (SELECT id FROM dwidar_pivot_api.packages)), 3, 2),
+  r.date_from, r.date_to, COALESCE(r.subscription_day, 0), COALESCE(r.is_continue, 0), COALESCE(r.all_day, 0), COALESCE(r.repeat_id, 0), COALESCE(r.is_repeat, 0),
+  IF(r.type_repeat IN ('daily', 'weekly', 'monthly', 'yearly'), r.type_repeat, NULL), 0, COALESCE(r.number_of_peoples, 1),
+  ROUND(COALESCE(r.amount, 0), 2), 0, 0, ROUND(COALESCE(r.amount, 0), 2), 0, 0, r.notes,
+  'Modules\\UserModule\\app\\Models\\User',
+  CASE WHEN r.creatable_type LIKE '%UserModule%' AND r.creatable_id IN (SELECT id FROM dwidar_pivot_api.users) THEN r.creatable_id ELSE 1 END,
+  r.created_at, r.updated_at, r.deleted_at, COALESCE(r.status_id, 1), COALESCE(r.subscription_id, 0), COALESCE(r.created_by, 1), r.date_from, r.date_to, r.type_repeat, COALESCE(r.is_cancelled, 0)
+FROM dwidar_pivot_api.reservations r;
+
+-- 3.10 extras (old package extras, id kept, quantity 1, unit price = amount)
+--      adjustment = balance moves / close-outs / discount / reimbursement; extra = a sale, with its income category
+INSERT INTO extras (id, account_id, extrable_type, extrable_id, type, income_category_id, item, quantity, unit_price, amount, date, notes,
+  creatable_type, creatable_id, created_at, updated_at)
+SELECT e.id, 1, 'Modules\\PackageModule\\app\\Models\\Package', e.addable_id,
+  IF(c.category = 0, 'adjustment', 'extra'), c.category, LEFT(COALESCE(NULLIF(TRIM(e.item), ''), '-'), 255), 1, ROUND(e.amount, 2), ROUND(e.amount, 2),
+  COALESCE(e.date, DATE(e.created_at)), NULL,
+  'Modules\\UserModule\\app\\Models\\User', 1, e.created_at, e.updated_at
+FROM dwidar_pivot_api.extras e
+JOIN (SELECT x.id, CASE
+    WHEN x.item IN ('تصوير', 'PAPER') THEN 1
+    WHEN x.item IN ('شحن رصيد') THEN 2
+    WHEN x.item IN ('ايصالات', 'ايصالات = 5', 'ايصالات حجوزات (4)', 'تحصيل لعمل ايصال') THEN 3
+    WHEN x.item IN ('shared space', 'work space', 'روم', '150Room', 'روم من 11-12', 'Locker 10/11/12/1/2/3') THEN 5
+    WHEN x.item IN ('بوفيه', 'pofee', 'poffe', 'حساب بوفيه', 'حساب البوفيه', 'عم امير بوفيه') THEN 101
+    WHEN x.item IN ('عدد ساعات بريك') THEN 102
+    WHEN x.item IN ('تقفيل الحساب بساعات اضافية') THEN 103
+    WHEN x.item IN ('ترحيل حساب من الشهر اللي فات', 'ترحيل حساب من الشهر الحالى للشهر القادم', 'ترحيل الباكدج القديمة', 'ترحيل حساب من الشهر الماضي',
+                    'حساب من الشهر القديم', 'ترحيل باكدج قديمة', 'حساب مرحل من الباكدج القديمة 10/2024', 'مرحل للباكدج الجديده (11/2024)',
+                    'حساب باقى من باكدج قديمة', 'حساب قديم', 'حساب قديم من باكدج شهر 11', 'ترحيل من باكدج الشهر الفات',
+                    'ترحيل حساب من الشهر اللي فات الى الشهر الحالى', 'ترحيل حساب من الشهر الى البكدج الجديدة', 'ترحيل حساب', 'old package',
+                    'تقفيل حساب', 'تقفيل الباكدج', 'تقفيل حساب قديم', 'تصفير الحساب', 'تسويه', 'خصم', 'استرداد لدكتور محمد جمال من شركته') THEN 0
+    ELSE -1 END category
+  FROM dwidar_pivot_api.extras x) c ON c.id = e.id
+WHERE c.category >= 0
+  -- its package was deleted in the old system: skipped (user decision 2026-10-11)
+  AND e.addable_id IN (SELECT id FROM dwidar_pivot_api.packages);
+-- an item not in the lists above is NOT imported: 3.0c lists them before, check 6.5 (unclassified) must be 0
+
+-- 3.11 payments (id = payment_no = old id): method 5 → withholding (method 0); negative → refund (positive amount);
+--      old 8330 (−43.40, method 5, reservation 12483 has no positive withholding) → refund, no method, note "withholding correction"
+INSERT INTO payments (id, account_id, payment_no, payable_type, payable_id, income_category_id, member_id, type, amount, payment_method_id,
+  paid_at, notes, creatable_type, creatable_id, created_at, updated_at)
+SELECT p.id, 1, p.id,
+  IF(p.paymentable_type LIKE '%Package%', 'Modules\\PackageModule\\app\\Models\\Package', 'Modules\\ReservationModule\\app\\Models\\Reservation'),
+  p.paymentable_id, 0, COALESCE(r.member_id, k.member_id, 0),
+  CASE WHEN p.amount < 0 THEN 'refund' WHEN p.payment_method = 5 THEN 'withholding' ELSE 'payment' END,
+  ABS(ROUND(p.amount, 2)),
+  IF(p.payment_method = 5, 0, p.payment_method),
+  COALESCE(p.date, DATE(p.created_at)),
+  IF(p.payment_method = 5 AND p.amount < 0, CONCAT_WS(' — ', 'withholding correction', NULLIF(p.notes, '')), p.notes),
+  'Modules\\UserModule\\app\\Models\\User',
+  CASE WHEN p.creatable_type LIKE '%UserModule%' AND p.creatable_id IN (SELECT id FROM dwidar_pivot_api.users) THEN p.creatable_id ELSE 1 END,
+  p.created_at, p.updated_at
+FROM dwidar_pivot_api.payments p
+LEFT JOIN dwidar_pivot_api.reservations r ON p.paymentable_type LIKE '%Reservation%' AND r.id = p.paymentable_id
+LEFT JOIN dwidar_pivot_api.packages     k ON p.paymentable_type LIKE '%Package%'     AND k.id = p.paymentable_id;
+
+-- 3.12 a reservation inside a package is paid through the package (old: 1 payment, 300.00, reservation 106 → package 3)
+UPDATE payments pay
+JOIN reservations r ON pay.payable_type = 'Modules\\ReservationModule\\app\\Models\\Reservation' AND r.id = pay.payable_id
+SET pay.payable_type = 'Modules\\PackageModule\\app\\Models\\Package', pay.payable_id = r.package_id
+WHERE r.package_id > 0;
+
+-- 3.13 incomes → other income (no payable): id = payment_no = @income_offset (the highest old payment id) + old id
+INSERT INTO payments (id, account_id, payment_no, payable_type, payable_id, income_category_id, member_id, type, amount, payment_method_id,
+  paid_at, notes, creatable_type, creatable_id, created_at, updated_at)
+SELECT @income_offset + i.id, 1, @income_offset + i.id, NULL, 0, i.type_id, 0, 'payment', ROUND(i.amount, 2), i.payment_method_id,
+  COALESCE(i.date, DATE(i.created_at)), NULLIF(CONCAT_WS(' — ', NULLIF(i.item, ''), NULLIF(i.notes, '')), ''),
+  'Modules\\UserModule\\app\\Models\\User',
+  CASE WHEN i.creatable_type LIKE '%UserModule%' AND i.creatable_id IN (SELECT id FROM dwidar_pivot_api.users) THEN i.creatable_id ELSE 1 END,
+  i.created_at, i.updated_at
+FROM dwidar_pivot_api.incomes i;
+
+-- 3.14 next ids: app payments from 100001 (config paymentmodule.number_start); the rest after the highest imported id
+SET @sql = 'ALTER TABLE payments AUTO_INCREMENT = 100001'; PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql = CONCAT('ALTER TABLE users AUTO_INCREMENT = ', (SELECT MAX(id) + 1 FROM users)); PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql = CONCAT('ALTER TABLE employees AUTO_INCREMENT = ', (SELECT MAX(id) + 1 FROM employees)); PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql = CONCAT('ALTER TABLE income_categories AUTO_INCREMENT = ', (SELECT MAX(id) + 1 FROM income_categories)); PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql = CONCAT('ALTER TABLE payment_methods AUTO_INCREMENT = ', (SELECT GREATEST(MAX(id) + 1, 7) FROM payment_methods)); PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
+-- 3.15 imported payments of each old employee = ONE closed shift closing per employee (else years of open period → the
+--      "close your shift" popup at once). Payments of the account login (1) are not in a shift (locked by the day closing).
+--      totals = ShiftClosingService::summary() shape: methods {id: {name, payments, refunds, net}}, withholding {count, total}, cash_total, count
+INSERT INTO shift_closings (account_id, user_id, status, first_payment_at, last_payment_at, count, cash_total, withholding_total, totals, notes,
+  closed_by, closed_at, created_at, updated_at)
+SELECT 1, t.user_id, 'closed', t.first_at, t.last_at, t.n, t.cash, t.wh,
+  JSON_OBJECT('methods', COALESCE(m.methods, JSON_OBJECT()), 'withholding', JSON_OBJECT('count', t.wh_n, 'total', t.wh),
+    'cash_total', t.cash, 'count', t.n),
+  'Imported from the old system', 1, NOW(), NOW(), NOW()
+FROM (
+  SELECT p.creatable_id user_id, MIN(p.created_at) first_at, MAX(p.created_at) last_at, COUNT(*) n,
+    ROUND(SUM(CASE p.type WHEN 'payment' THEN p.amount WHEN 'refund' THEN -p.amount ELSE 0 END), 2) cash,
+    ROUND(SUM(IF(p.type = 'withholding', p.amount, 0)), 2) wh, SUM(p.type = 'withholding') wh_n
+  FROM payments p JOIN users u ON u.id = p.creatable_id AND u.userable_type = 'Modules\\EmployeeModule\\app\\Models\\Employee'
+  WHERE p.account_id = 1 AND p.deleted_at IS NULL AND p.shift_closing_id = 0
+  GROUP BY p.creatable_id
+) t
+LEFT JOIN (
+  SELECT x.user_id, JSON_OBJECTAGG(x.payment_method_id, JSON_OBJECT('name', x.name, 'payments', x.payments, 'refunds', x.refunds, 'net', x.net)) methods
+  FROM (
+    SELECT p.creatable_id user_id, p.payment_method_id, COALESCE(pm.name_en, pm.name_ar, CONCAT('Method #', p.payment_method_id)) name,
+      ROUND(SUM(IF(p.type = 'payment', p.amount, 0)), 2) payments, ROUND(SUM(IF(p.type = 'refund', p.amount, 0)), 2) refunds,
+      ROUND(SUM(IF(p.type = 'refund', -p.amount, p.amount)), 2) net
+    FROM payments p JOIN users u ON u.id = p.creatable_id AND u.userable_type = 'Modules\\EmployeeModule\\app\\Models\\Employee'
+    LEFT JOIN payment_methods pm ON pm.id = p.payment_method_id
+    WHERE p.account_id = 1 AND p.deleted_at IS NULL AND p.shift_closing_id = 0 AND p.type <> 'withholding'
+    GROUP BY p.creatable_id, p.payment_method_id, pm.name_en, pm.name_ar
+  ) x GROUP BY x.user_id
+) m ON m.user_id = t.user_id;
+
+UPDATE payments p
+JOIN shift_closings s ON s.account_id = p.account_id AND s.user_id = p.creatable_id AND s.notes = 'Imported from the old system'
+SET p.shift_closing_id = s.id
+WHERE p.account_id = 1 AND p.deleted_at IS NULL AND p.shift_closing_id = 0;
+
+INSERT INTO shift_events (account_id, user_id, shift_closing_id, by_user_id, action, reason, totals)
+SELECT account_id, user_id, id, 1, 'close', 'Imported from the old system', totals FROM shift_closings WHERE notes = 'Imported from the old system';
+
+-- 3.16 every imported date BEFORE today = a closed day (all history locked; the account can reopen a day with a reason),
+--      logged "Imported from the old system". Today stays open: the first app payments of the go-live day must be allowed
+--      (the account closes it as usual). totals = DayClosingService::summary() shape:
+--      employees {user_id: {name, methods {id: {payments, refunds, net}}, net}}, methods {id: {name, net}}, withholding {count, total}, cash_total, count
+-- a normal helper table (MySQL can't read a TEMPORARY table twice in one query), dropped below
+DROP TABLE IF EXISTS tmp_import_days;
+CREATE TABLE tmp_import_days (paid_at DATE PRIMARY KEY)
+SELECT DISTINCT paid_at FROM payments WHERE account_id = 1 AND id < 100001 AND paid_at < CURDATE();
+
+INSERT INTO day_closings (account_id, date, status, cash_total, withholding_total, totals, closed_by, closed_at, created_at, updated_at)
+SELECT 1, d.paid_at, 'closed', d.cash, d.wh,
+  JSON_OBJECT('employees', COALESCE(e.employees, JSON_OBJECT()), 'methods', COALESCE(m.methods, JSON_OBJECT()),
+    'withholding', JSON_OBJECT('count', d.wh_n, 'total', d.wh), 'cash_total', d.cash, 'count', d.n),
+  1, NOW(), NOW(), NOW()
+FROM (
+  SELECT p.paid_at, COUNT(*) n,
+    ROUND(SUM(CASE p.type WHEN 'payment' THEN p.amount WHEN 'refund' THEN -p.amount ELSE 0 END), 2) cash,
+    ROUND(SUM(IF(p.type = 'withholding', p.amount, 0)), 2) wh, SUM(p.type = 'withholding') wh_n
+  FROM payments p JOIN tmp_import_days t ON t.paid_at = p.paid_at
+  WHERE p.account_id = 1 AND p.deleted_at IS NULL GROUP BY p.paid_at
+) d
+LEFT JOIN (
+  SELECT u.paid_at, JSON_OBJECTAGG(u.user_id, JSON_OBJECT('name', u.name, 'methods', u.methods, 'net', u.net)) employees
+  FROM (
+    SELECT x.paid_at, x.user_id, x.name,
+      JSON_OBJECTAGG(x.payment_method_id, JSON_OBJECT('payments', x.payments, 'refunds', x.refunds, 'net', x.net)) methods, ROUND(SUM(x.net), 2) net
+    FROM (
+      SELECT p.paid_at, p.creatable_id user_id, COALESCE(e.name, NULLIF(a.name_en, ''), a.name_ar, CONCAT('User #', p.creatable_id)) name,
+        p.payment_method_id,
+        ROUND(SUM(IF(p.type = 'payment', p.amount, 0)), 2) payments, ROUND(SUM(IF(p.type = 'refund', p.amount, 0)), 2) refunds,
+        ROUND(SUM(IF(p.type = 'refund', -p.amount, p.amount)), 2) net
+      FROM payments p JOIN tmp_import_days t ON t.paid_at = p.paid_at
+      LEFT JOIN users us ON us.id = p.creatable_id
+      LEFT JOIN employees e ON us.userable_type = 'Modules\\EmployeeModule\\app\\Models\\Employee' AND e.id = us.userable_id
+      LEFT JOIN accounts a ON us.userable_type = 'Modules\\AccountModule\\app\\Models\\Account' AND a.id = us.userable_id
+      WHERE p.account_id = 1 AND p.deleted_at IS NULL AND p.type <> 'withholding'
+      GROUP BY p.paid_at, p.creatable_id, e.name, a.name_en, a.name_ar, p.payment_method_id
+    ) x GROUP BY x.paid_at, x.user_id, x.name
+  ) u GROUP BY u.paid_at
+) e ON e.paid_at = d.paid_at
+LEFT JOIN (
+  SELECT y.paid_at, JSON_OBJECTAGG(y.payment_method_id, JSON_OBJECT('name', y.name, 'net', y.net)) methods
+  FROM (
+    SELECT p.paid_at, p.payment_method_id, COALESCE(NULLIF(pm.name_en, ''), pm.name_ar, CONCAT('Method #', p.payment_method_id)) name,
+      ROUND(SUM(IF(p.type = 'refund', -p.amount, p.amount)), 2) net
+    FROM payments p JOIN tmp_import_days t ON t.paid_at = p.paid_at
+    LEFT JOIN payment_methods pm ON pm.id = p.payment_method_id
+    WHERE p.account_id = 1 AND p.deleted_at IS NULL AND p.type <> 'withholding'
+    GROUP BY p.paid_at, p.payment_method_id, pm.name_en, pm.name_ar
+  ) y GROUP BY y.paid_at
+) m ON m.paid_at = d.paid_at;
+
+INSERT INTO day_closing_logs (account_id, day_closing_id, action, user_id, reason, cash_total, withholding_total, totals)
+SELECT c.account_id, c.id, 'close', 1, 'Imported from the old system', c.cash_total, c.withholding_total, c.totals
+FROM day_closings c JOIN tmp_import_days t ON t.paid_at = c.date
+WHERE c.account_id = 1 AND c.id NOT IN (SELECT day_closing_id FROM day_closing_logs);
+
+DROP TABLE tmp_import_days;
+
+-----
+STEP 4 — recalculate the packages (terminal): price / net from the reservations, then paid / remaining (net + extras − payments)
+-----
+php artisan tinker --execute 'Modules\PackageModule\app\Models\Package::each(fn ($p) => $p->recalculate());'
+
+-----
+STEP 4b — SQL: packages without a period (no counted reservations: the recalculation leaves date_from / date_to empty)
+          → from = created_at, end = the OLD system's updated_at (ours was rewritten by the transfer / step 4) (user, 2026-10-13)
+-----
+UPDATE packages p
+JOIN dwidar_pivot_api.packages o ON o.id = p.id
+SET p.date_from = DATE(o.created_at), p.date_to = DATE(o.updated_at)
+WHERE p.account_id = 1 AND p.deleted_at IS NULL AND (p.date_from IS NULL OR p.date_to IS NULL)
+  AND NOT EXISTS (SELECT 1 FROM reservations r WHERE r.package_id = p.id AND r.deleted_at IS NULL
+                  AND r.reservation_status_id NOT IN (SELECT id FROM reservation_statuses WHERE is_counted = 0));
+
+-----
+STEP 5 — paid / remaining of every reservation and package (terminal)
+-----
+php artisan payments:refresh
+
+-----
+STEP 6 — checks (SQL): every "old" must equal its "new"
+-----
+-- 6.1 rows
+SELECT 'members' t, (SELECT COUNT(*) FROM dwidar_pivot_api.members) old_n, (SELECT COUNT(*) FROM dwidar_res_portal.members) new_n
+UNION ALL SELECT 'packages', (SELECT COUNT(*) FROM dwidar_pivot_api.packages), (SELECT COUNT(*) FROM dwidar_res_portal.packages)
+UNION ALL SELECT 'reservations', (SELECT COUNT(*) FROM dwidar_pivot_api.reservations), (SELECT COUNT(*) FROM dwidar_res_portal.reservations)
+UNION ALL SELECT 'extras (package exists)', (SELECT COUNT(*) FROM dwidar_pivot_api.extras WHERE addable_id IN (SELECT id FROM dwidar_pivot_api.packages)), (SELECT COUNT(*) FROM dwidar_res_portal.extras)
+UNION ALL SELECT 'payments', (SELECT COUNT(*) FROM dwidar_pivot_api.payments), (SELECT COUNT(*) FROM dwidar_res_portal.payments WHERE payable_type IS NOT NULL)
+UNION ALL SELECT 'incomes', (SELECT COUNT(*) FROM dwidar_pivot_api.incomes), (SELECT COUNT(*) FROM dwidar_res_portal.payments WHERE payable_type IS NULL)
+UNION ALL SELECT 'employees', (SELECT COUNT(*) FROM dwidar_pivot_api.users), (SELECT COUNT(*) FROM dwidar_res_portal.employees);
+
+-- 6.2 money (signed: refunds negative)
+SELECT (SELECT ROUND(SUM(amount), 2) FROM dwidar_pivot_api.payments) old_payments,
+       (SELECT SUM(IF(type = 'refund', -amount, amount)) FROM dwidar_res_portal.payments WHERE payable_type IS NOT NULL) new_payments,
+       (SELECT ROUND(SUM(amount), 2) FROM dwidar_pivot_api.incomes) old_incomes,
+       (SELECT SUM(IF(type = 'refund', -amount, amount)) FROM dwidar_res_portal.payments WHERE payable_type IS NULL) new_incomes,
+       (SELECT ROUND(SUM(amount), 2) FROM dwidar_pivot_api.extras WHERE addable_id IN (SELECT id FROM dwidar_pivot_api.packages)) old_extras,
+       (SELECT SUM(amount) FROM dwidar_res_portal.extras) new_extras;
+
+-- 6.3 payments by method (old 5 = withholding / its correction = method 0)
+SELECT o.method, o.n old_n, n.n new_n, o.total old_total, n.total new_total
+FROM (SELECT IF(payment_method = 5, 0, payment_method) method, COUNT(*) n, ROUND(SUM(amount), 2) total FROM dwidar_pivot_api.payments GROUP BY method) o
+LEFT JOIN (SELECT payment_method_id method, COUNT(*) n, SUM(IF(type = 'refund', -amount, amount)) total FROM dwidar_res_portal.payments WHERE payable_type IS NOT NULL GROUP BY method) n ON n.method = o.method
+ORDER BY o.method;
+SELECT type, COUNT(*) n, SUM(amount) total FROM dwidar_res_portal.payments GROUP BY type;
+
+-- 6.4 incomes by category
+SELECT o.cat, o.n old_n, n.n new_n, o.total old_total, n.total new_total
+FROM (SELECT type_id cat, COUNT(*) n, ROUND(SUM(amount), 2) total FROM dwidar_pivot_api.incomes GROUP BY cat) o
+LEFT JOIN (SELECT income_category_id cat, COUNT(*) n, SUM(amount) total FROM dwidar_res_portal.payments WHERE payable_type IS NULL GROUP BY cat) n ON n.cat = o.cat ORDER BY o.cat;
+
+-- 6.5 extras: unclassified must be 0; by type / category
+SELECT COUNT(*) unclassified_not_imported FROM dwidar_pivot_api.extras o LEFT JOIN dwidar_res_portal.extras n ON n.id = o.id
+WHERE n.id IS NULL AND o.addable_id IN (SELECT id FROM dwidar_pivot_api.packages);
+SELECT o.id skipped_extra, o.addable_id deleted_package, o.item, o.amount FROM dwidar_pivot_api.extras o WHERE o.addable_id NOT IN (SELECT id FROM dwidar_pivot_api.packages);
+SELECT id, name_en, is_active, is_revenue FROM dwidar_res_portal.income_categories ORDER BY id;
+SELECT COUNT(*) vat_incomes, SUM(amount) vat_total FROM dwidar_res_portal.payments WHERE payable_type IS NULL AND income_category_id = 6;
+SELECT e.type, e.income_category_id, c.name_en, COUNT(*) n, SUM(e.amount) total FROM dwidar_res_portal.extras e LEFT JOIN dwidar_res_portal.income_categories c ON c.id = e.income_category_id GROUP BY e.type, e.income_category_id, c.name_en;
+
+-- 6.6 links: all must be 0
+SELECT (SELECT COUNT(*) FROM payments p LEFT JOIN reservations r ON r.id = p.payable_id WHERE p.payable_type LIKE '%Reservation' AND r.id IS NULL) missing_reservations,
+       (SELECT COUNT(*) FROM payments p LEFT JOIN packages k ON k.id = p.payable_id WHERE p.payable_type LIKE '%Package' AND k.id IS NULL) missing_packages,
+       (SELECT COUNT(*) FROM payments p JOIN reservations r ON r.id = p.payable_id WHERE p.payable_type LIKE '%Reservation' AND r.package_id > 0) paid_inside_package,
+       (SELECT COUNT(*) FROM extras e LEFT JOIN packages k ON k.id = e.extrable_id WHERE k.id IS NULL) extras_without_package,
+       (SELECT COUNT(*) FROM reservations r LEFT JOIN members m ON m.id = r.member_id WHERE m.id IS NULL) reservations_without_member,
+       (SELECT COUNT(*) FROM payments WHERE id <> payment_no) id_not_no;
+
+-- 6.7 creators: rows per user (an old user = same id; 1 = account: old admin / empty)
+SELECT p.creatable_id user_id, COALESCE(e.name, 'Account') name, COUNT(*) payments FROM payments p LEFT JOIN employees e ON e.id = p.creatable_id GROUP BY p.creatable_id, e.name ORDER BY p.creatable_id;
+
+-- 6.8 logins: active = leave_date NULL
+SELECT u.id, u.email, e.name, IF(e.leave_date IS NULL, 'active', CONCAT('inactive since ', e.leave_date)) login FROM users u LEFT JOIN employees e ON e.id = u.userable_id AND u.userable_type LIKE '%Employee' ORDER BY u.id;
+
+-- 6.9 after steps 4–5: packages vs the old system (old remaining = net + extras − paid)
+SELECT COUNT(*) packages,
+       SUM(ABS(n.after_discount - o.after_discount) < 0.011) same_net,
+       SUM(ABS(n.remaining - o.remaining) < 0.011) same_remaining,
+       ROUND(SUM(n.after_discount - o.after_discount), 2) net_difference,
+       ROUND(SUM(n.remaining - o.remaining), 2) remaining_difference
+FROM dwidar_res_portal.packages n JOIN dwidar_pivot_api.packages o ON o.id = n.id;
+SELECT n.id, n.name, o.after_discount old_net, n.after_discount new_net, o.remaining old_remaining, n.remaining new_remaining
+FROM dwidar_res_portal.packages n JOIN dwidar_pivot_api.packages o ON o.id = n.id
+WHERE ABS(n.after_discount - o.after_discount) >= 0.011 OR ABS(n.remaining - o.remaining) >= 0.011 ORDER BY n.id;
+
+-- 6.10 after step 5: who owes / has credit
+SELECT 'reservations owed' t, COUNT(*) n, SUM(remaining) total FROM reservations WHERE package_id = 0 AND remaining > 0
+UNION ALL SELECT 'reservations credit', COUNT(*), SUM(remaining) FROM reservations WHERE package_id = 0 AND remaining < 0
+UNION ALL SELECT 'packages owed', COUNT(*), SUM(remaining) FROM packages WHERE remaining > 0
+UNION ALL SELECT 'packages credit', COUNT(*), SUM(remaining) FROM packages WHERE remaining < 0;
+
+-- 6.11 shift closings (after 3.15): every employee payment is in its imported closing; the closings' totals = their payments
+SELECT 'employee payments without a closing (0)' t, COUNT(*) n FROM payments p JOIN users u ON u.id = p.creatable_id
+  AND u.userable_type = 'Modules\\EmployeeModule\\app\\Models\\Employee' WHERE p.deleted_at IS NULL AND p.shift_closing_id = 0
+UNION ALL SELECT 'closings whose totals differ (0)', COUNT(*) FROM shift_closings s
+  JOIN (SELECT shift_closing_id, COUNT(*) n, ROUND(SUM(CASE type WHEN 'payment' THEN amount WHEN 'refund' THEN -amount ELSE 0 END), 2) cash
+        FROM payments WHERE deleted_at IS NULL AND shift_closing_id > 0 GROUP BY shift_closing_id) p ON p.shift_closing_id = s.id
+  WHERE p.n <> s.count OR p.cash <> s.cash_total;
+
+-- 6.12 day closings (after 3.16): every imported date before the import day is closed; its totals = its payments
+SELECT 'imported dates before today not closed (0)' t, COUNT(DISTINCT p.paid_at) n FROM payments p
+  LEFT JOIN day_closings c ON c.account_id = p.account_id AND c.date = p.paid_at AND c.status = 'closed'
+  WHERE p.id < 100001 AND p.paid_at < CURDATE() AND c.id IS NULL
+UNION ALL SELECT 'closed days whose cash total differs (0)', COUNT(*) FROM day_closings c
+  JOIN (SELECT paid_at, ROUND(SUM(CASE type WHEN 'payment' THEN amount WHEN 'refund' THEN -amount ELSE 0 END), 2) cash
+        FROM payments WHERE deleted_at IS NULL GROUP BY paid_at) p ON p.paid_at = c.date
+  WHERE p.cash <> c.cash_total
+UNION ALL SELECT 'closed days without a log (0)', COUNT(*) FROM day_closings c
+  WHERE c.id NOT IN (SELECT day_closing_id FROM day_closing_logs);

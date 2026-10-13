@@ -1296,3 +1296,9 @@ input:disabled:not([type="checkbox"]):not([type="radio"]) {
 .filter-bar__tabs {
     flex-basis: 100%;
 }
+
+/* a list "Paid" amount (packages list): black, bold */
+.amount-paid {
+    color: rgb(0 0 0);
+    font-weight: 700;
+}

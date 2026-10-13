@@ -1,5 +1,5 @@
 /*
- * PDF documents (mpdf): the payment receipt (paymentmodule::Payment.receipt-pdf).
+ * PDF documents (mpdf): the payment receipt (paymentmodule::Payment.receipt-pdf), the package statement (packagemodule::Package.statement-pdf).
  * mpdf can't read custom.css (CSS variables, flex / grid), so the PDF views link this file by its path.
  * Plain CSS 2 only: tables for the layout, no variables.
  */
@@ -27,3 +27,31 @@ table { width: 100%; border-collapse: collapse; }
 .receipt-foot { margin-top: 40px; }
 .receipt-foot td { vertical-align: bottom; }
 .receipt-sign { text-align: right; width: 40%; border-top: 1px solid #94a3b8; padding-top: 4px; color: #64748b; }
+
+/* ===== The package statement (packagemodule::Package.statement-pdf, A4) ===== */
+.statement-title-ar { font-size: 12pt; font-weight: bold; color: #164e63; }
+.rtl { direction: rtl; text-align: right; }
+.nowrap { white-space: nowrap; }
+.num { text-align: right; white-space: nowrap; }
+
+.statement-summary { margin-top: 16px; border: 1px solid #cbd5e1; background-color: #f8fafc; }
+.statement-summary-col { width: 50%; vertical-align: top; padding: 6px 8px; }
+.statement-summary-table th, .statement-summary-table td { padding: 3px 4px; font-size: 9.5pt; text-align: left; }
+.statement-summary-table th { color: #64748b; font-weight: normal; width: 55%; }
+.statement-summary-table td { text-align: right; }
+.statement-strong { font-weight: bold; }
+.statement-owed { color: #b91c1c; }
+.statement-credit { color: #1d4ed8; }
+
+.statement-section { margin-top: 18px; margin-bottom: 4px; font-size: 11pt; font-weight: bold; color: #164e63; }
+.statement-table th { background-color: #f1f5f9; color: #475569; font-weight: bold; font-size: 9pt; padding: 5px 6px; text-align: left; border-bottom: 1px solid #cbd5e1; }
+.statement-table th.num { text-align: right; }
+.statement-table td { padding: 4px 6px; font-size: 9pt; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+.statement-total td { font-weight: bold; background-color: #f8fafc; border-top: 1px solid #94a3b8; }
+
+.statement-footer td { font-size: 8pt; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 4px; }
+.statement-footer-right { text-align: right; }
+/* the statement reservations table: even rows shaded; a cancelled like reservation on red (0 hours, 0 amount) */
+.statement-row-even td { background-color: #f1f5f9; }
+.statement-row-cancelled td { background-color: #fee2e2; color: #991b1b; }
+.statement-cancelled-label { font-weight: bold; }

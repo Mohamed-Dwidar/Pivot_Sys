@@ -63,11 +63,11 @@
                     <th data-data="place">Space &rsaquo; Unit</th>
                     <th data-data="plan">Plan</th>
                     <th data-data="period" data-name="start_at" data-class="whitespace-nowrap">Period</th>
-                    <th data-data="status">Status</th>
                     <th data-data="net_amount" data-name="net_amount" data-class="whitespace-nowrap">Amount</th>
                     <th data-data="paid_amount" data-name="paid_amount" data-class="whitespace-nowrap">Paid</th>
                     <th data-data="remaining_html" data-name="remaining" data-class="whitespace-nowrap">Remaining</th>
-                    <th data-data="by">By</th>
+                    <th data-data="by">Created By</th>
+                    <th data-data="status">Status</th>
                     <th data-data="actions"></th>
                 </tr>
             </thead>

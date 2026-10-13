@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use Modules\MemberModule\app\Services\MemberService;
 use Modules\PackageModule\app\Http\Requests\PackageRequest;
 use Modules\PackageModule\app\Services\PackageService;
+use niklasravnsborg\LaravelPdf\Facades\Pdf;
 use Yajra\DataTables\Facades\DataTables;
 
 /**
@@ -42,43 +43,53 @@ trait PackageActions
     // the list page, the rows come from data() (DataTables)
     public function index()
     {
-        $members = $this->memberService->options($this->accountId());
-        return view('packagemodule::Package.index', compact('members'));
+        return view('packagemodule::Package.index');
     }
 
-    // DataTables server side: search + member_id / is_active filters
+    // the list tab: current (default, also '') | past | all
+    private function tab(array $filters): string
+    {
+        $tab = (string) ($filters['tab'] ?? '');
+        return isset(\Modules\PackageModule\app\Models\Package::TABS[$tab]) ? $tab : 'current';
+    }
+
+    // DataTables server side: tab + search (package, member name / phone) + status / payment filters
     public function data(Request $request)
     {
         return $this->table(['search' => $request->input('search.value')] + $request->all())->toJson();
     }
 
-    // the list columns, for data() and for one row after a change (row())
+    /**
+     * The list columns (docs/reservations-list-plan.md, packages list 2026-10-13), for data() and for one row after a change:
+     * Package (+ member) | Period (From / Ends) | Reservations (counted / booked hours, two lines) | Amount (net, + price · −discount%)
+     * | Paid (black bold) | Remaining | Created By | Status (package + payment badges); Activate / Deactivate in the row menu
+     */
     private function table(array $filters, $id = null)
     {
-        $query = $this->packageService->listQuery($this->accountId());
+        $tab = $this->tab($filters);
+        // + counted_reservations / booked_minutes, + who added it (By)
+        $query = $this->packageService->listQuery($this->accountId())->withReservationStats()->with('creatable.userable');
         if ($id) {
             $query->whereKey($id);
         }
 
         return DataTables::eloquent($query)
             // inside filter() so "of N total" counts all the packages
-            ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['member_id', 'is_active', 'payment_status'])))
+            ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['is_active', 'payment_status']))->tab($tab))
             ->setRowId(fn ($package) => 'row-' . $package->id)
-            ->addColumn('name_html', fn ($package) => '<a href="' . $this->route('show', $package->id) . '" data-modal class="font-medium">' . e($package->name) . '</a>')
-            ->addColumn('member', fn ($package) => e($package->member?->name ?? '-'))
-            ->addColumn('period', fn ($package) => $package->period)
-            // the price (reservations net amounts) - the discount = the net
-            ->editColumn('amount', fn ($package) => number_format($package->amount, 2))
-            ->addColumn('discount', fn ($package) => rtrim(rtrim(number_format($package->discount_percentage, 2), '0'), '.') . '%')
-            ->editColumn('after_discount', fn ($package) => '<span class="font-medium text-success">' . number_format($package->after_discount, 2) . '</span>')
-            ->editColumn('paid_amount', fn ($package) => number_format($package->paid_amount, 2))
-            ->addColumn('remaining_html', fn ($package) => view('paymentmodule::Payment.partials.row-remaining', ['payable' => $package])->render())
-            ->addColumn('status', fn ($package) => view('layoutmodule::partials.row-toggle', [
-                'url' => $this->route('active', $package->id), 'row' => $package->id, 'name' => 'is_active', 'checked' => $package->is_active,
-            ])->render())
+            ->addColumn('name_html', fn ($package) => view('packagemodule::Package.partials.row-package', compact('package'))->render())
+            ->addColumn('period', fn ($package) => view('packagemodule::Package.partials.row-period', compact('package'))->render())
+            ->addColumn('reservations', fn ($package) => view('packagemodule::Package.partials.row-reservations', compact('package'))->render())
+            ->addColumn('status', fn ($package) => view('packagemodule::Package.partials.row-status', compact('package'))->render())
+            ->editColumn('after_discount', fn ($package) => view('packagemodule::Package.partials.row-amount', compact('package'))->render())
+            // black, bold (custom.css .amount-paid)
+            ->editColumn('paid_amount', fn ($package) => '<span class="amount-paid">' . number_format($package->paid_amount, 2) . '</span>')
+            // red when owed, a credit (negative) in blue, no badge
+            ->addColumn('remaining_html', fn ($package) => view('paymentmodule::Payment.partials.remaining-amount', ['payable' => $package])->render())
+            ->addColumn('by', fn ($package) => e($package->creatable?->userable?->displayName() ?? '-'))
             ->addColumn('actions', fn ($package) => view('packagemodule::Package.partials.row-actions', compact('package'))->render())
-            ->rawColumns(['name_html', 'after_discount', 'remaining_html', 'status', 'actions'])
-            ->only(['DT_RowId', 'name_html', 'member', 'period', 'amount', 'discount', 'after_discount', 'paid_amount', 'remaining_html', 'reservations_count', 'status', 'actions']);
+            ->rawColumns(['name_html', 'period', 'reservations', 'status', 'after_discount', 'paid_amount', 'remaining_html', 'actions'])
+            ->only(['DT_RowId', 'name_html', 'period', 'reservations', 'status', 'after_discount', 'paid_amount', 'remaining_html', 'by', 'actions']);
     }
 
     // the updated row with the list filters (list[...]), null when it does not match them any more
@@ -111,6 +122,33 @@ trait PackageActions
         return view('packagemodule::Package.show', compact('package'));
     }
 
+    // the customer package statement (PDF, A4, opened in the browser) — "Package Statement", not an invoice
+    public function statement($id)
+    {
+        $data = $this->packageService->statement($this->accountId(), $id);
+
+        $config = [
+            'format' => 'A4',
+            'margin_top' => 12, 'margin_bottom' => 18, 'margin_footer' => 6,
+            // Arabic (member / item names): shaped and right to left (autoScriptToLang marks the language, autoLangToFont picks a font)
+            'instanceConfigurator' => function ($mpdf) {
+                $mpdf->autoScriptToLang = true;
+                $mpdf->autoLangToFont = true;
+            },
+        ];
+        // the Cairo font of config/pdf.php when its files are there, else mpdf's DejaVu Sans (Arabic too)
+        if (!is_file(config('pdf.font_path') . 'Cairo-Regular.ttf')) {
+            $config['default_font'] = 'dejavusans';
+        }
+
+        // a normal response (the package's stream() echoes it itself, outside the Laravel response)
+        $pdf = Pdf::loadView('packagemodule::Package.statement-pdf', $data, [], $config)->output();
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="package-statement-' . $data['package']->id . '.pdf"',
+        ]);
+    }
+
     public function edit($id)
     {
         $package = $this->packageService->findOne($this->accountId(), $id);
@@ -129,7 +167,7 @@ trait PackageActions
         ]);
     }
 
-    // the active switch in the list (ajax)
+    // Activate / Deactivate (the row menu, with a confirmation; ajax)
     public function toggleActive(Request $request, $id)
     {
         $request->validate(['is_active' => 'required|boolean']);

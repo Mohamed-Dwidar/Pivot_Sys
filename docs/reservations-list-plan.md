@@ -36,11 +36,26 @@
 | 6 | Amount | net amount, green + bold |
 | 7 | Paid | paid amount |
 | 8 | Remaining | > 0 red; < 0 (member credit) blue `77.00 credit`; 0 normal; inside a package `-` (`partials/row-remaining`) |
-| 9 | By | the creator (employee / account name: `creatable.userable->displayName()`) |
+| 9 | Created By | the creator (employee / account name: `creatable.userable->displayName()`) |
 | – | (menu) | row menu unchanged (View, Edit, Restore, Renew, Add Payment, Delete) |
+- Column order (2026-10-13): Member | Space › Unit | Plan | Period | Amount | Paid | Remaining | Created By | Status (Status moved after Created By).
 - Sortable: Period (start), Amount, Paid, Remaining; the tab order applies until a column is clicked (as before).
 - Dropped with this change: the long badge ("running · day 12 of 90" / "ends …", decision 2 below) — the Period format replaces it;
   `long_badge` / `days_left` stay in the model (unused in the list).
+
+## Packages list (user, 2026-10-13) — the same style; same for employees (shared `PackageActions`)
+- **Tabs:** Current (default: `date_to` NULL — no end / no reservations yet — or `date_to >= today`) | Past (`date_to < today`) | All
+  (`Package::TABS`, `scopeTab`). Default order: Period (start) newest first.
+- **Filters, all visible:** search (package, member name or phone) | status (active) | payment | Clear. The "All Members" select was removed.
+- **Columns (order updated 2026-10-13):** Package (name → view popup; member name small under it, always) | Period (`From 14-10-2024` / `Ends 03-12-2024`,
+  no end = "Continues", none = "-") | Reservations, two lines: the counted ones (cancelled like excluded) / the booked hours of the TIMED ones in brackets
+  `91` / `(124.5 h)`; full day / contract types count but add no hours; no hours = count only (`scopeWithReservationStats`:
+  `counted_reservations`, `booked_minutes` subqueries, sortable) | Amount (net green bold; with a discount a small line `<price> · −<discount>%`;
+  no Price / Discount columns) | Paid (black bold, `.amount-paid`) | Remaining (red > 0, blue "credit" < 0, normal 0, no badge) |
+  Created By (creator) | Status (Active / Inactive, then the payment badge) — Status moved after Created By.
+- **Row menu:** View, Edit, Add Payment, **Activate / Deactivate** (confirmation; replaces the switch in every row), Delete.
+- Shared cells (PaymentModule): `Payment/partials/remaining-amount` (reservations + packages Remaining), `Payment/partials/payment-badge`
+  (the payment badge, "Partial" short label) — the reservations list uses them too.
 
 ## Data facts (2026-10-12)
 - 19,823 reservations; 19,569 are repeat copies (each its own row); 1,629 last 7 days or more; last start 2027-10-04.

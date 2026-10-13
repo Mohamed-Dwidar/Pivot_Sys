@@ -42,6 +42,52 @@ class PackageService
         return $this->packageRepository->forAccount($accountId)->findOrFail($id);
     }
 
+    /**
+     * The customer package statement (PDF, PackageActions::statement()) — not a tax invoice (those come from ETA):
+     * ALL its reservations by date — the cancelled like ones are listed too (red, 0 hours, 0 amount, not in the totals) —,
+     * hours of the TIMED counted ones only (not a full day / contract type,
+     * end after start — the same rule as the list), the extras of type "extra" (adjustments = one "balance carried over" line),
+     * the payments (refunds minus, withholding apart; no collector) and the totals.
+     */
+    public function statement($accountId, $id): array
+    {
+        $package = $this->findOne($accountId, $id)->load('member.company', 'account');
+        $all = $package->reservations()
+            ->with('space', 'unit', 'plan', 'subscriptionType', 'status')->orderBy('start_at')->orderBy('id')->get();
+        // the counted ones give the count / hours / totals; a not counted (cancelled ...) one = 0 hours
+        $reservations = $all->filter(fn ($reservation) => $reservation->isCounted())->values();
+        $minutes = $all->mapWithKeys(fn ($reservation) => [$reservation->id => $reservation->isCounted() ? $this->timedMinutes($reservation) : 0]);
+        $extras = $package->extrasList();
+
+        return [
+            'package' => $package,
+            'account' => $package->account,
+            'reservations' => $reservations,
+            'allReservations' => $all,
+            'cancelledCount' => $all->count() - $reservations->count(),
+            'minutes' => $minutes,
+            'hours' => round($minutes->sum() / 60, 2),
+            'reservationsTotal' => round((float) $reservations->sum('net_amount'), 2),
+            'extras' => $extras->where('type', 'extra')->values(),
+            'extrasTotal' => round((float) $extras->where('type', 'extra')->sum('amount'), 2),
+            'adjustments' => $extras->where('type', 'adjustment'),
+            'adjustmentsTotal' => round((float) $extras->where('type', 'adjustment')->sum('amount'), 2),
+            'payments' => $package->payments()->with('paymentMethod')->orderBy('paid_at')->orderBy('payment_no')->get(),
+            'due' => round($package->payableAmount(), 2),
+        ];
+    }
+
+    // the booked minutes of a timed reservation (0: a full day / contract type, or no end after the start)
+    private function timedMinutes($reservation): int
+    {
+        $type = $reservation->subscriptionType;
+        if ($type?->full_day || $type?->is_contract || !$reservation->start_at || !$reservation->end_at || $reservation->end_at->lte($reservation->start_at)) {
+            return 0;
+        }
+
+        return (int) ceil($reservation->start_at->diffInSeconds($reservation->end_at) / 60);
+    }
+
     // $creator: the logged in user who adds the package
     public function create($accountId, array $data, Model $creator)
     {

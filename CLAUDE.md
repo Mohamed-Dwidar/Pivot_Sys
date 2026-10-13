@@ -54,7 +54,7 @@ Then suggest a commit message.
 - Language: UI English now; Arabic names stored, RTL not done yet
 - Layout: pages `@extends` their area layout (`layoutmodule::admin.main` / `account.main` / `employee.main`), never `main` directly; fill `title`, `actions`, `content`; page JS/CSS via `@push('scripts')` / `@push('styles')`
 - Layout: template markup + classes copied from `Template_Source/dagger-*.html`; custom styles = named classes in `custom.css` (no `style=""`, no `<style>`); template overrides in `custom.js`, never edit template files (`app.css`, `themes/dagger.js`, `vendors/*`)
-- PDF views (mpdf, e.g. `paymentmodule::Payment.receipt-pdf`): the ONE exception to the custom-CSS rule — styles in `public/assets/css/pdf.css`, linked with `public_path()` (mpdf can't read `custom.css`: CSS variables, flex / grid); still no `style=""` / `<style>`; plain CSS 2, tables for layout
+- PDF views (mpdf, e.g. `paymentmodule::Payment.receipt-pdf`, `packagemodule::Package.statement-pdf`): the ONE exception to the custom-CSS rule — styles in `public/assets/css/pdf.css`, linked with `public_path()` (mpdf can't read `custom.css`: CSS variables, flex / grid); still no `style=""` / `<style>`; plain CSS 2, tables for layout
 - Layout: icons = Lucide (`data-lucide="name"`); images in `public/assets/images` (only logo / favicon — template demo images not copied)
 - Layout: sidebar open by default, collapse toggle remembered (`localStorage.compactMenu`), no hover-expand; content full width (no `.container`)
 
