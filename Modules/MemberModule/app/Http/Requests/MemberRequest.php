@@ -19,7 +19,8 @@ class MemberRequest extends FormRequest
 
     public function rules(): array
     {
-        $accountId = $this->user()->userable_id;
+        // the account itself, or the account of the logged in employee
+        $accountId = $this->user()->userable->ownerAccountId();
 
         // company / job must be one of the account's own (not deleted) records
         $ownedBy = fn ($table) => Rule::exists($table, 'id')->where('account_id', $accountId)->whereNull('deleted_at');

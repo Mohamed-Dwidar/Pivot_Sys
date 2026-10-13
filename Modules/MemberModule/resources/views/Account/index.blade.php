@@ -1,11 +1,12 @@
-@extends('layoutmodule::account.main')
+@php($area = request()->routeIs('employee.*') ? 'employee' : 'account')
+@extends(Auth::user()->userable->layout())
 
 @section('title')
     Members
 @endsection
 
 @section('actions')
-    <a href="{{ route('account.members.create') }}" data-modal class="btn btn-primary"><i data-lucide="plus"></i> Add Member</a>
+    <a href="{{ route($area . '.members.create') }}" data-modal class="btn btn-primary"><i data-lucide="plus"></i> Add Member</a>
 @endsection
 
 @section('content')
@@ -27,7 +28,7 @@
     </form>
 
     <div class="table-wrap mt-5">
-        <table id="members-table" class="data-table" data-datatable data-url="{{ route('account.members.data') }}"
+        <table id="members-table" class="data-table" data-datatable data-url="{{ route($area . '.members.data') }}"
             data-filters="#members-filters" data-order='[[0, "asc"]]' data-empty="No members yet.">
             <thead>
                 <tr>

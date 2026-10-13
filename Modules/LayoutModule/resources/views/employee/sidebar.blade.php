@@ -1,25 +1,21 @@
 @php
+    /*
+     * The employee sidebar (2026-10-13): their daily pages only, direct links (Members since 2026-10-14);
+     * Change Password stays in the header menu (employee/main $menuLinks).
+     */
     $items = [
-        ['divider' => 'Main'],
+        ['divider' => 'Daily'],
         [
-            'title' => 'My Profile',
-            'icon' => 'contact',
+            'title' => 'Dashboard',
+            'icon' => 'gauge-circle',
             'url' => route('employee.dashboard'),
             'active' => request()->routeIs('employee.dashboard'),
         ],
-
-        ['divider' => 'Work'],
         [
             'title' => 'Reservations',
             'icon' => 'calendar-check',
             'url' => route('employee.reservations.index'),
             'active' => request()->routeIs('employee.reservations.*'),
-        ],
-        [
-            'title' => 'Packages',
-            'icon' => 'package',
-            'url' => route('employee.packages.index'),
-            'active' => request()->routeIs('employee.packages.*'),
         ],
         [
             'title' => 'Payments',
@@ -28,18 +24,22 @@
             'active' => request()->routeIs('employee.payments.*'),
         ],
         [
+            'title' => 'Packages',
+            'icon' => 'package',
+            'url' => route('employee.packages.index'),
+            'active' => request()->routeIs('employee.packages.*'),
+        ],
+        [
+            'title' => 'Members',
+            'icon' => 'users',
+            'url' => route('employee.members.index'),
+            'active' => request()->routeIs('employee.members.*'),
+        ],
+        [
             'title' => 'My Shift',
             'icon' => 'lock',
             'url' => route('employee.shift.index'),
             'active' => request()->routeIs('employee.shift.*'),
-        ],
-
-        ['divider' => 'Settings'],
-        [
-            'title' => 'Change Password',
-            'icon' => 'key-round',
-            'url' => route('user.account.edit'),
-            'active' => request()->routeIs('user.account.*'),
         ],
     ];
 @endphp

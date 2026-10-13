@@ -6,7 +6,9 @@
 ---
 
 ## Current status
-- **Settings › General + My Shift list (2026-10-13), uncommitted, tested (HTTP kernel; OFF via the in-memory setting), not in a browser:**
+- **Employees manage members (2026-10-14), uncommitted, tested (HTTP kernel, real data):** `employee.members.*` (list, view, add, edit — no delete), shared `MemberActions`, employee sidebar Members.
+- **Sidebars reorganized by use (2026-10-13), uncommitted, every page's highlight checked:** account Daily | Management | Settings (one collapsed group); employee Daily only — see LayoutModule.
+- **Settings › General + My Shift list (2026-10-13), committed `feb0020`, tested (HTTP kernel; OFF via the in-memory setting), not in a browser:**
   - My Shift payments = the Payments page list (`Payment/partials/list-table`, `?shift=open`), no Created By; Add Payment / Daily Summary buttons removed from My Shift. My Closings: Payments column = the payments' dates + count, Withholding column hidden while withholding tax is off; the shift popup = totals + the payments in the Payments list cells (newest 200, `popupPayments()`), no History (`Shift/partials/change` deleted).
   - Settings › General (account only): Withholding tax (OFF hides new withholding everywhere, existing records stay visible) and VAT (stored; Phase 2 rule in `payments-plan.md` §3).
   - DB done by the user (2026-10-13): `accounts.withholding_enabled` / `vat_enabled` (default 1; create migration has them).
@@ -23,12 +25,12 @@
   - Question open: the 243 "continues" rows with an end date treated as ending at it?
   - Kept on purpose, unused (user 2026-10-13: "may use it later"): the Subscriptions page files (`Concerns/SubscriptionActions`, `Account|Employee/Subscription*ModuleController`, `views/Subscription/index`, no routes / menu), `partials/contracts-summary`, the model subscription scopes (`SUBSCRIPTION_TABS`, `scopeSubscriptionTab`, `withRenewed`, `renewedSql()`).
   - Columns (2026-10-13, built + tested on real rows, account + employee; NOT checked in a browser yet): Member (phone, package line = link to the package popup) | Space / Unit on two lines (color dot, no "›") | Plan | Period by type (full day = `31-12-2026 Mon`; auto renew / contract = From / Ends; else two lines: date + day name / times, or `date day | time →` / `date day | time`) | Amount (green bold) | Paid | Remaining (red > 0, blue "credit" < 0, "-" in a package) | Created By (creator) | Status (reservation + payment badges; "In package" badge = link to the package popup; cancelled = status only, muted); long badge dropped.
-- **Closing simplified to ONE level, the shift (2026-10-13), uncommitted, built + tested (rolled back transactions + HTTP kernel, real data), not checked in a browser:** spec `docs/payments-plan.md` §2b (rewritten).
+- **Closing simplified to ONE level, the shift (2026-10-13), committed `feb0020`, built + tested (rolled back transactions + HTTP kernel, real data), not checked in a browser:** spec `docs/payments-plan.md` §2b (rewritten).
   - Every login closes its own shift (employees AND the account: My Shift); no day / month lock, no reopen; the account edits / deletes a closed-shift payment with a reason (totals recalculated, logged before / after, "Edited after closing" badge); refunds by employees and the account (reason, ≤ the payment less its refunds, into the refunder's open shift; a closed original only gets the log + badge); refunds = their own minus line in the close popup; Daily Summary (read only) replaces Day Closing; reminders 12 h / 4 h in config, Shift Reminders page removed.
   - DB done by the user (2026-10-13, backup first): dropped `day_closings`, `day_closing_logs`, `shift_closings.status / reopened_*`, `accounts.shift_reminder_hours / shift_snooze_hours`; added `shift_closings.edited_at / edit_count`, `shift_events.payment_id / changes` + new actions, `payments.refund_of / reason`. Create migrations match the DB; the two day migrations deleted. 52 imported refunds stay unlinked (user).
   - DB done by the user: `to_run` **STEP 3.15b** ran (the account's 1,848 imported payments = one closed "Imported" shift, 1,346,429.92, closed 04-10-2026 23:50:30; every imported shift closed at its last payment); check 6.11 = all 0 (verified 2026-10-13).
   - Before (2026-10-11, committed `f17f7f9`): two levels (shift + account day closing) — replaced; `to_run` 3.15 (14 employee closings) ran, 3.16 never ran.
-- **Next up:** (0) user runs the packages period SQL (STEP 4b) + checks the payments / reservations / packages lists and the statement PDF in the browser; (1) user commits the closing / settings work; (2) user tests in the browser (employee: My Shift + its list, My Closings, close / logout / reminder popups, refund; account: My Shift, Daily Summary, close on behalf, edit / delete / refund in a closed shift + the badge, the shift popup; Settings › General both ways); update the "Closing Day Cycle — User Guide" doc if the screens change; (3) then the 6.9 decision and Phase 2 (InvoiceModule).
+- **Next up:** (0) user runs the packages period SQL (STEP 4b) + checks the payments / reservations / packages lists and the statement PDF in the browser; (2) user tests in the browser (employee: My Shift + its list, My Closings, close / logout / reminder popups, refund; account: My Shift, Daily Summary, close on behalf, edit / delete / refund in a closed shift + the badge, the shift popup; Settings › General both ways); update the "Closing Day Cycle — User Guide" doc if the screens change; (3) then the 6.9 decision and Phase 2 (InvoiceModule).
 - **Before:** data transfer `dwidar_pivot_api` (old, live, READ ONLY) → `dwidar_res_portal` — **RAN 2026-10-11** (`to_run` steps 1–6; backup `storage/app/backups/dwidar_res_portal-20261011-1742.sql`, 6.1 MB). All checks match except 6.9 (17 packages differ from the old stored values — waiting for the user: accept the new values or not). Phase 1 code done (steps 5–10 + extras committed by the user in `ac1c79f`; `is_revenue` + docs uncommitted — the user commits, suggest messages only).
 - **Transfer result:** members 2,932, packages 220, reservations 19,823 (17,756 Confirmed / 2,067 Cancelled), extras 179 (extra 123 skipped: its package was deleted), payments 13,054 (7,707,148.91) + incomes 736 (76,550.94), methods 5, categories 9 (6 VAT inactive + not revenue: 12 incomes 32,564.44; 101 Buffet, 102 Break Hours, 103 Extra Hours), employees 15 + logins (active 3, 7, 10, 12, 13, 14, 15, 16; others leave_date), account login 1 untouched; next payment id / No. 100001 (imported max 14,220).
 - **`to_run` is re-runnable** for go-live day (after stopping the old system): 3.0 pre-check (74 checks on every source row, BLOCKING stops before any TRUNCATE, fallbacks listed); employees / logins upserted; ids from the source (income offset = max old payment id). User decisions: reservations of deleted members imported without a member (9), of deleted packages → no package + Cancelled (20), extras of deleted packages skipped (1), old 8330 (−43.40 withholding) → refund "withholding correction".
@@ -67,13 +69,13 @@
 - **Pending:** positions / shifts of the imported employees (only 3 = Accountant set); 12, 13, 15 should change their weak passwords
 
 ### LayoutModule (layouts, shared UI, JS/CSS)
-- **Last updated:** 2026-10-13 (list toolbars: filter-tabs, one date field, local flatpickr)
+- **Last updated:** 2026-10-13 (sidebars by use; list toolbars: filter-tabs, one date field, local flatpickr)
 - **Files:** `views/{main,modal,account/*,admin/*,employee/*}`, `views/partials/*`, `config/config.php`, `public/assets/{css/custom.css, css/pdf.css, js/custom.js, js/datatables.js}`
   - `pdf.css`: PDF views only (mpdf, CSS 2, linked by `public_path()`), e.g. the payment receipt
   - List toolbars (2026-10-13): `partials/filter-tabs` (hidden `tab` + tab buttons, `data-date-select` / `data-date-label` from `Model::tabDates()`, optional counts) + `partials/date-range-filter` (ONE date field, flatpickr 4.6.13 MIT, local copy `public/assets/vendor/flatpickr/` (+ LICENSE) + `l10n/ar`, pushed `@once`; hidden `date_from` / `date_to`; `single` = one day only; `default` = starts on / goes back to that day, never empty; custom.js `dateRange*` syncs it with the tabs) — reservations, packages, payments
   - Shell: `main` (page frame, `@yield('header'|'sidebar'|'title'|'actions'|'content')`, `@stack('styles'|'scripts')`), `header` (top bar + brand), `sidebar` (frame, `@include($menu)`), `partials/menu` (renders `$items`), `flash`, `footer`, `login` (guest shell for the login / register pages)
   - Per area: `{admin,account,employee}/main` (extends `main`, fills header vars + picks `{area}/sidebar`), `{area}/sidebar` (the `$items` array), `{area}/dashboard`
-  - Account sidebar groups: Reservations, Payments (All Payments, Withholding Certificates, My Shift, Daily Summary — 2026-10-13, replaced Day Closing), Employees, Spaces, Settings (General — withholding tax / VAT switches, Payment Methods, Income Categories; Shift Reminders removed 2026-10-13); Withholding Certificates hidden while withholding tax is off — user approved; employee sidebar: Reservations, Packages, Payments, My Shift (was Day Closing)
+  - Sidebars by how often things are used (user, 2026-10-13; style / icons kept, no route changes): account = **Daily** (direct links: Dashboard, Reservations, Packages, Payments, My Shift, Members) | **Management** (Daily Summary — also active on `account.shifts.*`, Withholding Certificates — hidden while withholding tax is off, Employees) | **Settings** (ONE group, collapsed unless the page is inside it — `partials/menu` opens a group with an active child: General, Spaces & Units — `account.spaces.*` incl. units, Plans, Subscription Types, Reservation Statuses, Payment Methods, Income Categories, Companies, Jobs, Employee Positions, Employee Shifts); employee = Daily: Dashboard (`employee.dashboard`, the profile page), Reservations, Payments, Packages, My Shift, Members (2026-10-14; order as the user set it; Change Password stays in the header menu). Old groups Reservations / Payments / Employees / Spaces removed; every page checked to highlight its item (account Profile / Login Details = header menu, no item)
   - Shift popups (2026-10-11): `header` optional `$logoutPrompt` (`data-logout-prompt` on the logout form); `employee/main` passes it when `$shiftOpen` and pushes `[data-shift-reminder]` when `$shiftReminderUrl` (both shared by PaymentModule `ShiftReminder` middleware)
   - Brand: `public/assets/images/{logo.png, favicon.png|jpg}`
 - **How it works:** popup CRUD (`data-modal`), ajax forms (`data-ajax`, SweetAlert confirm, 422 errors under fields, `html_` errors rendered as HTML), DataTables row update/remove, row toggles, dependent selects (`data-options-url`, `data-parent`, `data-also`), `data-show-if` (checkbox name, or `field=value other` for a select; `field=` = empty) / `data-disable-if`, Tom Select (`searchable`), `Str::humanize()` option texts.
@@ -147,7 +149,7 @@
 ### Payments / Invoices / ETA (PaymentModule — phase 1 in progress; InvoiceModule, ReportModule — not built)
 - **Last updated:** 2026-10-13 (payments list simplified; ONE closing level: the shift)
 - **Spec: `docs/payments-plan.md` — read before any payments/invoice work**
-- **Status:** shift closing = the ONE closing level since 2026-10-13 (§2b; two levels 2026-10-11 → 10-13, `f17f7f9`), uncommitted; Phase 1 done (`9dd28e0`, `a7170e8`, `a02f1fa`, `a2b6075`, `d73c9e2`, `ac1c79f`; `is_revenue` uncommitted); old data transferred from `dwidar_pivot_api` 2026-10-11 (`to_run`, re-runnable for go-live)
+- **Status:** shift closing = the ONE closing level since 2026-10-13 (§2b; two levels 2026-10-11 → 10-13, `f17f7f9`), committed `feb0020`; Phase 1 done (`9dd28e0`, `a7170e8`, `a02f1fa`, `a2b6075`, `d73c9e2`, `ac1c79f`; `is_revenue` uncommitted); old data transferred from `dwidar_pivot_api` 2026-10-11 (`to_run`, re-runnable for go-live)
 - **Phases:** (1) payments + withholding certificates + shift closing + old data import · (2) tax rates + invoices / receipts + ETA entry view · (3) reports
 - **Files (PaymentModule):**
   - `app/Contracts/Payable`, `app/Models/Concerns/HasPayments` (payments(), `paymentsTotal()`, `payment_status` unpaid / partial / paid / credit)
@@ -207,15 +209,30 @@
 - **Pending:** browser test of My Shift / Daily Summary / closed-shift edits and refunds; check 6.9 decision; go-live re-run of `to_run` (3.15 covers the account); Phase 2 (InvoiceModule: extras of type extra + income categories become invoice lines; `is_revenue` 0 excluded from income reports in phase 3)
 
 ### Member / Company / Job modules
-- **Last updated:** 2026-10-07
-- **Files:** `MemberModule/app/{Models/Member, Services/MemberService}`, CompanyModule, JobModule
-- **How it works:** account's members (company, job); names humanized on save; options "name mobile" for searchable selects.
+- **Last updated:** 2026-10-14 (employees manage members)
+- **Files:** `MemberModule/app/{Models/Member, Services/MemberService, Http/Controllers/Concerns/MemberActions, Http/Controllers/{Account/MemberAccountModuleController (+ destroy), Employee/MemberEmployeeModuleController}, Http/Requests/MemberRequest}`, `views/Account/*` (shared by both areas: routes `{area}.members.*`, layout `userable->layout()`), CompanyModule, JobModule
+- **How it works:** account's members (company, job); names humanized on save; options "name mobile" for searchable selects. Account + employees (2026-10-14): list, view, add, edit (`MemberActions`, `ownerAccountId()`); delete = the account only (no `employee.members.destroy`, no Delete in the employee row menu / view).
 - **Depends on:** —
-- **Pending:** —
+- **Decisions:** employees can't delete members (user asked "manage"; members have no soft delete and a delete isn't refused when the member has reservations / payments — kept account only)
+- **Pending:** the account's member delete has no guard for members with reservations / payments (old gap)
 
 ---
 
 ## Session log
+
+### 2026-10-14 — employees manage members
+- **Changed:** `MemberActions` trait (list / view / add / edit) + `Employee/MemberEmployeeModuleController`; account controller keeps destroy; routes `employee.members.*` (no destroy); `MemberRequest` + the trait use `ownerAccountId()`; member views area-aware (routes, layout, Delete only for the account); employee sidebar Members
+- **Why:** user: employees manage the members (the user also reordered both sidebars by hand)
+- **Affects:** MemberModule routes / views (shared with the account), employee sidebar
+- **Found:** members have no soft delete and the delete isn't guarded (reservations / payments) → employees get no delete
+- **Commit:** see suggested commit (user commits)
+
+### 2026-10-13 — sidebars by use
+- **Changed:** account sidebar = Daily (Dashboard, Reservations, Packages, Payments, My Shift, Members) | Management (Daily Summary, Withholding Certificates when on, Employees) | Settings (one group, collapsed unless its page is open: General, Spaces & Units, Plans, Subscription Types, Reservation Statuses, Payment Methods, Income Categories, Companies, Jobs, Employee Positions, Employee Shifts); employee sidebar = Daily (Dashboard, Reservations, Packages, Payments, My Shift); old groups removed
+- **Why:** user: order by how often things are used (shared layout change approved)
+- **Affects:** LayoutModule `account/sidebar`, `employee/sidebar` only (no routes / permissions)
+- **Found:** employees have no Members page (left out); Change Password is already in the employee header menu; withholding tax is currently OFF on account 1 (so its item is hidden)
+- **Commit:** see suggested commit (user commits)
 
 ### 2026-10-13 — ONE closing level: the shift
 - **Changed:** day closing removed (tables, model, service, controllers, requests, views, routes, sidebar item, the day lock in `PaymentService`); shift reopen / close again removed; the account's own shift (`MyShiftActions`, `account.shift.*`, sidebar My Shift); closed-shift edit / delete with a reason → `ShiftClosingService::paymentChanged()` (recalculated totals, `shift_events` payment_* before / after, `edited_at` / `edit_count` badge, History); refunds for employees + the account (`refund_of`, `reason`, cap per payment, refunder's shift; closed original → log + badge only); refunds line in the shift / day totals; Daily Summary (`DailySummaryService`, `account.daily-summary.index`); reminder hours → config, Shift Reminders page + account columns removed; create migrations match the live DB (day migrations deleted); `to_run` (3.1 tables, 3.15 incl. the account, 3.15b one time, 3.16 / 6.12 removed, 6.11); docs (`payments-plan` §2b rewritten, CLAUDE.md, the user guide doc)
@@ -223,7 +240,7 @@
 - **Affects:** every payment edit / delete / refund, employee + account My Shift, account sidebar, `to_run`, the "Closing Day Cycle — User Guide" doc
 - **Then (same day):** imported shifts closed at their last payment (`to_run` 3.15 / 3.15b / 6.11); My Shift without Add Payment / Daily Summary buttons, its payments = the Payments list (`?shift=open`); Settings › General (withholding tax switch applied everywhere, VAT stored for Phase 2); My Closings Payments column = the payments' dates, Withholding column by setting; shift popup = the payments in the Payments list cells (newest 200), no History; the user ran 3.15b + the accounts SQL (6.11 all 0)
 - **Found:** `PaymentService` can't inject `ShiftClosingService` (it injects PaymentService) → resolved with `app()` when used; the account had 1,848 imported payments outside any shift (3.15b); popups don't start DataTables (cells rendered server side); a 4,296-payment shift took 5.7 s to render → capped at 200 (0.45 s)
-- **Commit:** see suggested commit (user commits)
+- **Commit:** `feb0020`
 
 ### 2026-10-13 — payments list simplified, same filter order on every list
 - **Changed:** payments list: tabs Today | This Month | All, one filter row (search, dates, For with the "Other income" group, Method + Refunds / Withholding; Type / Sources / Categories filters removed), summary line by method (withholding apart), columns Member (no.) | For (unit color + Space › Unit + start / package / category) | Date (time) | Method | Amount (refund red, withholding badge) | Created By (account only); `Payment::TABS` / `scopeTab` / `for` + `method` filter keys, `PaymentService::listSummary()`, partials `row-member`, `row-amount`, `list-summary`; datatables.js json `html` → `[data-html]`; filter order search | date | selects on reservations + packages; packages date filter (period overlaps); then ONE date field for the three lists (flatpickr range, MIT, synced with the tabs both ways; `partials/{filter-tabs, date-range-filter}`, `Model::tabDates()`, custom.js `dateRange*` replaced the date range → All rule)
@@ -274,17 +291,3 @@
 - **Affects:** LayoutModule sidebars; Reservation / Package delete; day closing needs the new table
 - **Found:** tested the logs with a TEMPORARY table (no real DB change); migrations batch was 11 (SQL uses 12)
 - **Commit:** see suggested commit (user commits)
-
-### 2026-10-11 — Payments phase 1 steps 5–9, reserved number range
-- **Changed:** number range 100001 (`paymentmodule.number_start`, `nextNumber()` floor, `to_run` SQL; import SQL adjusted + re-dry-run); step 5 payments block + Add Payment in reservation / package views and row menus, Paid / Remaining columns + payment status filter; step 6 owner edit / delete (reason) / refund; step 7 withholding certificates (CRUD, attach payments, difference, private attachment); step 8 day closing (summary, close, reopen); step 9 `movePayments()`; custom.js JSON `modal`; custom.css `.payments-block__head`
-- **Why:** user: import on hold (source may be outdated), reserve ids; continue Phase 1 to the first step needing DB changes / approval
-- **Affects:** Reservation / Package lists + views; LayoutModule custom.js / custom.css; every payment change (closed days)
-- **Found:** `/` redirects → the Laravel example test fails (old); my rolled back tests moved the `payments` / `withholding_certificates` AUTO_INCREMENT (the range SQL sets payments)
-- **Commit:** user commits (not committed by Claude)
-
-### 2026-10-11 — cancelled due 0, cutoff analysis, overpaid list
-- **Changed:** `Reservation::payableAmount()` 0 for a not counted status; `ReservationService` refreshes paid / remaining on create / update / status change; `refreshAll()` eager loads the status; `to_run` RUN ORDER (import now, recalculation + refresh on hold); `storage/app/payments-review/{overpaid-reservations.csv, monthly.md}`
-- **Why:** user decisions (cancelled = nothing due, cutoff 2024-04-24 under review, overpaid not touched)
-- **Affects:** reservation remaining / payment status everywhere; 4 paid cancelled reservations become credit (915.00)
-- **Found:** "2022-04" = payment date / start date of 18 back-dated rows (all created 2024-09, all fully paid), nothing created before 2024-06-01; old system's manual entry ends 2025-02-14; 11,916 reservations here aren't in the old DB (repeat copies from 2025-03-16)
-- **Commit:** `d73c9e2`

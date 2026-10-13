@@ -1,4 +1,5 @@
-@extends(request()->ajax() ? 'layoutmodule::modal' : 'layoutmodule::account.main')
+@php($area = request()->routeIs('employee.*') ? 'employee' : 'account')
+@extends(request()->ajax() ? 'layoutmodule::modal' : Auth::user()->userable->layout())
 
 @section('title')
     Member Details
@@ -7,8 +8,11 @@
 @section('modal-size', 'lg')
 
 @section('actions')
-    <a href="{{ route('account.members.edit', $member->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
-    @include('membermodule::Account.partials.delete-form')
+    <a href="{{ route($area . '.members.edit', $member->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
+    {{-- delete: the account only (a member is deleted for good) --}}
+    @if ($area === 'account')
+        @include('membermodule::Account.partials.delete-form')
+    @endif
 @endsection
 
 @section('content')
@@ -28,7 +32,7 @@
 
     @unless (request()->ajax())
         <div class="form-actions">
-            <a href="{{ route('account.members.index') }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> Back to Members</a>
+            <a href="{{ route($area . '.members.index') }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> Back to Members</a>
         </div>
     @endunless
 @endsection
