@@ -44,11 +44,6 @@ class ExpenseCategoryService
 
     public function create($accountId, array $data)
     {
-        // no sort order: after the last one
-        if (!isset($data['sort_order']) || $data['sort_order'] === '') {
-            $data['sort_order'] = (int) $this->categoryRepository->forAccount($accountId)->max('sort_order') + 1;
-        }
-
         return $this->categoryRepository->create($this->categoryData($data) + ['account_id' => $accountId]);
     }
 
@@ -84,7 +79,6 @@ class ExpenseCategoryService
             'name_ar' => $data['name_ar'],
             'name_en' => $data['name_en'] ?? null,
             'is_active' => !empty($data['is_active']),
-            'sort_order' => (int) ($data['sort_order'] ?? 0),
         ];
     }
 }

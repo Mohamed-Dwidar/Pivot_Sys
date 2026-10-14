@@ -13,7 +13,6 @@ class IncomeCategoryRequest extends FormRequest
             'name_en' => 'nullable|string|max:255',
             'is_active' => 'boolean',
             'is_revenue' => 'boolean',
-            'sort_order' => 'nullable|integer|min:0|max:65535',
         ];
     }
 

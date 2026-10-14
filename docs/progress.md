@@ -175,7 +175,7 @@
   - Payments list partials (2026-10-13): `views/Payment/partials/{list-table (Payments page + My Shift), row-member, row-amount, row-source, list-summary}`; `Http/Middleware/WithholdingEnabled` (certificates routes, Settings › General)
   - `routes/web.php`: `{account|employee}.payments.{index, data, options.payables, create, store, show, receipt, refund, refund.store}` + `account.payments.{edit, update, delete, destroy}`; `account.daily-summary.index`; `account.shift.{index, data, confirm, close}`; `employee.shift.{index, data, confirm, close, reminder, logout-prompt, still-working, show}`; `account.shifts.{confirm, close, show}`; `account.withholding-certificates.*` (+ `attachment`); `account.payment-methods.*`, `account.income-categories.*`
 - **How it works:**
-  - Methods / categories: popup CRUD like reservation statuses (list, add / edit, active toggle, sort order); delete refused while used by payments
+  - Methods / categories: popup CRUD like reservation statuses (list, add / edit, active toggle; methods have a sort order); income / expense categories have NO sort order in the UI (2026-10-14: lists + drop menus by name A→Z, `scopeOrdered()`; `sort_order` column dropped from the create migrations + `to_run`, DB ALTER by the user); delete refused while used by payments
   - `PaymentService::create($accountId, $data, $creator)`: payable `reservation | package` (+ `payable_id`) or other income (`income_category_id`); type payment | withholding (refund = step 6); refuses a reservation inside a package, amount ≤ 0, no method (withholding → method 0) — any date (no day lock); `payment_no` = MAX + 1 per account under `lockForUpdate`; then `refresh(payable)`
   - `refresh()`: paid = Σ `Payment::PAID_SQL` (payments + withholding − refunds), remaining = due − paid (due 0 inside a package); `refreshAll()` one grouped query per payable type, ~7 s for all rows
   - `isOwner($user)` = userable is Account (edit / delete rights)
@@ -228,6 +228,13 @@
 ---
 
 ## Session log
+
+### 2026-10-14 — income / expense categories by name
+- **Changed:** both categories sorted by name A→Z (`scopeOrdered()` → `orderByLocalized('name')`, list default = Name); Sort Order removed from the forms, lists, requests, services, models' fillable
+- **Why:** user request
+- **Affects:** Settings › Income / Expense Categories, every category drop menu (payments, extras, expenses, filters)
+- **DB:** `sort_order` removed from both create migrations + `to_run` (3.4, 3.13b, 3.15c); the user runs the 2 `ALTER TABLE … DROP COLUMN sort_order`
+- **Commit:** see suggested commit (user commits)
 
 ### 2026-10-14 — expenses (built, tested, old data imported)
 - **Changed:** expense categories (Settings, copy of income categories), expenses (model, service, shared actions, account + employee pages, private receipt, `expense_no`), expenses in the recorder's open shift + closing (`up_to_expense_id`), totals per method payments − refunds − expenses = net (shift / My Shift / shift popup / Daily Summary), expense changes after closing logged (`expense_edit` / `expense_delete`), `shifts:recalculate` command, sidebars Expenses + Expense Categories, `to_run` import (types → categories, expenses, imported shifts closed at the later of last payment / expense, checks 6.11 / 6.13)
@@ -294,10 +301,3 @@
 - **Affects:** every payment edit / delete (closed shift), day closing (account only, guarded), employee payments list, LayoutModule header / employee layout / sidebars / custom.js, web middleware group
 - **Found:** a TEMPORARY table can't be read twice in one MySQL query (3.16 uses a normal helper table); pushing a middleware to the router group at boot is overwritten by the kernel (use the kernel's `appendMiddlewareToGroup`); mixing `@php(...)` and `@php ... @endphp` in one Blade file breaks it; no `lock-open` icon in this Lucide
 - **Commit:** `f17f7f9`
-
-### 2026-10-11 — data transfer from dwidar_pivot_api (ran)
-- **Changed:** `extras` (table, model, `HasExtras`, service, request, controller, routes, views; package due = net + extras); `income_categories.is_revenue` (create migration + form); `to_run` rewritten (backup, pre-check, truncate target tables, upsert employees / logins, inserts, recalculation, refresh, checks) and RUN; old `to_run` kept in `storage/app/backups/to_run.before-2026-10-11`
-- **Why:** user: move all old data (up to date source) into the new system, account 1, old users = employees
-- **Affects:** every module's data; PackageModule due (extras); IncomeCategory form
-- **Found:** first run stopped at 3.10 (an extra without a date) → pre-check added (74 checks, stops before TRUNCATE); old system's stored package values were stale for 17 packages (check 6.9, decision pending); 9 old users had plain-text passwords (3 active: 12, 13, 15 — hashed as is, weak); all member displays are null-safe (9 reservations without a member checked: views, lists, receipt)
-- **Commit:** `ac1c79f` (extras + code) + see suggested commit (is_revenue, docs)

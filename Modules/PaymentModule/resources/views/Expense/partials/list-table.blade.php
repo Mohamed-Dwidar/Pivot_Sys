@@ -10,8 +10,8 @@
         <thead>
             <tr>
                 <th data-data="item_html">Expense</th>
-                <th data-data="category">Category</th>
                 <th data-data="spent_at" data-name="spent_at" data-class="whitespace-nowrap">Date</th>
+                <th data-data="category">Category</th>
                 <th data-data="method">Method</th>
                 <th data-data="amount" data-name="amount" data-class="whitespace-nowrap">Amount</th>
                 @if (!empty($showBy))

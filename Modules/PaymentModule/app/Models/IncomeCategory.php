@@ -17,13 +17,12 @@ class IncomeCategory extends Model
     // read in the active language: $model->name (see App\Helpers\LocalizedHelper)
     protected array $localizedFields = ['name'];
 
-    protected $fillable = ['account_id', 'name_ar', 'name_en', 'is_active', 'is_revenue', 'sort_order'];
+    protected $fillable = ['account_id', 'name_ar', 'name_en', 'is_active', 'is_revenue'];
 
     protected $casts = [
         'is_active' => 'boolean',
         // false = not income (VAT collected ...): the income reports leave it out
         'is_revenue' => 'boolean',
-        'sort_order' => 'integer',
     ];
 
     public function account(): BelongsTo
@@ -36,10 +35,10 @@ class IncomeCategory extends Model
         return $this->hasMany(Payment::class);
     }
 
-    // the categories order (lists, drop menus)
+    // the categories order (lists, drop menus): by name
     public function scopeOrdered($query)
     {
-        return $query->orderBy('sort_order')->orderBy('id');
+        return $query->orderByLocalized('name')->orderBy('id');
     }
 
     public function scopeFilter($query, array $filters = [])

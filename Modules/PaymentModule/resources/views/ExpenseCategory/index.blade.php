@@ -24,7 +24,6 @@
             data-filters="#expense-categories-filters" data-order='[[0, "asc"]]' data-empty="No expense categories yet.">
             <thead>
                 <tr>
-                    <th data-data="sort_order" data-name="sort_order" data-class="w-24">Order</th>
                     <th data-data="name_html" data-name="name">Name</th>
                     <th data-data="expenses_count" data-name="expenses_count">Expenses</th>
                     <th data-data="status" data-name="is_active">Status</th>

@@ -17,7 +17,6 @@ return new class extends Migration {
             $table->boolean('is_active')->default(1);
             // 0 = money collected for someone else (VAT ...): never counted as income in the reports
             $table->boolean('is_revenue')->default(1);
-            $table->unsignedSmallInteger('sort_order')->default(0);
 
             $table->timestamps();
             $table->softDeletes();

@@ -50,14 +50,13 @@ class IncomeCategoryAccountModuleController extends Controller
             ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['is_active'])))
             ->setRowId(fn ($category) => 'row-' . $category->id)
             ->orderColumn('name', fn ($query, $order) => $query->orderByLocalized('name', $order))
-            ->orderColumn('sort_order', fn ($query, $order) => $query->orderBy('sort_order', $order)->orderBy('id', $order))
             ->addColumn('name_html', fn ($category) => '<a href="' . route('account.income-categories.edit', $category->id) . '" data-modal class="font-medium">' . e($category->name) . '</a>')
             ->addColumn('status', fn ($category) => view('layoutmodule::partials.row-toggle', [
                 'url' => route('account.income-categories.active', $category->id), 'row' => $category->id, 'name' => 'is_active', 'checked' => $category->is_active,
             ])->render())
             ->addColumn('actions', fn ($category) => view('paymentmodule::Category.partials.row-actions', compact('category'))->render())
             ->rawColumns(['name_html', 'status', 'actions'])
-            ->only(['DT_RowId', 'sort_order', 'name_html', 'payments_count', 'status', 'actions']);
+            ->only(['DT_RowId', 'name_html', 'payments_count', 'status', 'actions']);
     }
 
     // the updated row with the list filters (list[...]), null when it does not match them any more
