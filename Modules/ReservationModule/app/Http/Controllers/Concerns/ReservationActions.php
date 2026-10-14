@@ -108,7 +108,9 @@ trait ReservationActions
     private function tab(array $filters): string
     {
         if (!empty($filters['date_from']) && strtotime($filters['date_from'])) {
-            return 'days';
+            // the business date alone (the Today tab's date) = the Today tab (its night after midnight included)
+            $today = Reservation::businessToday()[0]->toDateString();
+            return $filters['date_from'] === $today && ($filters['date_to'] ?? null ?: $today) === $today ? 'today' : 'days';
         }
         $tab = (string) ($filters['tab'] ?? '');
         return isset(Reservation::TABS[$tab]) ? $tab : 'today';
@@ -135,7 +137,7 @@ trait ReservationActions
         $tab = $this->tab($filters);
         // the not counted ones (cancelled, pending ...) always after the counted ones
         // + who added it (the "By" column)
-        $query = $this->reservationService->listQuery($this->accountId())->with('creatable.userable')->countedFirst();
+        $query = $this->reservationService->listQuery($this->accountId())->with('creatable.userable', 'renewedBy')->countedFirst();
         if ($id) {
             $query->whereKey($id);
         } elseif (!request()->filled('order')) {
@@ -201,14 +203,15 @@ trait ReservationActions
         return response()->json(collect($this->planService->optionsForUnit($unit))->map(fn ($plan) => ['name' => Str::humanize($plan['name'])] + $plan)->values());
     }
 
-    // ?renew=ID (the Subscriptions page): the form pre-filled from that subscription, starting when it ends
+    // ?renew=ID (Renew: the Today page, the view, the list): the form pre-filled from that period, starting the day after it ends
+    // (renewal_of = it); else ?subscription_type_id / space_id / unit_id / start (the Today page: + New, a timeline slot)
     public function create(Request $request)
     {
-        $renewal = $request->filled('renew')
+        $reservation = $request->filled('renew')
             ? $this->reservationService->renewalOf($this->reservationService->findOne($this->accountId(), (int) $request->input('renew')))
-            : null;
+            : $this->reservationService->prefill($this->accountId(), $request->only(['subscription_type_id', 'space_id', 'unit_id', 'start']));
 
-        return view('reservationmodule::Reservation.create', ['reservation' => $renewal] + $this->formOptions($renewal));
+        return view('reservationmodule::Reservation.create', ['reservation' => $reservation] + $this->formOptions($reservation));
     }
 
     public function store(ReservationRequest $request)
@@ -266,6 +269,29 @@ trait ReservationActions
 
         return response()->json([
             'message' => 'The reservation has been restored to "' . $reservation->status?->name . '", its amount is due again.',
+            'row' => $this->row($request, $id),
+            'modal' => $request->boolean('back_to_view') ? route($this->area() . '.reservations.show', $id) : null,
+        ]);
+    }
+
+    // Mark left / undo (the Today page's Not renewed list, the view): the list row, back to the view when asked
+    public function markLeft(Request $request, $id)
+    {
+        $this->reservationService->markLeft($this->accountId(), $id, Auth::user());
+
+        return response()->json([
+            'message' => 'The period has been marked as left.',
+            'row' => $this->row($request, $id),
+            'modal' => $request->boolean('back_to_view') ? route($this->area() . '.reservations.show', $id) : null,
+        ]);
+    }
+
+    public function undoLeft(Request $request, $id)
+    {
+        $this->reservationService->undoLeft($this->accountId(), $id);
+
+        return response()->json([
+            'message' => 'The period is no longer marked as left.',
             'row' => $this->row($request, $id),
             'modal' => $request->boolean('back_to_view') ? route($this->area() . '.reservations.show', $id) : null,
         ]);

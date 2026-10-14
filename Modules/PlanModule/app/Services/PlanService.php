@@ -37,7 +37,9 @@ class PlanService
             ->orderBy('amount')->orderBy('name')->get()
             ->map(fn ($plan) => ['id' => $plan->id, 'name' => $plan->name . ' (' . number_format((float) $plan->amount, 2) . ' / ' . ($plan->lease_period_label ?? '-') . ')',
                 'amount' => (float) $plan->amount, 'timeBased' => (int) $plan->is_time_based,
-                'periodHours' => \Modules\PlanModule\app\Models\Plan::PERIOD_HOURS[$plan->lease_period] ?? 1])
+                'periodHours' => \Modules\PlanModule\app\Models\Plan::PERIOD_HOURS[$plan->lease_period] ?? 1,
+                // the reservation form sets the end from the start for one lease period (custom.js reservationEndFromPlan())
+                'leasePeriod' => (string) $plan->lease_period])
             ->all();
     }
 

@@ -16,6 +16,7 @@
  *   - any other select / input          -> sent with the request, applied on change
  *   - [data-filter-tab][data-name][data-value] buttons -> set the hidden input with that name (status tabs)
  *   - [data-clear-button] (type=reset)  -> clears everything, disabled when nothing is applied, [data-count] badge
+ *   - [data-initial="value"] on a filter -> its value when the list opens (e.g. from the URL), Clear still empties it
  *
  * Each row has id="row-{id}" (DT_RowId from the server). window.dataTables is used by the ajax forms (custom.js)
  * to update / remove one row without reloading the page.
@@ -114,6 +115,10 @@
         var form = tableEl.dataset.filters ? document.querySelector(tableEl.dataset.filters) : null;
         var searchInput = form ? form.querySelector('[name=search]') : null;
         var clearButton = form ? form.querySelector('[data-clear-button]') : null;
+        // a filter chosen when the list opens (not "selected" in the HTML: the form reset of Clear would bring it back)
+        if (form) {
+            form.querySelectorAll('[data-initial]').forEach(function (el) { el.value = el.dataset.initial; });
+        }
 
         var columns = Array.prototype.map.call(tableEl.querySelectorAll('thead th'), function (th) {
             return {

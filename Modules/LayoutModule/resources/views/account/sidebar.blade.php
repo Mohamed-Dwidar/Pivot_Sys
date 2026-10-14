@@ -1,6 +1,7 @@
 @php
     /*
-     * The account sidebar, by how often things are used (2026-10-13; Daily order + Payments = Cash In & Cash Out: 2026-10-14):
+     * The account sidebar, by how often things are used (2026-10-13; Daily order + Payments = Cash In & Cash Out: 2026-10-14;
+     * Today under Dashboard: 2026-10-14):
      * Daily (direct links) | Management | Settings (one group,
      * collapsed unless the current page is in it — partials/menu opens a group with an active child).
      * Settings › General: withholding tax off → no Withholding Certificates item.
@@ -13,6 +14,12 @@
             'icon' => 'gauge-circle',
             'url' => route('account.dashboard'),
             'active' => request()->routeIs('account.dashboard'),
+        ],
+        [
+            'title' => 'Today',
+            'icon' => 'calendar-days',
+            'url' => route('account.today.index'),
+            'active' => request()->routeIs('account.today.*'),
         ],
         [
             'title' => 'Reservations',

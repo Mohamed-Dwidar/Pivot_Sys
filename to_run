@@ -1,7 +1,7 @@
 =====================================================================
  DATA TRANSFER  dwidar_pivot_api (old, up to date, READ ONLY)  →  dwidar_res_portal (new)
  Written 2026-10-11. account_id = 1 everywhere. Nothing in dwidar_pivot_api is ever written or truncated.
- Run the steps in order. Steps 1–2 = terminal, step 3 = SQL (one session), steps 4–5 = terminal, step 6 = SQL checks.
+ Run the steps in order. Steps 1–2 = terminal, step 3 = SQL (one session), steps 4–5 = terminal, 5b = terminal + SQL, step 6 = SQL checks.
  RE-RUNNABLE: run it again on go-live day (after stopping the old system) — same result for the same source data.
    Each run empties and reloads members, packages, reservations, extras, payments, payment methods, income categories,
    withholding certificates, day closings: don't enter real data in those in the new system before go-live.
@@ -101,7 +101,6 @@ UNION ALL SELECT 'reservations.date_from NULL', 'BLOCKING', '-', COUNT(*), SUBST
 UNION ALL SELECT 'reservations.date_to before date_from', 'fallback', 'kept (warning only)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE date_to < date_from
 UNION ALL SELECT 'reservations.type_repeat not daily/weekly/monthly/yearly', 'fallback', 'NULL (no repeat frequency)', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE type_repeat IS NOT NULL AND type_repeat NOT IN ('daily', 'weekly', 'monthly', 'yearly')
 UNION ALL SELECT 'reservations.subscription_day NULL', 'fallback', '0', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE subscription_day IS NULL
-UNION ALL SELECT 'reservations.is_continue NULL', 'fallback', '0', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE is_continue IS NULL
 UNION ALL SELECT 'reservations.all_day NULL', 'fallback', '0', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE all_day IS NULL
 UNION ALL SELECT 'reservations.repeat_id NULL', 'fallback', '0', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE repeat_id IS NULL
 UNION ALL SELECT 'reservations.is_repeat NULL', 'fallback', '0', COUNT(*), SUBSTRING_INDEX(GROUP_CONCAT(id ORDER BY id), ',', 20) FROM dwidar_pivot_api.reservations WHERE is_repeat IS NULL
@@ -222,6 +221,40 @@ SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEM
   'SELECT ''refund_of exists''');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
+-- the Today page (2026-10-14; also in the create migrations): subscription_types.booking_mode (replaces full_day) / home_order,
+-- reservations.renewal_of / left_at / left_by, accounts.today_hours_from / today_hours_to / renewal_days.
+-- The mapping / order / Pivot hours run ONLY when the column is added here (a re-run keeps what the account set since);
+-- they are prepared strings, so the script still parses after full_day is dropped.
+SET @had_mode = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'subscription_types' AND COLUMN_NAME = 'booking_mode');
+SET @sql = IF(@had_mode = 0,
+  'ALTER TABLE subscription_types ADD booking_mode ENUM(''hourly'',''full_day'',''period'') NOT NULL DEFAULT ''hourly'' AFTER show_home, ADD home_order SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER booking_mode',
+  'SELECT ''booking_mode exists''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+-- full_day → full_day; contract / auto renew → period; else hourly (Pivot: 1 Day Use = full_day, 2 Subscriptions = period, 3 Meeting = hourly)
+SET @sql = IF(@had_mode = 0,
+  'UPDATE subscription_types SET booking_mode = CASE WHEN full_day = 1 THEN ''full_day'' WHEN is_contract = 1 OR auto_renew = 1 THEN ''period'' ELSE ''hourly'' END',
+  'SELECT ''booking_mode kept''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+-- Pivot's section order: Meeting, Day Use, Subscriptions
+SET @sql = IF(@had_mode = 0,
+  'UPDATE subscription_types SET home_order = CASE id WHEN 3 THEN 1 WHEN 1 THEN 2 WHEN 2 THEN 3 ELSE home_order END WHERE account_id = 1',
+  'SELECT ''home_order kept''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
+SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reservations' AND COLUMN_NAME = 'renewal_of') = 0,
+  'ALTER TABLE reservations ADD renewal_of BIGINT UNSIGNED NULL AFTER repeat_id, ADD left_at DATETIME NULL AFTER renewal_of, ADD left_by BIGINT NOT NULL DEFAULT 0 AFTER left_at, ADD INDEX reservations_renewal_of_index (renewal_of)',
+  'SELECT ''renewal_of exists''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
+SET @had_hours = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accounts' AND COLUMN_NAME = 'today_hours_from');
+SET @sql = IF(@had_hours = 0,
+  'ALTER TABLE accounts ADD today_hours_from TINYINT UNSIGNED NOT NULL DEFAULT 8 AFTER vat_enabled, ADD today_hours_to TINYINT UNSIGNED NOT NULL DEFAULT 24 AFTER today_hours_from, ADD renewal_days TINYINT UNSIGNED NOT NULL DEFAULT 7 AFTER today_hours_to',
+  'SELECT ''today_hours exists''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+-- Pivot works through the night: its timeline runs to 02:00 the next day (26)
+SET @sql = IF(@had_hours = 0, 'UPDATE accounts SET today_hours_to = 26 WHERE id = 1', 'SELECT ''today_hours kept''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
 INSERT INTO migrations (migration, batch)
 SELECT m.migration, (SELECT MAX(batch) + 1 FROM migrations) FROM (
   SELECT '2026_10_11_100006_create_extras_table' migration
@@ -328,9 +361,10 @@ FROM dwidar_pivot_api.packages k;
 
 -- 3.9 reservations: status 3 Cancelled (is_cancelled) else 2 Confirmed; subscription_id → subscription_type_id; date_from / date_to → start_at / end_at;
 --     type_repeat → repeat_frequency; no discount in the old system: net = amount (the old columns are copied too);
+--     the old is_continue is not imported (2026-10-15: no "continues", the column was dropped; the old end date is the end);
 --     a member deleted in the old system: kept as it is (no member, user decision); a package deleted in the old system: no package + Cancelled
 INSERT INTO reservations (id, account_id, member_id, space_id, unit_id, plan_id, package_id, subscription_type_id, reservation_status_id,
-  start_at, end_at, subscription_day, is_continue, all_day, repeat_id, is_repeat, repeat_frequency, repeat_interval, number_of_peoples,
+  start_at, end_at, subscription_day, all_day, repeat_id, is_repeat, repeat_frequency, repeat_interval, number_of_peoples,
   amount, discount_percentage, discount_value, net_amount, paid_amount, remaining, notes, creatable_type, creatable_id,
   created_at, updated_at, deleted_at, status_id, subscription_id, created_by, date_from, date_to, type_repeat, is_cancelled)
 SELECT r.id, 1, r.member_id, r.space_id, r.unit_id, r.plan_id,
@@ -338,13 +372,27 @@ SELECT r.id, 1, r.member_id, r.space_id, r.unit_id, r.plan_id,
   IF(r.package_id > 0 AND r.package_id NOT IN (SELECT id FROM dwidar_pivot_api.packages), 0, COALESCE(r.package_id, 0)),
   COALESCE(r.subscription_id, 0),
   IF(r.is_cancelled = 1 OR (r.package_id > 0 AND r.package_id NOT IN (SELECT id FROM dwidar_pivot_api.packages)), 3, 2),
-  r.date_from, r.date_to, COALESCE(r.subscription_day, 0), COALESCE(r.is_continue, 0), COALESCE(r.all_day, 0), COALESCE(r.repeat_id, 0), COALESCE(r.is_repeat, 0),
+  r.date_from, r.date_to, COALESCE(r.subscription_day, 0), COALESCE(r.all_day, 0), COALESCE(r.repeat_id, 0), COALESCE(r.is_repeat, 0),
   IF(r.type_repeat IN ('daily', 'weekly', 'monthly', 'yearly'), r.type_repeat, NULL), 0, COALESCE(r.number_of_peoples, 1),
   ROUND(COALESCE(r.amount, 0), 2), 0, 0, ROUND(COALESCE(r.amount, 0), 2), 0, 0, r.notes,
   'Modules\\UserModule\\app\\Models\\User',
   CASE WHEN r.creatable_type LIKE '%UserModule%' AND r.creatable_id IN (SELECT id FROM dwidar_pivot_api.users) THEN r.creatable_id ELSE 1 END,
   r.created_at, r.updated_at, r.deleted_at, COALESCE(r.status_id, 1), COALESCE(r.subscription_id, 0), COALESCE(r.created_by, 1), r.date_from, r.date_to, r.type_repeat, COALESCE(r.is_cancelled, 0)
 FROM dwidar_pivot_api.reservations r;
+
+-- 3.9b no "continues" any more (user 2026-10-15; the app always saves an end date, a subscription is renewed by a new period;
+--      reservations.is_continue dropped): a row without an end gets ONE period: the same length as the period it renews (renewal_of, the Renew rule), else its plan's lease period
+--      (time based: hours; else days: day 1, week 7, month 30, year 365 — Plan::PERIOD_HOURS), ending 23:59:59 of its last day.
+--      On 2026-10-15: 1 row without an end (#22115 → 14-11-2026 23:59:59, done); the old system has none.
+UPDATE reservations r
+JOIN plans p ON p.id = r.plan_id
+LEFT JOIN reservations o ON o.id = r.renewal_of AND o.deleted_at IS NULL AND o.end_at IS NOT NULL
+SET r.end_at = CASE
+  WHEN p.is_time_based = 1 THEN r.start_at + INTERVAL CASE p.lease_period WHEN 'hour' THEN 1 WHEN 'day' THEN 24 WHEN 'week' THEN 168 WHEN 'year' THEN 8760 ELSE 720 END HOUR
+  WHEN o.id IS NOT NULL THEN TIMESTAMP(DATE(r.start_at) + INTERVAL DATEDIFF(DATE(GREATEST(o.end_at, o.start_at)), DATE(o.start_at)) DAY, '23:59:59')
+  ELSE TIMESTAMP(DATE(r.start_at) + INTERVAL CASE p.lease_period WHEN 'day' THEN 0 WHEN 'week' THEN 6 WHEN 'year' THEN 364 ELSE 29 END DAY, '23:59:59')
+END
+WHERE r.deleted_at IS NULL AND r.end_at IS NULL AND r.start_at IS NOT NULL;
 
 -- 3.10 extras (old package extras, id kept, quantity 1, unit price = amount)
 --      adjustment = balance moves / close-outs / discount / reimbursement; extra = a sale, with its income category
@@ -584,6 +632,41 @@ STEP 5 — paid / remaining of every reservation and package + the imported shif
 -----
 php artisan payments:refresh
 php artisan shifts:recalculate --imported
+
+-----
+STEP 5b — renewals of the imported periods (every run: 3.9 reloads the reservations, so renewal_of / left_at start empty)
+          The command came with the Today page (2026-10-14). Run the dry run first and check its numbers.
+-----
+# a) link each period to the one it renews (booking_mode = period types, counted, with a member): the closest previous period of
+#    the same member + type, same unit first then same space, starting 7 days before to 15 days after the old end; each old period
+#    linked at most once; only fills renewal_of IS NULL (safe to run again). Prints: links, by unit / by space, running linked.
+#    Expected on the 2026-10-14 data: 1,071 links (1,038 by unit, 33 by space), 66 of the 118 running periods linked.
+php artisan reservations:link-renewals --dry-run
+php artisan reservations:link-renewals
+
+-- b) SQL, AFTER a): the periods still not renewed that ended more than 60 days before go-live → left (left_by 0 = auto, a manual
+--    "Mark left" has the user id). Expected on 2026-10-14 (cutoff 2026-08-15): 227 marked, 14 stay under Not renewed.
+SET @left_cutoff = CURDATE() - INTERVAL 60 DAY;
+UPDATE reservations r
+JOIN subscription_types t ON t.id = r.subscription_type_id AND t.booking_mode = 'period'
+SET r.left_at = r.end_at, r.left_by = 0
+WHERE r.deleted_at IS NULL AND r.left_at IS NULL AND r.member_id > 0 AND r.end_at < @left_cutoff
+  AND r.reservation_status_id NOT IN (SELECT id FROM reservation_statuses WHERE is_counted = 0)
+  AND r.id NOT IN (SELECT renewal_of FROM (SELECT renewal_of FROM reservations WHERE deleted_at IS NULL AND renewal_of IS NOT NULL
+                                         AND reservation_status_id NOT IN (SELECT id FROM reservation_statuses WHERE is_counted = 0)) n);
+
+-- c) SQL, AFTER a) and b) — OLD DATA ONLY, one-time rule (user 2026-10-14), not a system rule: space 1 (Shared Space) periods
+--    that ended more than 1 month before go-live and are still not renewed / not left → left (left_by 0 = auto).
+--    Expected on 2026-10-14 (cutoff 2026-09-14): 4 marked; then 10 stay under Not renewed (Shared Space 6, Locker 2,
+--    Private Office 1, Logo 1).
+SET @left_cutoff_space1 = CURDATE() - INTERVAL 1 MONTH;
+UPDATE reservations r
+JOIN subscription_types t ON t.id = r.subscription_type_id AND t.booking_mode = 'period'
+SET r.left_at = r.end_at, r.left_by = 0
+WHERE r.space_id = 1 AND r.deleted_at IS NULL AND r.left_at IS NULL AND r.member_id > 0 AND r.end_at < @left_cutoff_space1
+  AND r.reservation_status_id NOT IN (SELECT id FROM reservation_statuses WHERE is_counted = 0)
+  AND r.id NOT IN (SELECT renewal_of FROM (SELECT renewal_of FROM reservations WHERE deleted_at IS NULL AND renewal_of IS NOT NULL
+                                         AND reservation_status_id NOT IN (SELECT id FROM reservation_statuses WHERE is_counted = 0)) n);
 
 -----
 STEP 6 — checks (SQL): every "old" must equal its "new"

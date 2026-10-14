@@ -15,21 +15,53 @@ class SubscriptionType extends Model
         // the reservations of this type can repeat / renew automatically (continue) (the reservation form shows these options only then)
         'can_repeat' => 'Can Repeat',
         'auto_renew' => 'Auto Renew',
-        'full_day' => 'Full Day',
         // a contract (monthly subscription, one reservation per period): the reservations list collapses it on the daily
         // tabs and lists it on its Subscriptions tab (docs/reservations-list-plan.md)
         'is_contract' => 'Contract',
     ];
 
-    protected $fillable = ['account_id', 'name', 'show_home', 'can_repeat', 'auto_renew', 'full_day', 'is_contract'];
+    /**
+     * How the type is booked (replaces the old full_day flag) = its Today page section: hourly = a timeline of its units,
+     * full_day = the day's list (booked by date), period = running counts + renewals (subscriptions / contracts: one
+     * reservation per period, renewed by a new period with renewal_of)
+     */
+    const BOOKING_MODES = [
+        'hourly' => 'Hourly',
+        'full_day' => 'Full Day',
+        'period' => 'Period',
+    ];
+
+    protected $fillable = ['account_id', 'name', 'show_home', 'booking_mode', 'home_order', 'can_repeat', 'auto_renew', 'is_contract'];
 
     protected $casts = [
         'show_home' => 'boolean',
+        'home_order' => 'integer',
         'can_repeat' => 'boolean',
         'auto_renew' => 'boolean',
-        'full_day' => 'boolean',
         'is_contract' => 'boolean',
     ];
+
+    public function isHourly(): bool
+    {
+        return $this->booking_mode === 'hourly';
+    }
+
+    public function isFullDay(): bool
+    {
+        return $this->booking_mode === 'full_day';
+    }
+
+    public function isPeriod(): bool
+    {
+        return $this->booking_mode === 'period';
+    }
+
+    // the ids of the types of a booking mode (all accounts: the ids are global), once per request
+    public static function idsOf(string $mode): array
+    {
+        $modes = once(fn () => static::pluck('booking_mode', 'id')->all());
+        return array_keys(array_filter($modes, fn ($typeMode) => $typeMode === $mode));
+    }
 
     public function account(): BelongsTo
     {

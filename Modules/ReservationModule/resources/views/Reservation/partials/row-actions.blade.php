@@ -5,8 +5,8 @@
         ['label' => 'Edit', 'icon' => 'pencil', 'url' => route($area . '.reservations.edit', $reservation->id), 'modal' => true],
         // not inside a package (paid through the package)
         // not counted (cancelled, pending ...): back to the default counted status (popup, the slot is checked)
-        // a contract period: the next period, pre-filled (the Subscriptions tab)
-        ...($reservation->isContract() && $reservation->isCounted() ? [['label' => 'Renew', 'icon' => 'refresh-cw', 'url' => route($area . '.reservations.create', ['renew' => $reservation->id]), 'modal' => true]] : []),
+        // a counted period of a period type (subscriptions / contracts) not renewed yet: the next period, pre-filled (renewal_of)
+        ...($reservation->isPeriod() && $reservation->isCounted() && !$reservation->renewedBy ? [['label' => 'Renew', 'icon' => 'refresh-cw', 'url' => route($area . '.reservations.create', ['renew' => $reservation->id]), 'modal' => true]] : []),
         ...(!$reservation->isCounted() ? [['label' => 'Restore', 'icon' => 'rotate-ccw', 'url' => route($area . '.reservations.restore', $reservation->id), 'modal' => true]] : []),
         ...($reservation->canTakePayments() ? [['label' => 'Add Cash In', 'icon' => 'wallet', 'url' => route($area . '.payments.create', ['payable' => 'reservation', 'payable_id' => $reservation->id]), 'modal' => true]] : []),
     ],

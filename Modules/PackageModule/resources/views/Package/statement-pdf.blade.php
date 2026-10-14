@@ -115,7 +115,7 @@
                 <tr class="{{ !$counted ? 'statement-row-cancelled' : ($loop->even ? 'statement-row-even' : '') }}">
                     <td class="nowrap">{{ $start?->format($dateFormat . ' D') }}</td>
                     <td class="nowrap">
-                        @if ($type?->full_day)
+                        @if ($type?->isFullDay())
                             Full day
                         @elseif ($type?->auto_renew || $type?->is_contract)
                             until {{ $end?->format($dateFormat) ?? '-' }}

@@ -10,18 +10,38 @@
     // the unit capacity (data-capacity): 1 = the number of people is 1 and can not be changed (custom.js)
     $unitOptions = collect($units)->mapWithKeys(fn ($unit) => [$unit['id'] => ['name' => $unit['name'], 'data' => ['capacity' => $unit['capacity']]]])->all();
     // data-time-based: the plan reservations have a start / end time (custom.js shows the time inputs)
-    $planOptions = collect($plans)->mapWithKeys(fn ($plan) => [$plan['id'] => ['name' => $plan['name'], 'data' => ['amount' => $plan['amount'], 'time-based' => $plan['timeBased'], 'period-hours' => $plan['periodHours']]]])->all();
+    $planOptions = collect($plans)->mapWithKeys(fn ($plan) => [$plan['id'] => ['name' => $plan['name'], 'data' => ['amount' => $plan['amount'], 'time-based' => $plan['timeBased'], 'period-hours' => $plan['periodHours'], 'lease-period' => $plan['leasePeriod']]]])->all();
     $packageOptions = collect($packages)->map(fn ($package) => ['name' => $package['name'], 'data' => ['member-id' => $package['member_id']]])->all();
     // the date / time inputs need Y-m-d / H:i values (the browser shows them in the user's format)
-    // create: today, now -> in 1 hour; edit: the saved values (the times only for a time based plan)
+    // create: today, now -> in 1 hour (pre-filled from the Today page: its start -> in 1 hour); edit / renew: the saved values
+    // (the times only for a time based plan)
     $now = now();
-    $endDefault = $now->copy()->addHour();
-    $startAt = old('start_at', $reservation ? $reservation->start_at?->format('Y-m-d') : $now->format('Y-m-d'));
-    $endAt = $reservation ? $reservation->end_at?->format('Y-m-d') : $endDefault->format('Y-m-d');
+    $prefilled = $reservation && !$reservation->exists && !$reservation->plan_id;
+    $fresh = !$reservation || $prefilled;
+    $startDefault = $prefilled && $reservation->start_at ? $reservation->start_at : $now;
+    $endDefault = $startDefault->copy()->addHour();
     $timeBased = (bool) $reservation?->plan?->is_time_based;
-    $startTime = old('start_time', $reservation ? ($timeBased ? $reservation->start_at?->format('H:i') : null) : $now->format('H:i'));
-    $endTime = old('end_time', $reservation ? ($timeBased ? $reservation->end_at?->format('H:i') : null) : $endDefault->format('H:i'));
+    $startAt = old('start_at', $fresh ? $startDefault->format('Y-m-d') : $reservation->start_at?->format('Y-m-d'));
+    $endAt = $fresh ? $endDefault->format('Y-m-d') : $reservation->end_at?->format('Y-m-d');
+    $startTime = old('start_time', $fresh ? $startDefault->format('H:i') : ($timeBased ? $reservation->start_at?->format('H:i') : null));
+    $endTime = old('end_time', $fresh ? $endDefault->format('H:i') : ($timeBased ? $reservation->end_at?->format('H:i') : null));
+    // a new reservation at night (before the cutoff of Settings › General): a full day one is for the business date (the day
+    // before), a time based one for now — custom.js reservationTimeBased() switches the untouched dates with the plan
+    $nightDates = '';
+    $businessDate = \Modules\AccountModule\app\Models\Account::current()?->businessDate();
+    if (!$reservation && $businessDate && !$businessDate->isSameDay($now)) {
+        $nightDates = ' data-business-date="' . $businessDate->format('Y-m-d') . '"';
+        $startAt = old('start_at', $businessDate->format('Y-m-d'));
+        $endAt = $businessDate->format('Y-m-d');
+    }
+    // "Renewal of #": the account's edit form only (a mistake fix); the Renew form sends it hidden
+    $renewalField = $reservation?->exists && $area === 'account' && $reservation->isPeriod();
 @endphp
+
+@if ($reservation && !$reservation->exists && $reservation->renewal_of)
+    <input type="hidden" name="renewal_of" value="{{ $reservation->renewal_of }}">
+    <div class="mb-5 text-primary">Renewal of #{{ $reservation->renewal_of }}: it starts the day after that period ends.</div>
+@endif
 
 <div class="form-section">Member</div>
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
@@ -59,26 +79,22 @@
 <div class="form-section mt-8">Dates</div>
 <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
     <div class="date-time-pair">
-        @include('layoutmodule::partials.field', ['name' => 'start_at', 'label' => 'Start Date', 'type' => 'date', 'required' => true, 'value' => $startAt])
+        @include('layoutmodule::partials.field', ['name' => 'start_at', 'label' => 'Start Date', 'type' => 'date', 'required' => true, 'value' => $startAt,
+            'attrs' => $nightDates ? $nightDates . ' data-real-date="' . $now->format('Y-m-d') . '"' : ''])
         {{-- only for a time based plan (custom.js [data-time-fields]) --}}
         <div data-time-fields>
             @include('layoutmodule::partials.field', ['name' => 'start_time', 'label' => 'Start Time', 'type' => 'time', 'required' => true, 'value' => $startTime])
         </div>
     </div>
-    {{-- only when the subscription type is auto renew (custom.js [data-type-allows]) --}}
-    <div class="md:pt-8" data-type-allows="auto-renew">
-        @include('layoutmodule::partials.checkbox', ['name' => 'is_continue', 'label' => 'The reservation continues', 'checked' => $reservation?->is_continue ?? false,
-            'hint' => 'A continuous reservation has no end date.'])
-    </div>
 </div>
 <div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-3">
     <div class="date-time-pair">
-        @include('layoutmodule::partials.field', ['name' => 'end_at', 'label' => 'End Date', 'type' => 'date',
+        {{-- always required ("The reservation continues" removed 2026-10-15: a subscription is renewed by a new period, renewal_of) --}}
+        @include('layoutmodule::partials.field', ['name' => 'end_at', 'label' => 'End Date', 'type' => 'date', 'required' => true,
             'value' => old('end_at', $endAt),
-            'attrs' => 'data-disable-if="is_continue" data-default-from="start_at"'])
+            'attrs' => 'data-default-from="start_at"' . ($nightDates ? $nightDates . ' data-real-date="' . $endDefault->format('Y-m-d') . '"' : '')])
         <div data-time-fields>
-            @include('layoutmodule::partials.field', ['name' => 'end_time', 'label' => 'End Time', 'type' => 'time', 'value' => $endTime,
-                'attrs' => 'data-disable-if="is_continue"'])
+            @include('layoutmodule::partials.field', ['name' => 'end_time', 'label' => 'End Time', 'type' => 'time', 'required' => true, 'value' => $endTime])
         </div>
     </div>
 </div>
@@ -121,6 +137,14 @@
         </div>
     </div>
 @endunless
+
+@if ($renewalField)
+    <div class="form-section mt-8">Renewal</div>
+    <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
+        @include('layoutmodule::partials.field', ['name' => 'renewal_of', 'label' => 'Renewal of #', 'type' => 'number', 'value' => $reservation->renewal_of,
+            'attrs' => 'min="1" step="1"', 'hint' => 'The reservation number of the period this one renews (empty = none). Same subscription type, not renewed by another one.'])
+    </div>
+@endif
 
 <div class="mt-5">
     @include('layoutmodule::partials.field', ['name' => 'notes', 'label' => 'Notes', 'type' => 'textarea', 'value' => $reservation?->notes])

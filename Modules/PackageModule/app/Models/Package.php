@@ -103,10 +103,10 @@ class Package extends Model implements Payable
         $sum = $this->reservationsTotal();
         [, $afterDiscount] = self::calculate($sum, (float) $this->discount_percentage, null, 'percentage');
 
-        // the dates: the first start / the last end of its counted reservations (no end when one of them continues)
+        // the dates: the first start / the last end of its counted reservations (no end when one of them has none: fallback only)
         $counted = $this->reservations()->whereNotIn('reservation_status_id', ReservationStatus::notCountedIds());
         $this->date_from = (clone $counted)->min('start_at');
-        $this->date_to = (clone $counted)->where(fn ($query) => $query->whereNull('end_at')->orWhere('is_continue', true))->exists()
+        $this->date_to = (clone $counted)->whereNull('end_at')->exists()
             ? null
             : (clone $counted)->max('end_at');
 
@@ -193,7 +193,7 @@ class Package extends Model implements Payable
     public function scopeWithReservationStats($query)
     {
         $notCounted = implode(',', array_map('intval', ReservationStatus::notCountedIds()) ?: [0]);
-        $noHours = implode(',', SubscriptionType::where('full_day', true)->orWhere('is_contract', true)->pluck('id')->map(fn ($id) => (int) $id)->all() ?: [0]);
+        $noHours = implode(',', SubscriptionType::where('booking_mode', 'full_day')->orWhere('is_contract', true)->pluck('id')->map(fn ($id) => (int) $id)->all() ?: [0]);
         $counted = "FROM reservations r WHERE r.package_id = packages.id AND r.deleted_at IS NULL AND r.reservation_status_id NOT IN ($notCounted)";
 
         return $query->selectRaw("(SELECT COUNT(*) $counted) AS counted_reservations")

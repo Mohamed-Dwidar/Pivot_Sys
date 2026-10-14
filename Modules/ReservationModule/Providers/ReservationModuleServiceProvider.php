@@ -22,7 +22,10 @@ class ReservationModuleServiceProvider extends ModuleServiceProvider
      *
      * @var string[]
      */
-    // protected array $commands = [];
+    protected array $commands = [
+        // to_run STEP 5b: the imported periods → renewal_of
+        \Modules\ReservationModule\app\Console\LinkRenewalsCommand::class,
+    ];
 
     /**
      * Provider classes to register.

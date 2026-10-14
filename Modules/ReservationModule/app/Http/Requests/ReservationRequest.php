@@ -19,7 +19,6 @@ class ReservationRequest extends FormRequest
         // the account itself, or the account of the logged in employee
         $accountId = $this->user()->userable->ownerAccountId();
         $ownedBy = fn ($table) => Rule::exists($table, 'id')->where('account_id', $accountId)->whereNull('deleted_at');
-        $continues = $this->continues();
         $timeBased = $this->timeBased();
         $repeating = $this->repeating();
 
@@ -37,14 +36,13 @@ class ReservationRequest extends FormRequest
             'member_id' => ['required_without:package_id', 'nullable', 'integer', Rule::exists('members', 'id')->where('account_id', $accountId)],
 
             'start_at' => 'required|date',
-            'is_continue' => 'boolean',
-            // required unless it continues (and its subscription type is auto renew)
-            'end_at' => ['nullable', 'date', 'after_or_equal:start_at', Rule::requiredIf(!$continues)],
+            // always (2026-10-15: no more "continues" without an end; a subscription is renewed by a new period)
+            'end_at' => ['required', 'date', 'after_or_equal:start_at'],
             // the times: only for a time based plan
             // the times: only for a time based plan (else they are ignored, the form fills them even when hidden);
             // the time inputs always send H:i (24 hours), the lists show them as h:i A
             'start_time' => $timeBased ? ['required', 'date_format:H:i'] : ['exclude'],
-            'end_time' => $timeBased ? [Rule::requiredIf(!$continues), 'nullable', 'date_format:H:i'] : ['exclude'],
+            'end_time' => $timeBased ? ['required', 'date_format:H:i'] : ['exclude'],
             // repeat: on create only (and when the subscription type can repeat)
             'is_repeat' => 'boolean',
             'repeat_frequency' => [Rule::requiredIf($repeating), 'nullable', Rule::in(array_keys(Reservation::REPEAT_FREQUENCIES))],
@@ -59,13 +57,10 @@ class ReservationRequest extends FormRequest
             'discount_value' => 'nullable|numeric|min:0|lte:amount',
             'net_amount' => 'nullable|numeric|min:0|lte:amount',
             'notes' => 'nullable|string|max:5000',
+            // the period it renews: the Renew form (hidden, both areas) / "Renewal of #" in the account's edit form; employees'
+            // edits keep it; checked by ReservationService::renewalError()
+            'renewal_of' => $this->route('id') && !$this->routeIs('account.*') ? ['exclude'] : ['nullable', 'integer', 'min:1'],
         ];
-    }
-
-    // it continues: checked and its subscription type is auto renew
-    private function continues(): bool
-    {
-        return $this->boolean('is_continue') && (bool) SubscriptionType::find($this->input('subscription_type_id'))?->auto_renew;
     }
 
     // repeat: on create (no reservation id in the route), checked and its subscription type can repeat
@@ -94,7 +89,7 @@ class ReservationRequest extends FormRequest
                     $validator->errors()->add('repeat_until', 'Too many repeats (more than ' . Reservation::MAX_REPEATS . '), choose an earlier date.');
                 }
             }
-            if ($this->timeBased() && !$this->continues() && !$validator->errors()->hasAny(['start_at', 'end_at', 'start_time', 'end_time'])
+            if ($this->timeBased() && !$validator->errors()->hasAny(['start_at', 'end_at', 'start_time', 'end_time'])
                 && $this->input('end_at') . ' ' . $this->input('end_time') <= $this->input('start_at') . ' ' . $this->input('start_time')) {
                 $validator->errors()->add('end_time', 'The end must be after the start.');
             }
@@ -125,7 +120,6 @@ class ReservationRequest extends FormRequest
             'unit_id.exists' => 'The selected unit is inactive, not in this space or not for this subscription type.',
             'plan_id.exists' => 'The selected plan is inactive or not available for this unit.',
             'member_id.required_without' => 'Select a member or a package.',
-            'end_at.required_unless' => 'The end date is required when the reservation does not continue.',
             'discount_value.lte' => 'The discount can not be more than the amount.',
             'net_amount.lte' => 'The net amount can not be more than the amount.',
         ];
@@ -145,6 +139,7 @@ class ReservationRequest extends FormRequest
             'repeat_until' => 'repeat until',
             'end_time' => 'end time',
             'end_at' => 'end date',
+            'renewal_of' => 'renewal of',
             'number_of_peoples' => 'number of people',
             'discount_percentage' => 'discount %',
             'discount_value' => 'discount value',

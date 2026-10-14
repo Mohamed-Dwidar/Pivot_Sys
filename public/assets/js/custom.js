@@ -295,6 +295,12 @@ function ajaxSubmit(form) {
                 done = tables.reload();
             }
 
+            // the Today page: its sections are loaded again (no list rows there, no redirect away)
+            if (!done && window.todayPage && window.todayPage.active()) {
+                window.todayPage.refresh();
+                done = true;
+            }
+
             if (!done && json.redirect) {
                 toastAfterRedirect(json.message);
                 window.location.href = json.redirect;
@@ -483,7 +489,7 @@ document.addEventListener("click", function (e) {
 //  - select[data-options-url][data-parent="field"]: its options are loaded by ajax (?field=value) when the parent changes
 //    (data-also="other_field ...": their values are sent too),
 //    with a loading spinner; it is disabled while the parent is empty; the json is [{id, name, ...}], the other keys become data-*
-//  - Reservation form ([data-reservation-form]): package -> member (locked), plan -> amount, discount % / discount value / net, unit capacity -> people, subscription type -> continue / repeat options
+//  - Reservation form ([data-reservation-form]): package -> member (locked), plan -> amount, discount % / discount value / net, unit capacity -> people, subscription type -> repeat options
 //  - Package price ([data-package-price]): discount % <-> after discount (from the amount)
 //  - Payment form ([data-payment-form]): "for" (reservation / package) -> the member's list is loaded again
 // ------------------------------------------------------------------
@@ -633,8 +639,43 @@ function reservationEndAfterStart(form) {
     }
 }
 
-// the continue option / the repeat section are shown only when the subscription type allows them
-// ([data-type-allows="auto-renew|can-repeat"] + the option data-auto-renew / data-can-repeat); hidden = unchecked
+// the end follows the plan's lease period from the start (one period): hour = start + 1 hour; day = the same day; week = +6 days;
+// month / year = the same day of the next month / year − 1 day (31-01 → 27-02 / 28-02: the short month's last day − 1).
+// Runs when the plan or the start changes; an end typed by hand is kept (data-end-touched) until the plan changes again.
+function reservationEndFromPlan(form, planChanged) {
+    var planEl = formField(form, "plan_id");
+    var startEl = formField(form, "start_at");
+    var endEl = formField(form, "end_at");
+    var option = planEl && planEl.selectedOptions[0];
+    var period = option && option.dataset.leasePeriod;
+    if (planChanged) delete form.dataset.endTouched;
+    if (!period || !startEl || !startEl.value || !endEl || form.dataset.endTouched) return;
+
+    var parts = startEl.value.split("-").map(Number);
+    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+    var ymd = function (d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); };
+    var end = new Date(parts[0], parts[1] - 1, parts[2]);
+    var months = { month: 1, year: 12 }[period];
+    if (period === "hour") {
+        var startTime = formField(form, "start_time");
+        var endTime = formField(form, "end_time");
+        if (!startTime || !startTime.value || !endTime) return;
+        var hm = startTime.value.split(":").map(Number);
+        end.setHours(hm[0] + 1, hm[1]);
+        endTime.value = pad(end.getHours()) + ":" + pad(end.getMinutes());
+    } else if (months) {
+        var target = new Date(end.getFullYear(), end.getMonth() + months, 1);
+        target.setDate(Math.min(end.getDate(), new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate()));
+        end = target;
+        end.setDate(end.getDate() - 1);
+    } else if (period === "week") {
+        end.setDate(end.getDate() + 6);
+    }
+    endEl.value = ymd(end);
+}
+
+// the repeat section is shown only when the subscription type allows it
+// ([data-type-allows="can-repeat"] + the option data-can-repeat); hidden = unchecked
 function reservationTypeOptions(form) {
     var typeEl = formField(form, "subscription_type_id");
     if (!typeEl) return;
@@ -660,13 +701,12 @@ function reservationPlanAmount(form) {
 
     var amount = Number(option.dataset.amount) || 0;
     if (option.dataset.timeBased === "1") {
-        var continues = formField(form, "is_continue");
         var at = function (date, time) {
             var d = formField(form, date), t = formField(form, time);
             return d && d.value && t && t.value ? new Date(d.value + "T" + t.value) : null;
         };
         var start = at("start_at", "start_time");
-        var end = continues && continues.checked ? null : at("end_at", "end_time");
+        var end = at("end_at", "end_time");
         if (start && end) {
             var hours = Math.max(0, (end - start) / 3600000);
             amount = amount * round2(hours / (Number(option.dataset.periodHours) || 1));
@@ -684,6 +724,13 @@ function reservationTimeBased(form) {
     var timeBased = !!(option && option.dataset.timeBased === "1");
     form.querySelectorAll("[data-time-fields]").forEach(function (box) {
         box.hidden = !timeBased;
+    });
+    // a new reservation at night (before the business day's cutoff): a time based one is for now (data-real-date), a full day
+    // one for the business date (the day before) — only the dates the user did not change
+    form.querySelectorAll("input[data-business-date][data-real-date]").forEach(function (input) {
+        if (input.value === input.dataset.businessDate || input.value === input.dataset.realDate) {
+            input.value = timeBased ? input.dataset.realDate : input.dataset.businessDate;
+        }
     });
 }
 
@@ -782,8 +829,11 @@ document.addEventListener("change", function (e) {
         if (name === "subscription_type_id") reservationTypeOptions(form);
         if (name === "start_at") reservationEndAfterStart(form);
         if (name === "plan_id") reservationTimeBased(form);
+        // the end follows the plan's lease period (an end typed by hand is kept until the plan changes)
+        if (name === "end_at" || name === "end_time") form.dataset.endTouched = "1";
+        if (["plan_id", "start_at", "start_time"].indexOf(name) >= 0) reservationEndFromPlan(form, name === "plan_id");
         // the amount follows the plan (and the start / end of a time based plan)
-        if (["plan_id", "start_at", "start_time", "end_at", "end_time", "is_continue"].indexOf(name) >= 0) reservationPlanAmount(form);
+        if (["plan_id", "start_at", "start_time", "end_at", "end_time"].indexOf(name) >= 0) reservationPlanAmount(form);
     }
 });
 
@@ -848,6 +898,7 @@ document.addEventListener("click", function (e) {
             });
             createIcons({ icons: icons, "stroke-width": 1.5, nameAttr: "data-lucide" });
             if (window.dataTables && "row" in json) window.dataTables.update(option.dataset.row, json.row);
+            if (window.todayPage && window.todayPage.active()) window.todayPage.refresh();
             toast(json.message);
         })
         .catch(function () {
@@ -927,3 +978,93 @@ document.addEventListener("keydown", function (e) {
     }
     galleryShow(modal, Number(modal.dataset.index) + (e.key === "ArrowRight" ? 1 : -1));
 });
+
+
+// Today page ([data-today], ReservationModule Today/*): todayPage.refresh() loads its sections again (data-url) after every save
+// in a popup (ajaxSubmit, status menu); Timeline | List per type ([data-today-toggle], remembered in localStorage, optional);
+// the now line of today's timelines (.tl[data-tl-start] = the first hour, unix seconds; 15 minute slots, custom.css .tl-from-N)
+window.todayPage = (function () {
+    function root() {
+        return document.querySelector("[data-today]");
+    }
+    function remembered(type) {
+        try {
+            return localStorage.getItem("todayView." + type);
+        } catch (e) {
+            return null;
+        }
+    }
+    function remember(type, view) {
+        try {
+            localStorage.setItem("todayView." + type, view);
+        } catch (e) { /* private mode: not remembered */ }
+    }
+    function showView(toggle, view) {
+        var section = toggle.closest(".today-section");
+        toggle.querySelectorAll("[data-view]").forEach(function (button) {
+            button.classList.toggle("active", button.dataset.view === view);
+        });
+        section.querySelectorAll("[data-today-view]").forEach(function (box) {
+            box.hidden = box.dataset.todayView !== view;
+        });
+    }
+    function applyViews(box) {
+        box.querySelectorAll("[data-today-toggle]").forEach(function (toggle) {
+            var view = remembered(toggle.dataset.todayToggle);
+            showView(toggle, view === "list" ? "list" : "timeline");
+        });
+    }
+    function nowLines(box) {
+        box.querySelectorAll(".tl[data-tl-start]").forEach(function (timeline) {
+            var slots = Number(timeline.dataset.tlSlots);
+            var slot = Math.floor((Date.now() / 1000 - Number(timeline.dataset.tlStart)) / 900) + 1;
+            timeline.querySelectorAll("[data-tl-now]").forEach(function (line) {
+                line.className = line.className.replace(/\btl-from-\d+\b/g, "").trim();
+                line.hidden = slot < 1 || slot > slots;
+                if (!line.hidden) line.classList.add("tl-from-" + slot);
+            });
+        });
+    }
+    function init(box) {
+        applyViews(box);
+        nowLines(box);
+    }
+
+    document.addEventListener("click", function (e) {
+        var button = e.target.closest && e.target.closest("[data-today-toggle] [data-view]");
+        if (!button) return;
+        var toggle = button.closest("[data-today-toggle]");
+        remember(toggle.dataset.todayToggle, button.dataset.view);
+        showView(toggle, button.dataset.view);
+    });
+
+    document.addEventListener("DOMContentLoaded", function () {
+        var box = root();
+        if (!box) return;
+        init(box);
+        setInterval(function () { nowLines(box); }, 60000);
+    });
+
+    return {
+        active: function () {
+            return !!root();
+        },
+        refresh: function () {
+            var box = root();
+            if (!box) return;
+            fetch(box.dataset.url, { headers: { "X-Requested-With": "XMLHttpRequest", Accept: "text/html" } })
+                .then(function (response) {
+                    if (!response.ok) throw response;
+                    return response.text();
+                })
+                .then(function (html) {
+                    box.innerHTML = html;
+                    createIcons({ icons: icons, "stroke-width": 1.5, nameAttr: "data-lucide" });
+                    init(box);
+                })
+                .catch(function () {
+                    toast("Could not refresh the page, please reload it.", "error");
+                });
+        },
+    };
+})();

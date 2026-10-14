@@ -3,10 +3,12 @@
 namespace Modules\AccountModule\app\Models;
 
 use App\Helpers\LocalizedHelper;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Auth;
 use Modules\CompanyModule\app\Models\Company;
 use Modules\JobModule\app\Models\Job;
 use Modules\MemberModule\app\Models\Member;
@@ -45,13 +47,16 @@ class Account extends Model implements Userable
 
     protected $fillable = [
         'name_ar', 'name_en', 'phone', 'address', 'description_ar', 'description_en', 'logo', 'status', 'approved_at',
-        'withholding_enabled', 'vat_enabled',
+        'withholding_enabled', 'vat_enabled', 'today_hours_from', 'today_hours_to', 'renewal_days',
     ];
 
     protected $casts = [
         'approved_at' => 'datetime',
         'withholding_enabled' => 'boolean',
         'vat_enabled' => 'boolean',
+        'today_hours_from' => 'integer',
+        'today_hours_to' => 'integer',
+        'renewal_days' => 'integer',
     ];
 
     // Settings › General, loaded once per request by account id (settingsOf())
@@ -82,6 +87,48 @@ class Account extends Model implements Userable
     public function vatEnabled(): bool
     {
         return (bool) ($this->vat_enabled ?? true);
+    }
+
+    // the account (its settings) of the logged in user (the account or its employee), null for an admin / a guest
+    public static function current(): ?self
+    {
+        $userable = Auth::user()?->userable;
+        return $userable && method_exists($userable, 'ownerAccountId') ? self::settingsOf($userable->ownerAccountId()) : null;
+    }
+
+    /**
+     * The Today page timeline hours (Settings › General): from 0–23, to from + 1 … 30 (> 24 = the next morning, 26 = 02:00).
+     * The business day of a date D = [D cutoff:00, D+1 cutoff:00), cutoff = to − 24 (0 when the day ends by midnight): a place
+     * open through the night keeps its night (until the cutoff) on the day it started.
+     */
+    public function todayHours(): array
+    {
+        $from = min(23, max(0, (int) ($this->today_hours_from ?? 8)));
+        return [$from, min(30, max($from + 1, (int) ($this->today_hours_to ?? 24)))];
+    }
+
+    public function cutoffHours(): int
+    {
+        return max(0, $this->todayHours()[1] - 24);
+    }
+
+    // the business date now (or at $at): before the cutoff it is still the day before
+    public function businessDate(?Carbon $at = null): Carbon
+    {
+        return ($at ?? now())->copy()->subHours($this->cutoffHours())->startOfDay();
+    }
+
+    // [start, end) of the business day of $date
+    public function businessDay(Carbon $date): array
+    {
+        $start = $date->copy()->startOfDay()->addHours($this->cutoffHours());
+        return [$start, $start->copy()->addDay()];
+    }
+
+    // the renewals window of the Today page (days after the business date)
+    public function renewalDays(): int
+    {
+        return min(90, max(1, (int) ($this->renewal_days ?? 7)));
     }
 
     // the account login (email, password)

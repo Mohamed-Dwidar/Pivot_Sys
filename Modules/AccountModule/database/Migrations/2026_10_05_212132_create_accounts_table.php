@@ -23,6 +23,10 @@ return new class extends Migration
             // Settings › General: withholding tax (off = no new withholding, existing kept) / VAT (Phase 2: off = prices tax free)
             $table->boolean('withholding_enabled')->default(true);
             $table->boolean('vat_enabled')->default(true);
+            // Settings › General, the Today page: the timeline hours (to > 24 = the next morning, max 30) and the renewals window (days)
+            $table->unsignedTinyInteger('today_hours_from')->default(8);
+            $table->unsignedTinyInteger('today_hours_to')->default(24);
+            $table->unsignedTinyInteger('renewal_days')->default(7);
             $table->timestamps();
         });
     }

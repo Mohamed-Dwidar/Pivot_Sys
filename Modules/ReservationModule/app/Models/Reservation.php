@@ -6,6 +6,7 @@ use App\Helpers\SafeMorphHelper;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
@@ -23,6 +24,8 @@ use Modules\UnitModule\app\Models\Unit;
  * A reservation of a unit (of a space) with a plan for a member, made by the account or one of its employees.
  * net_amount = amount - discount_value (discount_percentage is the same discount in %).
  * repeat_id: the reservation this one repeats (repeat()), repeats(): the reservations made from this one.
+ * renewal_of: the period this one renews (period types: Renew, repeat copies; renewedBy() = its counted renewal, at most one);
+ * left_at / left_by: a period marked "left" (not renewed on purpose; left_by 0 = auto-marked by to_run STEP 5b).
  */
 class Reservation extends Model implements Payable
 {
@@ -40,14 +43,14 @@ class Reservation extends Model implements Payable
 
     protected $fillable = [
         'account_id', 'member_id', 'space_id', 'unit_id', 'plan_id', 'package_id', 'subscription_type_id', 'reservation_status_id',
-        'start_at', 'end_at', 'subscription_day', 'is_continue', 'all_day', 'repeat_id', 'is_repeat', 'repeat_frequency', 'repeat_interval',
-        'number_of_peoples', 'amount', 'discount_percentage', 'discount_value', 'net_amount', 'paid_amount', 'remaining', 'notes',
+        'start_at', 'end_at', 'subscription_day', 'all_day', 'repeat_id', 'is_repeat', 'repeat_frequency', 'repeat_interval',
+        'renewal_of', 'left_at', 'left_by', 'number_of_peoples', 'amount', 'discount_percentage', 'discount_value', 'net_amount', 'paid_amount', 'remaining', 'notes',
     ];
 
     protected $casts = [
         'start_at' => 'datetime',
         'end_at' => 'datetime',
-        'is_continue' => 'boolean',
+        'left_at' => 'datetime',
         'all_day' => 'boolean',
         'is_repeat' => 'boolean',
         'amount' => 'float',
@@ -111,6 +114,24 @@ class Reservation extends Model implements Payable
         return $this->hasMany(self::class, 'repeat_id');
     }
 
+    // the period this one renews
+    public function renewalOf(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'renewal_of');
+    }
+
+    // the counted (not cancelled like) reservation that renews this period: "renewed" (at most one, ReservationService)
+    public function renewedBy(): HasOne
+    {
+        return $this->hasOne(self::class, 'renewal_of')->whereNotIn('reservation_status_id', ReservationStatus::notCountedIds() ?: [0]);
+    }
+
+    // a period of a period type (subscription / contract): it can be renewed, marked left
+    public function isPeriod(): bool
+    {
+        return in_array((int) $this->subscription_type_id, SubscriptionType::idsOf('period'), true);
+    }
+
     // who added the reservation (users: the account or an employee)
     public function creatable(): MorphTo
     {
@@ -164,14 +185,11 @@ class Reservation extends Model implements Payable
 
     // the same day:  "21-10-2026 | 11:00 AM → 01:30 PM" (time based) / "21-10-2026"
     // other days:    "21-10-2026 | 11:00 AM → 22-10-2026 | 01:30 PM" / "21-10-2026 → 25-10-2026"
-    // continuous:    "From 21-10-2026 | 11:00 AM (continues)"
+    // no end (old data fallback): "21-10-2026 → -"
     public function getPeriodAttribute(): string
     {
         if (!$this->start_at) {
             return '-';
-        }
-        if ($this->is_continue) {
-            return 'From ' . $this->formatAt($this->start_at) . ' (continues)';
         }
         if (!$this->end_at) {
             return $this->formatAt($this->start_at) . ' → -';
@@ -249,10 +267,29 @@ class Reservation extends Model implements Payable
      */
     public static function tabDates(): array
     {
+        [$today] = self::businessToday();
         return [
-            'today' => ['select' => today()->toDateString()],
-            'upcoming' => ['label' => 'From ' . today()->addDay()->format(self::DATE_FORMAT)],
+            'today' => ['select' => $today->toDateString()],
+            'upcoming' => ['label' => 'From ' . $today->copy()->addDay()->format(self::DATE_FORMAT)],
         ];
+    }
+
+    /**
+     * [the business date, its cutoff hours] of the logged in account (Account::businessDate(), Settings › General): at night,
+     * before the cutoff (e.g. 02:00), "today" is still the day before; [today(), 0] without an account.
+     */
+    public static function businessToday(): array
+    {
+        $account = Account::current();
+        return $account ? [$account->businessDate(), $account->cutoffHours()] : [today(), 0];
+    }
+
+    // the hourly reservations starting after midnight, before the cutoff (the night of the business date $today)
+    public function scopeNightOf($query, Carbon $today, int $cutoff)
+    {
+        $midnight = $today->copy()->addDay();
+        return $query->where('start_at', '>=', $midnight)->where('start_at', '<', $midnight->copy()->addHours($cutoff))
+            ->whereNotIn('subscription_type_id', SubscriptionType::idsOf('full_day') ?: [0]);
     }
 
     /**
@@ -277,10 +314,17 @@ class Reservation extends Model implements Payable
             $query->notContracts();
         }
 
+        // the business date (Settings › General): its night (hourly reservations after midnight, before the cutoff) is on
+        // Today, not on Upcoming; the full day ones go by their date
+        [$today, $cutoff] = self::businessToday();
+        $tomorrow = $today->copy()->addDay();
+
         return match ($tab) {
-            'today' => $query->runningBetween(today(), today()->addDay()),
+            'today' => $query->where(fn ($query) => $query->runningBetween($today, $tomorrow)
+                ->when($cutoff, fn ($query) => $query->orWhere(fn ($query) => $query->nightOf($today, $cutoff)))),
             'days' => $query->runningBetween(...self::pickedDays($filters)),
-            'upcoming' => $query->where('start_at', '>=', today()->addDay()),
+            'upcoming' => $query->where('start_at', '>=', $tomorrow)
+                ->when($cutoff, fn ($query) => $query->whereNot(fn ($query) => $query->nightOf($today, $cutoff))),
             default => $query,
         };
     }
@@ -298,7 +342,7 @@ class Reservation extends Model implements Payable
     {
         // starting in the period first, then the running ones
         if (in_array($tab, ['today', 'days'], true)) {
-            $query->orderByRaw('start_at >= ? DESC', [$tab === 'days' ? self::pickedDays($filters)[0] : today()]);
+            $query->orderByRaw('start_at >= ? DESC', [$tab === 'days' ? self::pickedDays($filters)[0] : self::businessToday()[0]]);
         }
 
         return in_array($tab, ['today', 'upcoming', 'days'], true)
@@ -388,19 +432,28 @@ class Reservation extends Model implements Payable
     }
 
     /**
-     * SQL: the next period exists = the member has a later counted contract reservation in the same space (renewed),
-     * for "reservations" in the query. In the data the renewal is the same member + space in 1,092 / 1,113 cases (2026-10-12).
+     * SQL: renewed = a counted, not deleted reservation points to it (renewal_of; per reservation, never per member — user
+     * 2026-10-14), for "reservations" in the query.
      */
     public static function renewedSql(): string
     {
-        $types = self::contractTypeIds() ?: [0];
         $notCounted = array_map('intval', ReservationStatus::notCountedIds()) ?: [0];
 
-        return 'EXISTS (SELECT 1 FROM reservations next WHERE next.account_id = reservations.account_id'
-            . ' AND next.member_id = reservations.member_id AND next.space_id = reservations.space_id'
-            . ' AND next.start_at > reservations.start_at AND next.deleted_at IS NULL'
-            . ' AND next.subscription_type_id IN (' . implode(',', $types) . ')'
+        return 'EXISTS (SELECT 1 FROM reservations next WHERE next.renewal_of = reservations.id AND next.deleted_at IS NULL'
             . ' AND next.reservation_status_id NOT IN (' . implode(',', $notCounted) . '))';
+    }
+
+    // the end date of a period as SQL: its last day (DATE of the end; an end before the start = the start, realEnd())
+    const END_DATE_SQL = 'DATE(GREATEST(reservations.end_at, reservations.start_at))';
+
+    /**
+     * The periods of the Today page renewals (period types, counted, with a member and an end, not marked left), by their
+     * last day (END_DATE_SQL): ending on / between the dates; renewed or not decided by the caller.
+     */
+    public function scopeRenewalPeriods($query)
+    {
+        return $query->whereIn('reservations.subscription_type_id', SubscriptionType::idsOf('period') ?: [0])
+            ->counted()->where('reservations.member_id', '>', 0)->whereNotNull('reservations.end_at')->whereNull('reservations.left_at');
     }
 
     // + the "renewed" column (0 / 1)

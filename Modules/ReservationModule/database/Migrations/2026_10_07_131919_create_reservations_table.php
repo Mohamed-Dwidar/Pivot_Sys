@@ -24,10 +24,14 @@ return new class extends Migration {
             $table->dateTime('start_at')->nullable();
             $table->dateTime('end_at')->nullable();
             $table->integer('subscription_day')->default(0);
-            $table->boolean('is_continue')->default(0);
 
             $table->boolean('all_day')->default(0);
             $table->bigInteger('repeat_id')->default(0);
+            // the period this reservation renews (Renew / repeat copies of a period type); at most one counted renewal per period
+            $table->unsignedBigInteger('renewal_of')->nullable()->index();
+            // a period marked "left" (the member did not renew): off the Today page's Not renewed list; left_by 0 = auto (to_run cutoff)
+            $table->dateTime('left_at')->nullable();
+            $table->bigInteger('left_by')->default(0);
             $table->boolean('is_repeat')->default(0);
             $table->enum('repeat_frequency', ['daily', 'weekly', 'monthly', 'yearly'])->nullable();
             $table->unsignedSmallInteger('repeat_interval')->default(0);

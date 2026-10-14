@@ -81,7 +81,7 @@ class PackageService
     private function timedMinutes($reservation): int
     {
         $type = $reservation->subscriptionType;
-        if ($type?->full_day || $type?->is_contract || !$reservation->start_at || !$reservation->end_at || $reservation->end_at->lte($reservation->start_at)) {
+        if ($type?->isFullDay() || $type?->is_contract || !$reservation->start_at || !$reservation->end_at || $reservation->end_at->lte($reservation->start_at)) {
             return 0;
         }
 

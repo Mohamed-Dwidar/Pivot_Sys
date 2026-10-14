@@ -15,7 +15,7 @@
 @endphp
 @if (!$start)
     -
-@elseif ($type?->full_day)
+@elseif ($type?->isFullDay())
     {{ $start->format($day) }}
 @elseif ($type?->auto_renew || $type?->is_contract)
     <div>From {{ $start->format($date) }}</div>

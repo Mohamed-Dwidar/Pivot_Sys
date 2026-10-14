@@ -5,7 +5,9 @@ use Modules\AccountModule\app\Models\Account;
 use Modules\EmployeeModule\app\Models\Employee;
 use Modules\ReservationModule\app\Http\Controllers\Account\ReservationAccountModuleController;
 use Modules\ReservationModule\app\Http\Controllers\Account\ReservationStatusAccountModuleController;
+use Modules\ReservationModule\app\Http\Controllers\Account\TodayAccountModuleController;
 use Modules\ReservationModule\app\Http\Controllers\Employee\ReservationEmployeeModuleController;
+use Modules\ReservationModule\app\Http\Controllers\Employee\TodayEmployeeModuleController;
 
 /**
  *  Reservations: managed by the account and by its employees (same actions, see Concerns\ReservationActions)
@@ -26,6 +28,9 @@ $reservationRoutes = function ($controller) {
     // a not counted reservation (cancelled ...) back to the default counted status, after the availability check
     Route::get('{id}/restore', [$controller, 'restoreForm'])->name('restore');
     Route::patch('{id}/restore', [$controller, 'restore'])->name('restore.store');
+    // a not renewed subscription period: marked "left" (off the Today page's Not renewed list) / undone
+    Route::patch('{id}/left', [$controller, 'markLeft'])->name('left');
+    Route::patch('{id}/left/undo', [$controller, 'undoLeft'])->name('left.undo');
     Route::delete('{id}', [$controller, 'destroy'])->name('destroy');
 };
 
@@ -34,6 +39,20 @@ Route::prefix('account/reservations')->name('account.reservations.')->middleware
 
 Route::prefix('employee/reservations')->name('employee.reservations.')->middleware(['auth', 'user.active:' . Employee::class])
     ->group(fn () => $reservationRoutes(ReservationEmployeeModuleController::class));
+
+/**
+ *  The Today page (TodayActions): the same for the account (under Dashboard) and its employees (their home page)
+ */
+$todayRoutes = function ($controller) {
+    Route::get('/', [$controller, 'index'])->name('index');
+    Route::get('sections', [$controller, 'sections'])->name('sections');
+};
+
+Route::prefix('account/today')->name('account.today.')->middleware(['auth', 'user.active:' . Account::class])
+    ->group(fn () => $todayRoutes(TodayAccountModuleController::class));
+
+Route::prefix('employee/today')->name('employee.today.')->middleware(['auth', 'user.active:' . Employee::class])
+    ->group(fn () => $todayRoutes(TodayEmployeeModuleController::class));
 
 /**
  *  Reservation statuses: only the account manages them

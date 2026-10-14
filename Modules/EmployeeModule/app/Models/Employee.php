@@ -116,9 +116,10 @@ class Employee extends Model implements Userable
         return null;
     }
 
+    // the Today page (2026-10-14); the old dashboard is their profile (header menu "My Profile")
     public function homeRoute(): string
     {
-        return 'employee.dashboard';
+        return 'employee.today.index';
     }
 
     public function layout(): string

@@ -50,14 +50,20 @@ class ReservationService
     }
 
     // $creator: the logged in user (account or employee) who makes the reservation
+    // $data['renewal_of']: the period it renews (the Renew form), checked again here (renewalError())
     public function create($accountId, array $data, Model $creator)
     {
         return DB::transaction(function () use ($accountId, $data, $creator) {
+            $renewalOf = !empty($data['renewal_of']) ? (int) $data['renewal_of'] : null;
             // the status is not chosen in the form: a new reservation gets the first active status
             $reservation = $this->reservationRepository->makeModel()->newInstance($this->reservationData($accountId, $data) + [
                 'account_id' => $accountId,
                 'reservation_status_id' => $this->statusService->defaultId($accountId),
+                'renewal_of' => $renewalOf,
             ]);
+            if ($renewalOf && ($error = $this->renewalError($accountId, $reservation, $renewalOf))) {
+                throw ValidationException::withMessages(['renewal_of' => $error]);
+            }
             $reservation->creatable()->associate($creator);
             $reservation->save();
 
@@ -82,7 +88,15 @@ class ReservationService
         return DB::transaction(function () use ($reservation, $accountId, $data) {
             $oldPackageId = $reservation->package_id;
             // the repeat is chosen on create only, it is kept as it is
-            $reservation->update(Arr::except($this->reservationData($accountId, $data), ['is_repeat', 'repeat_frequency', 'repeat_interval']));
+            $reservation->fill(Arr::except($this->reservationData($accountId, $data), ['is_repeat', 'repeat_frequency', 'repeat_interval']));
+            // "Renewal of #" (the account's edit form only: the key is sent only then): set / cleared, checked like a Renew
+            if (array_key_exists('renewal_of', $data)) {
+                $reservation->renewal_of = !empty($data['renewal_of']) ? (int) $data['renewal_of'] : null;
+                if ($reservation->renewal_of && ($error = $this->renewalError($accountId, $reservation, $reservation->renewal_of))) {
+                    throw ValidationException::withMessages(['renewal_of' => $error]);
+                }
+            }
+            $reservation->save();
 
             // moved into a package (it was paid on its own): its payments go to the package (paid through it now)
             if (!$oldPackageId && $reservation->package_id && ($package = $reservation->load('package')->package)) {
@@ -108,6 +122,12 @@ class ReservationService
         $status = ReservationStatus::where('account_id', $accountId)->find($statusId);
         if ($status?->is_counted && !$reservation->isCounted() && ($error = $this->restoreError($reservation))) {
             throw ValidationException::withMessages(['html_status' => $error]);
+        }
+        // a cancelled renewal back to counted: its period must not have another counted renewal meanwhile
+        if ($status?->is_counted && !$reservation->isCounted() && $reservation->renewal_of
+            && ($other = $this->renewedByOther($reservation->renewal_of, $reservation->id))) {
+            throw ValidationException::withMessages(['html_status' => 'The period #' . $reservation->renewal_of . ' is already renewed by '
+                . $this->reservationLink($other) . '. Change that one first.']);
         }
 
         return DB::transaction(function () use ($reservation, $statusId) {
@@ -147,31 +167,134 @@ class ReservationService
     public function restoreError(Reservation $reservation): ?string
     {
         $unit = Unit::find($reservation->unit_id);
-        // a continuous subscription has no end (as when it is saved, period())
-        $end = $reservation->is_continue && $reservation->subscriptionType?->auto_renew ? null : $reservation->end_at;
-
-        return $unit ? $this->periodsError($unit, [[$reservation->start_at, $end]], $reservation->id) : null;
+        return $unit ? $this->periodsError($unit, [[$reservation->start_at, $reservation->end_at]], $reservation->id) : null;
     }
 
     /**
-     * The next period of a subscription (the "Renew" form, not saved): same member, type, space, unit, plan, amounts,
-     * starting when it ends (date only plans: the next day) for the same length; no package / notes.
+     * The next period of a subscription (the "Renew" form, not saved): same member, type, space, unit, plan, amounts; no
+     * package / notes; renewal_of = the subscription. A time based plan starts when it ends, for the same length. A date plan:
+     * its last day = the DATE of its end (an imported end at 00:00 is that day, an app end is 23:59:59 of it — the next period
+     * of the imported data starts the day after in 501 / 544 cases, 2026-10-14), so it starts the day after, no overlap, for
+     * the same number of days.
      */
     public function renewalOf(Reservation $subscription): Reservation
     {
         $end = $subscription->realEnd() ?? $subscription->start_at;
-        $start = $subscription->plan?->is_time_based ? $end->copy() : $end->copy()->addSecond()->startOfDay();
-        $length = $subscription->start_at->diffInSeconds($end);
+        if ($subscription->plan?->is_time_based) {
+            $start = $end->copy();
+            $length = $subscription->start_at->diffInSeconds($end);
+            $newEnd = $length > 0 ? $start->copy()->addSeconds($length) : $start->copy();
+        } else {
+            $start = $end->copy()->startOfDay()->addDay();
+            $newEnd = $start->copy()->addDays((int) $subscription->start_at->copy()->startOfDay()->diffInDays($end->copy()->startOfDay()))->endOfDay();
+        }
 
-        $renewal = $subscription->replicate(['paid_amount', 'remaining', 'repeat_id', 'notes']);
+        $renewal = $subscription->replicate(['paid_amount', 'remaining', 'repeat_id', 'notes', 'left_at', 'left_by']);
         $renewal->forceFill([
             'start_at' => $start,
-            'end_at' => $length > 0 ? $start->copy()->addSeconds($length) : $start->copy(),
+            'end_at' => $newEnd,
             'package_id' => 0,
             'notes' => null,
+            'renewal_of' => $subscription->id,
         ]);
 
         return $renewal;
+    }
+
+    /**
+     * A new reservation pre-filled from the Today page (not saved): ?subscription_type_id / space_id / unit_id (only the
+     * account's, a unit of that type) / start (Y-m-d H:i, or a date: the time = now). null when nothing is given.
+     * The form's own checks run on save.
+     */
+    public function prefill($accountId, array $input): ?Reservation
+    {
+        $type = !empty($input['subscription_type_id']) ? SubscriptionType::where('account_id', $accountId)->find((int) $input['subscription_type_id']) : null;
+        $unit = !empty($input['unit_id']) ? Unit::where('account_id', $accountId)->find((int) $input['unit_id']) : null;
+        if ($unit && $type && (int) $unit->subscription_type_id !== $type->id) {
+            $unit = null;
+        }
+        $spaceId = $unit?->space_id ?: (int) ($input['space_id'] ?? 0);
+        $spaceId = $spaceId && \Modules\SpaceModule\app\Models\Space::where('account_id', $accountId)->whereKey($spaceId)->exists() ? $spaceId : 0;
+        $start = null;
+        if (!empty($input['start']) && strtotime((string) $input['start'])) {
+            $start = Carbon::parse($input['start']);
+            if (strlen(trim((string) $input['start'])) <= 10) {
+                $start->setTimeFrom(now());
+            }
+        }
+        if (!$type && !$unit && !$start) {
+            return null;
+        }
+
+        return (new Reservation())->forceFill([
+            'subscription_type_id' => $type?->id ?? (int) ($unit?->subscription_type_id ?? 0),
+            'space_id' => $spaceId,
+            'unit_id' => $unit?->id ?? 0,
+            'start_at' => $start,
+        ]);
+    }
+
+    /**
+     * Why $reservation can not renew the period $periodId (null = it can): the period must be of the account, of the same
+     * (period) type, start before it and end no later than the renewals window after its start (ended or ending), and have
+     * no other counted renewal. Used by create (Renew), the account's "Renewal of #" and the status guard.
+     */
+    public function renewalError($accountId, Reservation $reservation, int $periodId): ?string
+    {
+        $period = Reservation::where('account_id', $accountId)->find($periodId);
+        if (!$period || ($reservation->exists && $period->id === $reservation->id)) {
+            return 'Reservation #' . $periodId . ' was not found.';
+        }
+        if ((int) $period->subscription_type_id !== (int) $reservation->subscription_type_id || !$period->isPeriod()) {
+            return 'Reservation #' . $periodId . ' is not a period of the same subscription type.';
+        }
+        $start = $reservation->start_at;
+        $days = \Modules\AccountModule\app\Models\Account::settingsOf($accountId)?->renewalDays() ?? 7;
+        if (!$start || !$period->start_at->lt($start) || ($period->realEnd() ?? $period->start_at)->copy()->startOfDay()->gt($start->copy()->startOfDay()->addDays($days))) {
+            return 'Reservation #' . $periodId . ' must start before this one and end before it (or within ' . $days . ' days after its start).';
+        }
+        if ($other = $this->renewedByOther($period->id, $reservation->id)) {
+            return 'Reservation #' . $periodId . ' is already renewed by #' . $other->id . '.';
+        }
+        return null;
+    }
+
+    // the counted reservation (not $ignoreId) that already renews the period, null when none
+    private function renewedByOther(int $periodId, $ignoreId = null): ?Reservation
+    {
+        return Reservation::where('renewal_of', $periodId)->counted()->when($ignoreId, fn ($query) => $query->whereKeyNot($ignoreId))->first();
+    }
+
+    // a link to the reservation's view (new tab), for the "html_" errors
+    private function reservationLink(Reservation $reservation): string
+    {
+        $area = request()->routeIs('employee.*') ? 'employee' : 'account';
+        return '<a href="' . e(route($area . '.reservations.show', $reservation->id)) . '" target="_blank" rel="noopener" class="font-medium underline">#'
+            . $reservation->id . '</a>';
+    }
+
+    /**
+     * Mark a not renewed period "left" (the member did not renew; off the Today page's Not renewed list) — $by = the user,
+     * or undo it. Only a counted period of a period type that is not renewed; undo only when marked.
+     */
+    public function markLeft($accountId, $id, Model $by): Reservation
+    {
+        $reservation = $this->findOne($accountId, $id);
+        if (!$reservation->isPeriod() || !$reservation->isCounted() || $reservation->left_at || $reservation->renewedBy()->exists()) {
+            throw ValidationException::withMessages(['reservation' => 'Only an active, not renewed subscription period can be marked as left.']);
+        }
+        $reservation->forceFill(['left_at' => now(), 'left_by' => $by->getKey()])->save();
+        return $reservation;
+    }
+
+    public function undoLeft($accountId, $id): Reservation
+    {
+        $reservation = $this->findOne($accountId, $id);
+        if (!$reservation->left_at) {
+            throw ValidationException::withMessages(['reservation' => 'This period is not marked as left.']);
+        }
+        $reservation->forceFill(['left_at' => null, 'left_by' => 0])->save();
+        return $reservation;
     }
 
     // soft delete; the reason when it can not be deleted (it has payments: their money must not be lost), null when deleted
@@ -189,11 +312,13 @@ class ReservationService
         return null;
     }
 
-    // the copies of a repeated reservation: same data, moved to each repeat start (same duration), repeat_id = the original
+    // the copies of a repeated reservation: same data, moved to each repeat start (same duration), repeat_id = the original;
+    // a period type: each copy renews the one before it (renewal_of: the first copy → the original), so the chain is renewed
     private function createRepeats(Reservation $reservation, Carbon $until): int
     {
         $starts = Reservation::repeatStarts($reservation->start_at, $reservation->repeat_frequency, (int) $reservation->repeat_interval, $until, Reservation::MAX_REPEATS);
         $duration = $reservation->end_at ? $reservation->start_at->diffInSeconds($reservation->end_at) : null;
+        $previousId = $reservation->isPeriod() ? $reservation->id : null;
 
         foreach ($starts as $start) {
             $copy = $reservation->replicate();
@@ -204,22 +329,24 @@ class ReservationService
             $copy->repeat_frequency = 'monthly';
             $copy->repeat_interval = 1;
             $copy->repeat_id = $reservation->id;
+            $copy->renewal_of = $previousId;
             $copy->save();
+            $previousId = $previousId ? $copy->id : null;
         }
 
         return count($starts);
     }
 
-    // [start, end] of the form data: a time based plan = the date + the time, else the whole days; no end when it continues
+    // [start, end] of the form data: a time based plan = the date + the time, else the whole days (the end is required; no end =
+    // a defensive fallback only)
     public function period(array $data): array
     {
         $timeBased = (bool) Plan::find($data['plan_id'] ?? null)?->is_time_based;
-        $isContinue = !empty($data['is_continue']) && SubscriptionType::find($data['subscription_type_id'] ?? null)?->auto_renew;
 
         $startAt = $timeBased && !empty($data['start_time'])
             ? Carbon::parse($data['start_at'] . ' ' . $data['start_time'])
             : Carbon::parse($data['start_at'])->startOfDay();
-        $endAt = $isContinue || empty($data['end_at']) ? null
+        $endAt = empty($data['end_at']) ? null
             : ($timeBased && !empty($data['end_time']) ? Carbon::parse($data['end_at'] . ' ' . $data['end_time']) : Carbon::parse($data['end_at'])->endOfDay());
 
         return [$startAt, $endAt];
@@ -312,12 +439,11 @@ class ReservationService
     {
         $plan = Plan::find($data['plan_id']);
         $timeBased = (bool) $plan?->is_time_based;
-        // continue / repeat only when the subscription type allows them
+        // repeat only when the subscription type allows it
         $type = SubscriptionType::find($data['subscription_type_id']);
-        $isContinue = !empty($data['is_continue']) && $type?->auto_renew;
         $isRepeat = !empty($data['is_repeat']) && $type?->can_repeat;
         [$startAt, $endAt] = $this->period($data);
-        // a time based plan: the plan amount x the periods from the start to the end (one period when it continues)
+        // a time based plan: the plan amount x the periods from the start to the end (no end: one period, fallback)
         if ($timeBased) {
             $data['amount'] = $endAt ? $plan->amountBetween($startAt, $endAt) : (float) $plan->amount;
         }
@@ -347,7 +473,6 @@ class ReservationService
             'member_id' => $memberId,
             'start_at' => $startAt,
             'end_at' => $endAt,
-            'is_continue' => $isContinue,
             // the day of the month of the start (1 - 31)
             'subscription_day' => $startAt->day,
             'is_repeat' => $isRepeat,

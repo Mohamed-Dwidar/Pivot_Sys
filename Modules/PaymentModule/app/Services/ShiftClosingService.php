@@ -120,6 +120,25 @@ class ShiftClosingService
     }
 
     /**
+     * The open shift in numbers only (the Today page strip; two aggregate queries, no rows): null when nothing is open, else
+     * ['since', 'cash_in' (payments), 'cash_out' (refunds + expenses)] — withholding apart (not cash), as in summary()
+     */
+    public function openTotals($accountId, $userId): ?array
+    {
+        $payments = $this->openPayments($accountId, $userId)->toBase()
+            ->selectRaw("MIN(created_at) since, COALESCE(SUM(CASE WHEN type = 'payment' THEN amount END), 0) cash_in, COALESCE(SUM(CASE WHEN type = 'refund' THEN amount END), 0) refunds")
+            ->first();
+        $expenses = $this->openExpenses($accountId, $userId)->toBase()->selectRaw('MIN(created_at) since, COALESCE(SUM(amount), 0) total')->first();
+        $since = collect([$payments->since, $expenses->since])->filter()->min();
+
+        return $since ? [
+            'since' => Carbon::parse($since),
+            'cash_in' => round((float) $payments->cash_in, 2),
+            'cash_out' => round((float) $payments->refunds + (float) $expenses->total, 2),
+        ] : null;
+    }
+
+    /**
      * The totals of some payments + expenses (an open shift / a closing; saved on the closing):
      * ['methods' => [method_id => ['name', 'payments', 'refunds', 'expenses', 'net' (= payments - refunds - expenses: to hand over)]],
      *  'refunds' / 'expenses' => ['count', 'total'] (all methods, their own minus lines), 'withholding' => ['count', 'total'],

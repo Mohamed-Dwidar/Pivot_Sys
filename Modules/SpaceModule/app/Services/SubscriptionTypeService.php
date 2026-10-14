@@ -75,10 +75,12 @@ class SubscriptionTypeService
 
     private function typeData(array $data): array
     {
-        $type_data = ['name' => $data['name']];
+        $type_data = ['name' => $data['name'], 'booking_mode' => $data['booking_mode'], 'home_order' => (int) ($data['home_order'] ?? 0)];
         foreach (array_keys(SubscriptionType::OPTIONS) as $option) {
             $type_data[$option] = !empty($data[$option]);
         }
+        // a contract is a period type (one reservation per period)
+        $type_data['is_contract'] = $type_data['is_contract'] && $data['booking_mode'] === 'period';
         return $type_data;
     }
 }

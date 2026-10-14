@@ -9,7 +9,11 @@ class SubscriptionTypeRequest extends FormRequest
 {
     public function rules(): array
     {
-        $rules = ['name' => 'required|string|max:255'];
+        $rules = [
+            'name' => 'required|string|max:255',
+            'booking_mode' => 'required|in:' . implode(',', array_keys(SubscriptionType::BOOKING_MODES)),
+            'home_order' => 'nullable|integer|min:0|max:999',
+        ];
         foreach (array_keys(SubscriptionType::OPTIONS) as $option) {
             $rules[$option] = 'boolean';
         }
