@@ -13,9 +13,7 @@
         <input type="search" name="search" class="{{ config('layoutmodule.form.input') }}" placeholder="Search by name" autocomplete="off">
         <select name="space_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Space">
             <option value="">All Spaces</option>
-            @foreach ($spaces as $id => $name)
-                <option value="{{ $id }}">{{ Str::humanize($name) }}</option>
-            @endforeach
+            @include('layoutmodule::partials.filter-options', ['options' => $spaces])
         </select>
         <select name="is_active" class="{{ config('layoutmodule.form.select') }}" aria-label="Status">
             <option value="">All Statuses</option>

@@ -93,9 +93,10 @@ trait ReservationActions
     public function index()
     {
         $accountId = $this->accountId();
+        $activeOnly = $this->area() === 'employee'; // employees: only the active statuses / spaces
         return view('reservationmodule::Reservation.index', [
-            'statuses' => $this->statusService->filterOptions($accountId),
-            'spaces' => $this->spaceService->options($accountId),
+            'statuses' => $this->statusService->filterOptions($accountId, $activeOnly),
+            'spaces' => $this->spaceService->filterOptions($accountId, $activeOnly),
             // the type filter (Day Use / Meeting / Subscriptions ...): a contract type shows its rows on every tab
             'types' => $this->subscriptionTypeService->options($accountId),
             'counts' => $this->tabCounts([]),

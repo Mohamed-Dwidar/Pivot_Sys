@@ -72,10 +72,11 @@ trait PaymentActions
     public function index()
     {
         $accountId = $this->accountId();
+        $activeOnly = $this->area() === 'employee'; // employees: only the active methods / categories
         return view('paymentmodule::Payment.index', [
-            'methods' => $this->methodService->filterOptions($accountId),
+            'methods' => $this->methodService->filterOptions($accountId, $activeOnly),
             // the "For" drop menu: Reservations, Packages, then the "Other income" group (each category)
-            'categories' => $this->categoryService->filterOptions($accountId),
+            'categories' => $this->categoryService->filterOptions($accountId, $activeOnly),
         ]);
     }
 

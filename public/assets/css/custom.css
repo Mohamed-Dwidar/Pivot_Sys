@@ -1287,6 +1287,11 @@ input:disabled:not([type="checkbox"]):not([type="radio"]) {
     gap: 0.75rem;
 }
 
+/* an inactive item in a list filter drop menu (partials/filter-options; the text also says "(Inactive)": macOS menus ignore colors) */
+.option-inactive {
+    color: rgb(148 163 184);
+}
+
 /* a not counted reservation (cancelled, pending ...) in the list: muted, still readable (DT_RowClass) */
 .data-table tbody tr.row-muted > td {
     opacity: 0.55;

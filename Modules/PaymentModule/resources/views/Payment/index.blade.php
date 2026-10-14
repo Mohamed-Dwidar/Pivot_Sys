@@ -43,16 +43,12 @@
             <option value="package">Packages</option>
             <optgroup label="Other income">
                 <option value="income">All other income</option>
-                @foreach ($categories as $id => $name)
-                    <option value="category-{{ $id }}">{{ Str::humanize($name) }}</option>
-                @endforeach
+                @include('layoutmodule::partials.filter-options', ['options' => $categories, 'prefix' => 'category-'])
             </optgroup>
         </select>
         <select name="method" class="{{ config('layoutmodule.form.select') }}" aria-label="Method">
             <option value="">All Methods</option>
-            @foreach ($methods as $id => $name)
-                <option value="{{ $id }}">{{ Str::humanize($name) }}</option>
-            @endforeach
+            @include('layoutmodule::partials.filter-options', ['options' => $methods])
             <option value="refund">Refunds</option>
             @if ($withholdingOn)
                 <option value="withholding">Withholding</option>

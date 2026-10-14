@@ -140,13 +140,13 @@ SELECT IF((SELECT COUNT(*) FROM transfer_precheck WHERE kind = 'BLOCKING' AND fo
           (SELECT 'STOP: blocking rows found' UNION ALL SELECT 'STOP')) AS precheck_result;
 
 -- 3.0e expenses (2026-10-14): the source must fit below the app range (100001) — an error here = stop; then the rows that take a
---      fallback (unknown type → category kept as is: must be 0, unknown creator → the account login 1, method 5 → no method 0)
+--      fallback (unknown type → category kept as is: must be 0, unknown creator → the account login 1, method 5 → 1 Cash)
 SELECT IF((SELECT COALESCE(MAX(id), 0) FROM dwidar_pivot_api.expenses) < 100001, 'ok', (SELECT 'STOP: an old expense id >= 100001' UNION ALL SELECT 'STOP')) AS expense_ids_check;
 SELECT 'expenses' t, COUNT(*) n, ROUND(SUM(amount), 2) total FROM dwidar_pivot_api.expenses
 UNION ALL SELECT 'types (categories)', COUNT(*), NULL FROM dwidar_pivot_api.types
 UNION ALL SELECT 'expenses with an unknown type (0)', COUNT(*), NULL FROM dwidar_pivot_api.expenses WHERE type_id NOT IN (SELECT id FROM dwidar_pivot_api.types)
 UNION ALL SELECT 'expenses item longer than 255 (0)', COUNT(*), NULL FROM dwidar_pivot_api.expenses WHERE CHAR_LENGTH(item) > 255
-UNION ALL SELECT 'expenses old method 5 → no method', COUNT(*), ROUND(SUM(amount), 2) FROM dwidar_pivot_api.expenses WHERE payment_method_id = 5
+UNION ALL SELECT 'expenses old method 5 → Cash (1)', COUNT(*), ROUND(SUM(amount), 2) FROM dwidar_pivot_api.expenses WHERE payment_method_id = 5
 UNION ALL SELECT 'expenses negative (money returned, imported as is)', COUNT(*), ROUND(SUM(amount), 2) FROM dwidar_pivot_api.expenses WHERE amount < 0
 UNION ALL SELECT 'expenses whose old user is not a login here → 1', COUNT(*), NULL FROM dwidar_pivot_api.expenses e
   WHERE e.creatable_type LIKE '%UserModule%' AND e.creatable_id NOT IN (SELECT id FROM dwidar_pivot_api.users)
@@ -417,12 +417,12 @@ SELECT t.id, 1, t.name_ar, CASE t.id WHEN 16 THEN 'Building Expenses' WHEN 40 TH
   1, t.created_at, t.updated_at
 FROM dwidar_pivot_api.types t;
 
--- 3.13c expenses (id = expense_no = old id): type_id → category; old method 5 "إشعار خصم" → 0 = no method (in the expense totals,
---       in no method's cash); the 2 negative rows (money returned) as they are; creator = creatable_type / creatable_id (old Admin /
+-- 3.13c expenses (id = expense_no = old id): type_id → category; old method 5 "إشعار خصم" → 1 Cash (user 2026-10-14: no "No method"
+--       for expenses); the 2 negative rows (money returned) as they are; creator = creatable_type / creatable_id (old Admin /
 --       empty / unknown user → the account login 1, old User X → login X); created_by ignored (user 2026-10-14)
 INSERT INTO expenses (id, account_id, expense_no, expense_category_id, item, amount, payment_method_id, spent_at, notes,
   shift_closing_id, creatable_type, creatable_id, created_at, updated_at)
-SELECT e.id, 1, e.id, e.type_id, e.item, ROUND(e.amount, 2), IF(e.payment_method_id = 5, 0, e.payment_method_id), e.date,
+SELECT e.id, 1, e.id, e.type_id, e.item, ROUND(e.amount, 2), IF(e.payment_method_id = 5, 1, e.payment_method_id), e.date,
   NULLIF(TRIM(e.notes), ''), 0, 'Modules\\UserModule\\app\\Models\\User',
   IF(e.creatable_type LIKE '%UserModule%' AND u.id IS NOT NULL, e.creatable_id, 1), e.created_at, e.updated_at
 FROM dwidar_pivot_api.expenses e LEFT JOIN users u ON u.id = e.creatable_id;
@@ -498,12 +498,12 @@ SELECT t.id, 1, t.name_ar, CASE t.id WHEN 16 THEN 'Building Expenses' WHEN 40 TH
   1, t.created_at, t.updated_at
 FROM dwidar_pivot_api.types t;
 
--- 3.13c expenses (id = expense_no = old id): type_id → category; old method 5 "إشعار خصم" → 0 = no method (in the expense totals,
---       in no method's cash); the 2 negative rows (money returned) as they are; creator = creatable_type / creatable_id (old Admin /
+-- 3.13c expenses (id = expense_no = old id): type_id → category; old method 5 "إشعار خصم" → 1 Cash (user 2026-10-14: no "No method"
+--       for expenses); the 2 negative rows (money returned) as they are; creator = creatable_type / creatable_id (old Admin /
 --       empty / unknown user → the account login 1, old User X → login X); created_by ignored (user 2026-10-14)
 INSERT INTO expenses (id, account_id, expense_no, expense_category_id, item, amount, payment_method_id, spent_at, notes,
   shift_closing_id, creatable_type, creatable_id, created_at, updated_at)
-SELECT e.id, 1, e.id, e.type_id, e.item, ROUND(e.amount, 2), IF(e.payment_method_id = 5, 0, e.payment_method_id), e.date,
+SELECT e.id, 1, e.id, e.type_id, e.item, ROUND(e.amount, 2), IF(e.payment_method_id = 5, 1, e.payment_method_id), e.date,
   NULLIF(TRIM(e.notes), ''), 0, 'Modules\\UserModule\\app\\Models\\User',
   IF(e.creatable_type LIKE '%UserModule%' AND u.id IS NOT NULL, e.creatable_id, 1), e.created_at, e.updated_at
 FROM dwidar_pivot_api.expenses e LEFT JOIN users u ON u.id = e.creatable_id;
@@ -555,6 +555,13 @@ WHERE s.notes = 'Imported from the old system' AND s.id NOT IN (SELECT shift_clo
 UPDATE shift_events e JOIN shift_closings s ON s.id = e.shift_closing_id
 SET e.created_at = s.closed_at
 WHERE s.notes = 'Imported from the old system' AND e.action = 'close';
+
+-----
+STEP 3.15d — ONE TIME on the already imported DB (2026-10-14, user: no "No method" for expenses): the 25 imported expenses of old
+method 5 "إشعار خصم" (method 0, 23,135.00: 24 in the account's imported shift 33 = 23,045.00, 1 in user 8's shift 6 = 90.00) → 1 Cash.
+NOT for a fresh go-live run (3.13c maps 5 → 1). Then `php artisan shifts:recalculate --imported` (STEP 5) and the check 6.13.
+
+UPDATE expenses SET payment_method_id = 1 WHERE account_id = 1 AND payment_method_id = 0;
 
 -----
 STEP 4 — recalculate the packages (terminal): price / net from the reservations, then paid / remaining (net + extras − payments)
@@ -671,12 +678,13 @@ UNION ALL SELECT 'imported closings whose close event is not at closed_at (0)', 
   LEFT JOIN shift_events e ON e.shift_closing_id = s.id AND e.action = 'close'
   WHERE s.notes = 'Imported from the old system' AND (e.id IS NULL OR e.created_at <> s.closed_at);
 
--- 6.13 expenses vs the old system (2026-10-14): rows, money, categories, method 5 → 0 — "old" must equal "new"; then per category
+-- 6.13 expenses vs the old system (2026-10-14): rows, money, categories, Cash (old 1 + 5) — "old" must equal "new"; then per category
 SELECT 'expenses rows' t, (SELECT COUNT(*) FROM dwidar_pivot_api.expenses) old_v, (SELECT COUNT(*) FROM expenses WHERE id < 100001) new_v
 UNION ALL SELECT 'expenses total', (SELECT ROUND(SUM(amount), 2) FROM dwidar_pivot_api.expenses), (SELECT ROUND(SUM(amount), 2) FROM expenses WHERE id < 100001)
 UNION ALL SELECT 'categories', (SELECT COUNT(*) FROM dwidar_pivot_api.types), (SELECT COUNT(*) FROM expense_categories WHERE id < 1000)
-UNION ALL SELECT 'no method (old method 5)', (SELECT COUNT(*) FROM dwidar_pivot_api.expenses WHERE payment_method_id = 5),
-  (SELECT COUNT(*) FROM expenses WHERE id < 100001 AND payment_method_id = 0);
+UNION ALL SELECT 'cash (old methods 1 + 5)', (SELECT COUNT(*) FROM dwidar_pivot_api.expenses WHERE payment_method_id IN (1, 5)),
+  (SELECT COUNT(*) FROM expenses WHERE id < 100001 AND payment_method_id = 1)
+UNION ALL SELECT 'no method (0)', 0, (SELECT COUNT(*) FROM expenses WHERE payment_method_id = 0);
 SELECT o.type_id, o.n old_n, n.n new_n, o.total old_total, n.total new_total, IF(o.n = n.n AND o.total = n.total, 'ok', 'DIFF') result
 FROM (SELECT type_id, COUNT(*) n, ROUND(SUM(amount), 2) total FROM dwidar_pivot_api.expenses GROUP BY type_id) o
 LEFT JOIN (SELECT expense_category_id, COUNT(*) n, ROUND(SUM(amount), 2) total FROM expenses WHERE id < 100001 GROUP BY expense_category_id) n

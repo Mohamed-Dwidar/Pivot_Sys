@@ -30,10 +30,11 @@ class EmployeePositionService
             ->orderBy('name')->get()->mapWithKeys(fn ($position) => [$position->id => $this->optionLabel($position)])->all();
     }
 
-    // all of them, for the list filters
+    // the list filters: [id => ['name', 'active']], all of them, the active ones first (the inactive ones marked)
     public function filterOptions($accountId): array
     {
-        return $this->positionRepository->forAccount($accountId)->orderBy('name')->pluck('name', 'id')->all();
+        return $this->positionRepository->forAccount($accountId)->orderByDesc('is_active')->orderBy('name')->get()
+            ->mapWithKeys(fn ($item) => [$item->id => ['name' => $item->name, 'active' => (bool) $item->is_active]])->all();
     }
 
     // 404 when it belongs to another account

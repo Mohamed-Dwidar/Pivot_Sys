@@ -46,10 +46,13 @@ class ReservationStatusService
             ->ordered()->get();
     }
 
-    // all of them, for the list filter
-    public function filterOptions($accountId): array
+    // the list filter: [id => ['name', 'active']], the active ones first (the account sees the inactive ones too, marked;
+    // $activeOnly: the employees' list)
+    public function filterOptions($accountId, bool $activeOnly = false): array
     {
-        return $this->statusRepository->forAccount($accountId)->ordered()->get()->pluck('name', 'id')->all();
+        return $this->statusRepository->forAccount($accountId)->when($activeOnly, fn ($query) => $query->where('is_active', true))
+            ->orderByDesc('is_active')->ordered()->get()
+            ->mapWithKeys(fn ($item) => [$item->id => ['name' => $item->name, 'active' => (bool) $item->is_active]])->all();
     }
 
     // 404 when it belongs to another account

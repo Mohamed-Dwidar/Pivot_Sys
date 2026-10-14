@@ -404,8 +404,8 @@ Steps 1–6 go into `to_run`.
   Total payments, Refunds (−), Total collected, Expenses (−), Net to hand over, withholding apart; My Shift lists its expenses
   (`Expense/partials/list-table`, `?shift=open`); closing also sends the newest expense id shown (`up_to_expense_id`).
 - **Imported (`dwidar_pivot_api`):** `types` → `expense_categories` (ids kept; 16 "Building Expenses", 40 "Chamber of Commerce"
-  translated — the only Arabic `name_en`); `expenses` → `expenses` (ids kept, type_id → category, method 5 "إشعار خصم" → 0 = "No method
-  (withholding notice)": in the expense totals, in no method's cash; the 2 negative rows = returns, as they are; creator =
+  translated — the only Arabic `name_en`); `expenses` → `expenses` (ids kept, type_id → category, method 5 "إشعار خصم" → 1 Cash (user
+  2026-10-14: no "No method" for expenses; this DB: `to_run` STEP 3.15d); the 2 negative rows = returns, as they are; creator =
   creatable_type / creatable_id: Admin / unknown → login 1, User X → login X; `created_by` ignored; dates as they are). Each login's
   imported expenses join its "Imported" shift, closed_at = the later of its last payment / expense; totals by
   `php artisan shifts:recalculate --imported`. `to_run`: 3.0e, 3.1 ALTERs, 3.2, 3.13b / 3.13c, 3.14, 3.15, STEP 3.15c (one time),

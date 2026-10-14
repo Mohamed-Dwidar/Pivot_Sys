@@ -65,9 +65,10 @@ trait ExpenseActions
     public function index()
     {
         $accountId = $this->accountId();
+        $activeOnly = $this->area() === 'employee'; // employees: only the active categories / methods
         return view('paymentmodule::Expense.index', [
-            'categories' => $this->categoryService->filterOptions($accountId),
-            'methods' => $this->methodService->filterOptions($accountId),
+            'categories' => $this->categoryService->filterOptions($accountId, $activeOnly),
+            'methods' => $this->methodService->filterOptions($accountId, $activeOnly),
         ]);
     }
 
@@ -137,7 +138,7 @@ trait ExpenseActions
         $rows = $this->expenseService->listQuery($this->accountId(), $this->listFilters($filters))->tab($tab)
             ->when($this->collectorId(), fn ($query, $userId) => $query->collectedBy($userId))
             ->reorder()->setEagerLoads([])->toBase()->selectRaw('payment_method_id, SUM(amount) total')->groupBy('payment_method_id')->get();
-        $methodNames = $this->methodService->filterOptions($this->accountId());
+        $methodNames = array_map(fn ($option) => $option['name'], $this->methodService->filterOptions($this->accountId()));
         $summary = [
             'total' => round((float) $rows->sum('total'), 2),
             'methods' => $rows->mapWithKeys(fn ($row) => [($row->payment_method_id ? ($methodNames[$row->payment_method_id] ?? 'Method #' . $row->payment_method_id) : Expense::NO_METHOD) => round((float) $row->total, 2)])->all(),

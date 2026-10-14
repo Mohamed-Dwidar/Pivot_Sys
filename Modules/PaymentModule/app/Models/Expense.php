@@ -13,7 +13,7 @@ use Modules\UserModule\app\Models\User;
 /**
  * Money paid out from a drawer (docs/payments-plan.md "Expenses"): it joins the open shift of whoever records it
  * (shift_closing_id 0 → the shift closing), like a refund. Amount > 0 in the app (2 imported old rows are negative = returns);
- * payment_method_id 0 = no method (imported old method 5 "withholding notice": in the expense totals, in no method's cash).
+ * Always a payment method (imported old method 5 "withholding notice" → Cash, user 2026-10-14).
  */
 class Expense extends Model
 {
@@ -103,7 +103,7 @@ class Expense extends Model
         ];
     }
 
-    // search (no., item, notes) | expense_category_id | method (an id, or "none" = 0) | date_from / date_to (spent_at)
+    // search (no., item, notes) | expense_category_id | method (an id) | date_from / date_to (spent_at)
     public function scopeFilter($query, array $filters = [])
     {
         if (!empty($filters['search'])) {
@@ -114,9 +114,7 @@ class Expense extends Model
             $query->where('expense_category_id', (int) $filters['expense_category_id']);
         }
         $method = (string) ($filters['method'] ?? '');
-        if ($method === 'none') {
-            $query->where('payment_method_id', 0);
-        } elseif (ctype_digit($method)) {
+        if (ctype_digit($method)) {
             $query->where('payment_method_id', (int) $method);
         }
         if (!empty($filters['date_from'])) {

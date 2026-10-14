@@ -32,7 +32,7 @@ class PlanAccountModuleController extends Controller
     // the list page, the rows come from data() (DataTables)
     public function index()
     {
-        $spaces = $this->spaceService->options($this->accountId());
+        $spaces = $this->spaceService->filterOptions($this->accountId());
         return view('planmodule::Account.index', compact('spaces'));
     }
 

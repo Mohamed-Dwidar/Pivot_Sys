@@ -33,10 +33,19 @@ class SpaceService
     }
 
     // 404 when the space belongs to another account
-    // [id => name] in the active language, for the filters
+    // [id => name] in the active language
     public function options($accountId): array
     {
         return $this->spaceRepository->forAccount($accountId)->orderByLocalized('name')->get()->pluck('name', 'id')->all();
+    }
+
+    // the list filters: [id => ['name', 'active']], the active ones first (the account sees the inactive ones too, marked;
+    // $activeOnly: the employees' lists)
+    public function filterOptions($accountId, bool $activeOnly = false): array
+    {
+        return $this->spaceRepository->forAccount($accountId)->when($activeOnly, fn ($query) => $query->where('is_active', true))
+            ->orderByDesc('is_active')->orderByLocalized('name')->get()
+            ->mapWithKeys(fn ($item) => [$item->id => ['name' => $item->name, 'active' => (bool) $item->is_active]])->all();
     }
 
     // [id => name] of the active spaces that have this subscription type, for the reservation form

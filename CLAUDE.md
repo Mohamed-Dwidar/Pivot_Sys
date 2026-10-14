@@ -31,7 +31,7 @@ Then suggest a commit message.
 
 ## Project structure
 - `Modules/{Name}Module/` — one module per feature: `app/{Http/Controllers/{Account|Admin|Employee|Guest|Auth}, Http/Requests, Models, Repositories, Services}`, `database/Migrations`, `resources/views`, `routes/web.php`
-- `Modules/LayoutModule/` — layouts (`main`, `admin/*`, `account/*`, `employee/*`, `modal`), sidebars, shared partials (`partials/field`, `checkbox`, `row-menu`, `row-toggle`, `form-actions`, `datatable-*`, `gallery`, `images-input`), `config/config.php` (template form / menu class strings)
+- `Modules/LayoutModule/` — layouts (`main`, `admin/*`, `account/*`, `employee/*`, `modal`), sidebars, shared partials (`partials/field`, `checkbox`, `filter-options`, `row-menu`, `row-toggle`, `form-actions`, `datatable-*`, `gallery`, `images-input`), `config/config.php` (template form / menu class strings)
 - `app/Helpers/` — traits: `LocalizedHelper` (name_ar/name_en → `->name`, `orderByLocalized`), `SafeMorphHelper` (morphTo → null for unknown / empty types, imported data; uses `app/Models/Relations/SafeMorphTo`), `UploaderHelper`, others legacy
 - `app/Providers/AppServiceProvider.php` — `Str::humanize()` macro (drop-menu option texts)
 - `public/assets/css/custom.css` — ALL custom CSS (except PDF views: `pdf.css`); `public/assets/js/custom.js` — modal, ajax forms, dynamic forms, toggles; `public/assets/js/datatables.js` — DataTables + `window.dataTables` row API

@@ -23,15 +23,11 @@
         @include('layoutmodule::partials.date-range-filter')
         <select name="reservation_status_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Status">
             <option value="">All Statuses</option>
-            @foreach ($statuses as $id => $name)
-                <option value="{{ $id }}">{{ Str::humanize($name) }}</option>
-            @endforeach
+            @include('layoutmodule::partials.filter-options', ['options' => $statuses])
         </select>
         <select name="space_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Space">
             <option value="">All Spaces</option>
-            @foreach ($spaces as $id => $name)
-                <option value="{{ $id }}">{{ Str::humanize($name) }}</option>
-            @endforeach
+            @include('layoutmodule::partials.filter-options', ['options' => $spaces])
         </select>
         <select name="subscription_type_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Type">
             <option value="">All Types</option>

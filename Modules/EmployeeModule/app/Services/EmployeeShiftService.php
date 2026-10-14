@@ -30,10 +30,11 @@ class EmployeeShiftService
             ->orderBy('name')->get()->mapWithKeys(fn ($shift) => [$shift->id => $this->optionLabel($shift)])->all();
     }
 
-    // all of them, for the list filters
+    // the list filters: [id => ['name', 'active']], all of them, the active ones first (the inactive ones marked)
     public function filterOptions($accountId): array
     {
-        return $this->shiftRepository->forAccount($accountId)->orderBy('name')->pluck('name', 'id')->all();
+        return $this->shiftRepository->forAccount($accountId)->orderByDesc('is_active')->orderBy('name')->get()
+            ->mapWithKeys(fn ($item) => [$item->id => ['name' => $item->name, 'active' => (bool) $item->is_active]])->all();
     }
 
     // 404 when it belongs to another account
