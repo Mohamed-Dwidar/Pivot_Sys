@@ -125,7 +125,7 @@ class PackageService
         }
         // its money must not be lost
         if ($package->payments()->exists()) {
-            return 'This package has payments, it can not be deleted. Refund or delete its payments first.';
+            return 'This package has cash in, it can not be deleted. Refund or delete its cash in first.';
         }
         $package->delete();
         return null;

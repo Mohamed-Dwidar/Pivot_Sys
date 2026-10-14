@@ -42,8 +42,10 @@ class PaymentAccountModuleController extends Controller
         $payment = $this->paymentService->update($this->accountId(), $id, $request->validated(), Auth::user());
 
         return response()->json([
-            'message' => 'Payment #' . $payment->payment_no . ' has been updated successfully.',
+            'message' => ($payment->type === 'refund' ? 'Refund #' : 'Cash In #') . $payment->payment_no . ' has been updated successfully.',
             'row' => $this->row($request, $id),
+            // a list without this row id (Payments All / Cash Out: row-payment-{id}) reloads
+            'reload' => true,
             'modal' => route('account.payments.show', $id),
             'redirect' => route('account.payments.show', $id),
         ]);
@@ -62,7 +64,7 @@ class PaymentAccountModuleController extends Controller
         $payableUrl = $this->payableUrl($payment);
 
         return response()->json([
-            'message' => 'Payment #' . $payment->payment_no . ' has been deleted.',
+            'message' => ($payment->type === 'refund' ? 'Refund #' : 'Cash In #') . $payment->payment_no . ' has been deleted.',
             'row' => null,
             'reload' => true,
             'modal' => $payableUrl,

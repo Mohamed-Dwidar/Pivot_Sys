@@ -125,7 +125,7 @@ class WithholdingCertificateService
         $ids = array_map('intval', $data['payments'] ?? []);
         $valid = array_keys($this->paymentOptions($accountId, $certificate));
         if (array_diff($ids, $valid)) {
-            throw ValidationException::withMessages(['payments' => 'Choose withholding payments that are not on another certificate.']);
+            throw ValidationException::withMessages(['payments' => 'Choose withholding entries that are not on another certificate.']);
         }
     }
 

@@ -7,10 +7,10 @@
     @csrf
     @method('DELETE')
     @if (!empty($menu))
-        <button type="submit" data-tw-dismiss="dropdown" class="{{ config('layoutmodule.menu.item') }} text-danger" title="{{ $category->expenses_count ? 'Used by expenses' : 'Delete' }}" @disabled($category->expenses_count)>
+        <button type="submit" data-tw-dismiss="dropdown" class="{{ config('layoutmodule.menu.item') }} text-danger" title="{{ $category->expenses_count ? 'Used by cash out' : 'Delete' }}" @disabled($category->expenses_count)>
             <i data-lucide="trash-2" class="{{ config('layoutmodule.menu.icon') }}"></i> Delete
         </button>
     @else
-        <button type="submit" class="btn btn-danger" title="{{ $category->expenses_count ? 'Used by expenses' : 'Delete' }}" @disabled($category->expenses_count)><i data-lucide="trash-2"></i> Delete</button>
+        <button type="submit" class="btn btn-danger" title="{{ $category->expenses_count ? 'Used by cash out' : 'Delete' }}" @disabled($category->expenses_count)><i data-lucide="trash-2"></i> Delete</button>
     @endif
 </form>

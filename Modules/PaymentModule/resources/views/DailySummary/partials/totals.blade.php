@@ -1,6 +1,6 @@
 {{--
-    A day's totals (DailySummaryService::summary(), the shift totals shape): per method payments - refunds - expenses = net
-    (the shift totals table: Total payments, Refunds, Total collected, Expenses, Net to hand over, withholding apart), then the
+    A day's totals (DailySummaryService::summary(), the shift totals shape): per method Cash In - Refunds - Cash Out = net
+    (the shift totals table: Cash In, Refunds, Cash Out, Net to hand over, withholding apart), then the
     same per collector × method. $summary: ['collectors', 'methods', 'refunds', 'expenses', 'withholding', 'cash_total', 'net_total', 'count']
 --}}
 @php
@@ -14,7 +14,7 @@
     <div class="form-section mt-8">By Collector</div>
     <div class="table-wrap">
         <table class="data-table">
-            <thead><tr><th>Collected By</th><th>Method</th><th>Payments</th><th>Refunds</th><th>Expenses</th><th>Net</th></tr></thead>
+            <thead><tr><th>Collected By</th><th>Method</th><th>Cash In</th><th>Refunds</th><th>Cash Out</th><th>Net</th></tr></thead>
             <tbody>
                 @foreach ($summary['collectors'] as $collector)
                     @foreach ($collector['methods'] as $methodId => $line)

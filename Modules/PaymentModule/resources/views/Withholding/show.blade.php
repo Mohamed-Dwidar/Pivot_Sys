@@ -26,7 +26,7 @@
         <div><dt>Member</dt><dd>{{ $certificate->member?->name ?? '-' }}</dd></div>
     </dl>
 
-    <div class="form-section mt-8">Withholding Payments ({{ $certificate->payments->count() }})</div>
+    <div class="form-section mt-8">Withholding Entries ({{ $certificate->payments->count() }})</div>
     @if ($certificate->payments->isNotEmpty())
         <div class="table-wrap">
             <table class="data-table">

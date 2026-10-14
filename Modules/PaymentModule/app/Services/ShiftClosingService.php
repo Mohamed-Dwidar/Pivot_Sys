@@ -199,10 +199,10 @@ class ShiftClosingService
             $payments = $this->openPayments($accountId, $collector->getKey())->lockForUpdate()->get();
             $expenses = $this->openExpenses($accountId, $collector->getKey())->lockForUpdate()->get();
             if ($payments->isEmpty() && $expenses->isEmpty()) {
-                throw ValidationException::withMessages(['shift' => 'There are no payments or expenses to close.']);
+                throw ValidationException::withMessages(['shift' => 'There is no cash in or cash out to close.']);
             }
             if ((int) $payments->max('id') !== $upToId || (int) $expenses->max('id') !== $upToExpenseId) {
-                throw ValidationException::withMessages(['shift' => 'Payments or expenses were added or changed since you opened this window. Review the totals again.']);
+                throw ValidationException::withMessages(['shift' => 'Cash in or cash out was added or changed since you opened this window. Review the totals again.']);
             }
 
             $closing = $this->saveTotals(new ShiftClosing([

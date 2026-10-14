@@ -126,7 +126,7 @@ class WithholdingCertificateAccountModuleController extends Controller
         $this->certificateService->deleteOne($this->accountId(), $id);
 
         return response()->json([
-            'message' => 'The certificate has been deleted, its payments can be attached again.',
+            'message' => 'The certificate has been deleted, its withholding entries can be attached again.',
             'row' => null,
             'redirect' => route('account.withholding-certificates.index'),
         ]);

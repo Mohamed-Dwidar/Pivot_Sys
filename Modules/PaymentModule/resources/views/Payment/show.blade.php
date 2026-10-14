@@ -2,8 +2,8 @@
 @extends(request()->ajax() ? 'layoutmodule::modal' : Auth::user()->userable->layout())
 
 @section('title')
-    Payment #{{ $payment->payment_no }}
-    <span class="badge {{ $payment->type_badge_class }} ml-2">{{ $payment->type_label }}</span>
+    {{-- "Cash In #N" / "Refund #N" / "Withholding #N" --}}
+    {{ $payment->type_label }} #{{ $payment->payment_no }}
 @endsection
 
 @section('modal-size', 'lg')

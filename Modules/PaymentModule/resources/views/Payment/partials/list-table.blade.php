@@ -1,12 +1,13 @@
 {{--
     The payments list table (DataTables, PaymentActions::table()), shared by the Payments page and My Shift:
     Member | For | Date | Method | Amount | Created By (account only, $showBy) | row menu.
-    $filters: the filters form id ("#payments-filters"; My Shift: a hidden form with shift=open), $empty: the empty text.
+    $filters: the filters form id ("#payments-filters"; My Shift: a hidden form with shift=open), $empty: the empty text,
+    $dataParams: query of the data URL (the Payments page Cash In tab: direction=in = no refunds).
 --}}
 @php($area = request()->routeIs('employee.*') ? 'employee' : 'account')
 <div class="table-wrap mt-5">
-    <table class="data-table" data-datatable data-url="{{ route($area . '.payments.data') }}"
-        data-filters="{{ $filters }}" data-order='[[2, "desc"]]' data-empty="{{ $empty ?? 'No payments here.' }}">
+    <table class="data-table" data-datatable data-url="{{ route($area . '.payments.data', $dataParams ?? []) }}"
+        data-filters="{{ $filters }}" data-order='[[2, "desc"]]' data-empty="{{ $empty ?? 'No cash in here.' }}">
         <thead>
             <tr>
                 <th data-data="member_html">Member</th>

@@ -9,4 +9,4 @@
 @else
     -
 @endif
-<div class="text-xs text-slate-500">{{ $closing->count }} {{ Str::plural('payment', $closing->count) }}</div>
+<div class="text-xs text-slate-500">{{ $closing->count }} cash in</div>

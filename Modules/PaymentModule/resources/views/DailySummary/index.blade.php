@@ -32,7 +32,7 @@
         <div class="form-section">Long Open Shifts</div>
         <div class="table-wrap">
             <table class="data-table">
-                <thead><tr><th>Employee</th><th>Open Since</th><th>Payments</th><th>Collected</th><th>"Still Working"</th><th></th></tr></thead>
+                <thead><tr><th>Employee</th><th>Open Since</th><th>Cash In</th><th>Collected</th><th>"Still Working"</th><th></th></tr></thead>
                 <tbody>
                     @foreach ($longOpen as $userId => $period)
                         <tr>
@@ -58,11 +58,11 @@
     {{-- the shifts holding payments of this day --}}
     <div class="form-section {{ $longOpen->isNotEmpty() ? 'mt-8' : '' }}">Shifts</div>
     @if ($openPeriods->isEmpty() && $shifts->isEmpty())
-        <div class="text-slate-500">No payments or expenses on this day.</div>
+        <div class="text-slate-500">No cash in or cash out on this day.</div>
     @else
         <div class="table-wrap">
             <table class="data-table">
-                <thead><tr><th>Collected By</th><th>Status</th><th>Payments From → To</th><th>Payments</th><th>Collected</th><th>Expenses</th>@if ($showWithholding)<th>Withholding</th>@endif<th></th></tr></thead>
+                <thead><tr><th>Collected By</th><th>Status</th><th>From → To</th><th>Cash In</th><th>Collected</th><th>Cash Out</th>@if ($showWithholding)<th>Withholding</th>@endif<th></th></tr></thead>
                 <tbody>
                     @foreach ($openPeriods as $userId => $period)
                         <tr>
@@ -100,7 +100,7 @@
                 </tbody>
             </table>
         </div>
-        <div class="mt-2 text-xs text-slate-500">A shift's totals are for the whole shift (it can hold payments of other days); the day totals below are for this day only.</div>
+        <div class="mt-2 text-xs text-slate-500">A shift's totals are for the whole shift (it can hold cash in / cash out of other days); the day totals below are for this day only.</div>
     @endif
 
     <div class="form-section mt-8">Day Totals</div>
@@ -108,10 +108,10 @@
 
     {{-- the day's expenses (spent_at): who paid out, for what, how much --}}
     @if ($expenses->isNotEmpty())
-        <div class="form-section mt-8">Expenses</div>
+        <div class="form-section mt-8">Cash Out</div>
         <div class="table-wrap">
             <table class="data-table">
-                <thead><tr><th>Expense</th><th>Category</th><th>Recorded By</th><th>Method</th><th>Amount</th></tr></thead>
+                <thead><tr><th>Cash Out</th><th>Category</th><th>Recorded By</th><th>Method</th><th>Amount</th></tr></thead>
                 <tbody>
                     @foreach ($expenses as $expense)
                         <tr>
@@ -132,7 +132,7 @@
         <div class="form-section mt-8">Refunds</div>
         <div class="table-wrap">
             <table class="data-table">
-                <thead><tr><th>Refund</th><th>Refunded By</th><th>Amount</th><th>Method</th><th>Original Payment</th><th>Member</th><th>Reason</th></tr></thead>
+                <thead><tr><th>Refund</th><th>Refunded By</th><th>Amount</th><th>Method</th><th>Original Cash In</th><th>Member</th><th>Reason</th></tr></thead>
                 <tbody>
                     @foreach ($refunds as $refund)
                         <tr>

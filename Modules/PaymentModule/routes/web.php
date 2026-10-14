@@ -25,6 +25,8 @@ use Modules\PaymentModule\app\Http\Middleware\WithholdingEnabled;
 $paymentRoutes = function ($controller) {
     Route::get('/', [$controller, 'index'])->name('index');
     Route::get('data', [$controller, 'data'])->name('data');
+    // the All / Cash Out tabs: payments + expenses together (2026-10-14)
+    Route::get('cash-data', [$controller, 'cashData'])->name('cash-data');
     // the member's reservations / packages drop menu of the form
     Route::get('options/payables', [$controller, 'payables'])->name('options.payables');
     Route::get('create', [$controller, 'create'])->name('create');

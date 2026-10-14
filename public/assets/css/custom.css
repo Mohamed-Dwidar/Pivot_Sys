@@ -711,6 +711,33 @@ div.dt-container div.dt-processing > div:last-child {
     border-color: rgb(var(--color-primary));
 }
 
+/* page tabs (links, one list each: the Payments page All | Cash In | Cash Out) — above the filter bar, underlined, unlike the
+   date pills of .status-tabs */
+.page-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid rgb(226 232 240);
+}
+
+.page-tabs a {
+    margin-bottom: -1px;
+    padding: 0.5rem 1rem;
+    font-weight: 500;
+    color: rgb(100 116 139);
+    border-bottom: 2px solid transparent;
+}
+
+.page-tabs a:hover {
+    color: rgb(51 65 85);
+}
+
+.page-tabs a.active {
+    color: rgb(var(--color-primary));
+    border-bottom-color: rgb(var(--color-primary));
+}
+
 /* ===== Dashboard cards ===== */
 .stat-grid {
     display: grid;

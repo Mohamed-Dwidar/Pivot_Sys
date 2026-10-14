@@ -6,10 +6,10 @@
 @php($area = request()->routeIs('employee.*') ? 'employee' : 'account')
 <div class="table-wrap mt-5">
     <table class="data-table" data-datatable data-url="{{ route($area . '.expenses.data') }}"
-        data-filters="{{ $filters }}" data-order='[[2, "desc"]]' data-empty="{{ $empty ?? 'No expenses here.' }}">
+        data-filters="{{ $filters }}" data-order='[[2, "desc"]]' data-empty="{{ $empty ?? 'No cash out here.' }}">
         <thead>
             <tr>
-                <th data-data="item_html">Expense</th>
+                <th data-data="item_html">Cash Out</th>
                 <th data-data="spent_at" data-name="spent_at" data-class="whitespace-nowrap">Date</th>
                 <th data-data="category">Category</th>
                 <th data-data="method">Method</th>

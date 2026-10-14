@@ -70,7 +70,7 @@ class IncomeCategoryService
     {
         $category = $this->findOne($accountId, $id);
         if ($category->payments_count > 0) {
-            return 'This income category is used by payments, deactivate it instead.';
+            return 'This income category is used by cash in, deactivate it instead.';
         }
         $category->delete();
         return null;

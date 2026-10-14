@@ -70,7 +70,7 @@ class ExpenseCategoryService
     {
         $category = $this->findOne($accountId, $id);
         if ($category->expenses_count > 0) {
-            return 'This expense category is used by expenses, deactivate it instead.';
+            return 'This expense category is used by cash out, deactivate it instead.';
         }
         $category->delete();
         return null;

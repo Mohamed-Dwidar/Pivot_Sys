@@ -1,6 +1,7 @@
 @php
     /*
-     * The account sidebar, by how often things are used (2026-10-13): Daily (direct links) | Management | Settings (one group,
+     * The account sidebar, by how often things are used (2026-10-13; Daily order + Payments = Cash In & Cash Out: 2026-10-14):
+     * Daily (direct links) | Management | Settings (one group,
      * collapsed unless the current page is in it — partials/menu opens a group with an active child).
      * Settings › General: withholding tax off → no Withholding Certificates item.
      */
@@ -20,16 +21,17 @@
             'active' => request()->routeIs('account.reservations.*'),
         ],
         [
+            'title' => 'Packages',
+            'icon' => 'package',
+            'url' => route('account.packages.index'),
+            'active' => request()->routeIs('account.packages.*'),
+        ],
+        [
             'title' => 'Payments',
             'icon' => 'wallet',
             'url' => route('account.payments.index'),
-            'active' => request()->routeIs('account.payments.*'),
-        ],
-        [
-            'title' => 'Expenses',
-            'icon' => 'banknote',
-            'url' => route('account.expenses.index'),
-            'active' => request()->routeIs('account.expenses.*'),
+            // Cash In + Cash Out (2026-10-14): the expense pages too (/expenses → the Cash Out tab)
+            'active' => request()->routeIs('account.payments.*', 'account.expenses.*'),
         ],
         [
             'title' => 'My Shift',
@@ -42,12 +44,6 @@
             'icon' => 'users',
             'url' => route('account.members.index'),
             'active' => request()->routeIs('account.members.*') && !request()->routeIs('account.members.create'),
-        ],
-        [
-            'title' => 'Packages',
-            'icon' => 'package',
-            'url' => route('account.packages.index'),
-            'active' => request()->routeIs('account.packages.*'),
         ],
 
         ['divider' => 'Management'],

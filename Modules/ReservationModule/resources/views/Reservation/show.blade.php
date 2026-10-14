@@ -2,9 +2,14 @@
 @extends(request()->ajax() ? 'layoutmodule::modal' : Auth::user()->userable->layout())
 
 @section('title')
-    {{-- one line: Reservation : space › (unit color) unit --}}
+    {{-- the member (name, phone under it) + the package badge (opens the package) --}}
     <span class="reservation-title">
-        <div class="text-lg font-medium">{{ $reservation->member?->name ?? '-' }}</div>
+        <div>
+            <div class="text-lg font-medium">{{ $reservation->member?->name ?? '-' }}</div>
+            @if ($reservation->member?->phone)
+                <div class="text-xs text-slate-500">{{ $reservation->member->phone }}</div>
+            @endif
+        </div>
         <div>
         @if ($reservation->package)
             <a href="{{ route($area . '.packages.show', $reservation->package_id) }}" data-modal class="badge badge-active mr-1" title="Package">
@@ -43,12 +48,6 @@
    <div class="form-section">&nbsp;</div>
 
     <dl class="detail-list">
-        {{-- "21-10-2026 | 11:00 AM" (the time only for a time based plan, see Reservation::formatAt) --}}
-        <div><dt>Start</dt><dd>{{ $reservation->formatAt($reservation->start_at) }}</dd></div>
-        <div><dt>End</dt><dd>{{ $reservation->is_continue ? 'Continues' : $reservation->formatAt($reservation->end_at) }}</dd></div>
-
-        <div><dt>Member Phone</dt><dd>{{ $reservation->member?->phone ?? '-' }}</dd></div>
-
         <div><dt>Number of People</dt><dd>{{ $reservation->number_of_peoples }}</dd></div>
         <div><dt>Auto Renew</dt><dd>
             {{-- the reservation column is is_continue (its subscription type is auto renew) --}}

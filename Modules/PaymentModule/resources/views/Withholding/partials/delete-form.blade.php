@@ -1,6 +1,6 @@
 {{-- its payments are free again (they can be attached to another certificate) --}}
 <form method="POST" action="{{ route('account.withholding-certificates.destroy', $certificate->id) }}" class="{{ !empty($menu) ? '' : 'inline-form' }}" data-ajax data-row="{{ $certificate->id }}"
-    data-confirm="Certificate &quot;{{ $certificate->certificate_no }}&quot; will be deleted, its withholding payments stay (without a certificate)."
+    data-confirm="Certificate &quot;{{ $certificate->certificate_no }}&quot; will be deleted, its withholding entries stay (without a certificate)."
     data-confirm-title="Delete this certificate?"
     data-confirm-button="Delete"
     data-confirm-variant="danger">

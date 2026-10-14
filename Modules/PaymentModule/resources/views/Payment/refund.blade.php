@@ -2,7 +2,7 @@
 @extends(request()->ajax() ? 'layoutmodule::modal' : Auth::user()->userable->layout())
 
 @section('title')
-    Refund Payment #{{ $payment->payment_no }}
+    Refund Cash In #{{ $payment->payment_no }}
 @endsection
 
 @section('modal-size', 'lg')
@@ -25,7 +25,7 @@
             @include('layoutmodule::partials.field', ['name' => 'amount', 'label' => 'Amount', 'type' => 'number', 'required' => true,
                 'value' => max(0, min($refundable, $payment->amount)) ?: null,
                 'attrs' => 'min="0.01" step="0.01" max="' . max(0, $refundable) . '"',
-                'hint' => 'Up to ' . number_format(max(0, $refundable), 2) . ' (this payment, less its earlier refunds).'])
+                'hint' => 'Up to ' . number_format(max(0, $refundable), 2) . ' (this cash in, less its earlier refunds).'])
             @include('layoutmodule::partials.field', ['name' => 'paid_at', 'label' => 'Date', 'type' => 'date', 'required' => true, 'value' => today()->format('Y-m-d')])
             @include('layoutmodule::partials.field', ['name' => 'payment_method_id', 'label' => 'Paid Back By', 'type' => 'select', 'required' => true, 'searchable' => true,
                 'options' => ['' => '- Select -'] + $methods, 'value' => $payment->payment_method_id ?: null])

@@ -10,7 +10,7 @@
 
 @section('content')
     <div class="mb-4">
-        You have {{ $period['summary']['count'] }} payments not closed since {{ $period['since']?->format('d-m-Y h:i A') ?? '-' }}
+        You have {{ $period['summary']['count'] }} cash in {{ Str::plural('entry', $period['summary']['count']) }} not closed since {{ $period['since']?->format('d-m-Y h:i A') ?? '-' }}
         ({{ number_format($period['summary']['cash_total'], 2) }} collected). Close your shift when you finish.
     </div>
 

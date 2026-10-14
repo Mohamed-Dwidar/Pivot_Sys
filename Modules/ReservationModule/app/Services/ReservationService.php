@@ -179,7 +179,7 @@ class ReservationService
     {
         $reservation = $this->findOne($accountId, $id);
         if ($reservation->payments()->exists()) {
-            return 'This reservation has payments, it can not be deleted. Refund or delete its payments first, or move it into a package (its payments move with it).';
+            return 'This reservation has cash in, it can not be deleted. Refund or delete its cash in first, or move it into a package (its cash in moves with it).';
         }
 
         DB::transaction(function () use ($reservation) {

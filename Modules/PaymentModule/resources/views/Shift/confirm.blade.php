@@ -17,7 +17,7 @@
 
 @section('content')
     @if ($period['payments']->isEmpty() && $period['expenses']->isEmpty())
-        <div class="text-slate-500">No payments or expenses since the last closing, nothing to close.</div>
+        <div class="text-slate-500">No cash in or cash out since the last closing, nothing to close.</div>
     @else
         <div class="mb-4">
             {{ $period['summary']['count'] }} payments and {{ $period['summary']['expenses']['count'] }} expenses since {{ $period['since']?->format('d-m-Y h:i A') }}.

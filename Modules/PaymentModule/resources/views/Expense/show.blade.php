@@ -2,7 +2,7 @@
 @extends(request()->ajax() ? 'layoutmodule::modal' : Auth::user()->userable->layout())
 
 @section('title')
-    Expense #{{ $expense->expense_no }}
+    Cash Out #{{ $expense->expense_no }}
 @endsection
 
 @section('modal-size', 'lg')
@@ -42,7 +42,7 @@
 
     @unless (request()->ajax())
         <div class="form-actions">
-            <a href="{{ route($area . '.expenses.index') }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> Back to Expenses</a>
+            <a href="{{ route($area . '.payments.index', ['type' => 'out']) }}" class="btn btn-secondary"><i data-lucide="arrow-left"></i> Back to Cash Out</a>
         </div>
     @endunless
 @endsection

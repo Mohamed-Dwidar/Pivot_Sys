@@ -1,7 +1,7 @@
 @extends(request()->ajax() ? 'layoutmodule::modal' : Auth::user()->userable->layout())
 
 @section('title')
-    Edit Payment #{{ $payment->payment_no }}
+    Edit {{ $payment->type_label }} #{{ $payment->payment_no }}
 @endsection
 
 @section('modal-size', 'lg')
@@ -10,7 +10,7 @@
      in a closed shift: a reason is required (logged on the shift, its totals recalculated) --}}
 @section('content')
     <form method="POST" action="{{ route('account.payments.update', $payment->id) }}" data-ajax data-row="{{ $payment->id }}"
-        data-confirm="The payment will be changed, the paid / remaining of what it pays are calculated again."
+        data-confirm="{{ $payment->type_label }} #{{ $payment->payment_no }} will be changed, the paid / remaining of what it pays are calculated again."
         data-confirm-title="Save the changes?"
         data-confirm-button="Save"
         data-confirm-variant="success">
@@ -20,7 +20,7 @@
         @include('paymentmodule::Payment.partials.payment-summary')
         @include('paymentmodule::Payment.partials.closed-shift-note')
 
-        <div class="form-section mt-6">Payment</div>
+        <div class="form-section mt-6">{{ $payment->type_label }}</div>
         <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
             @include('layoutmodule::partials.field', ['name' => 'amount', 'label' => 'Amount', 'type' => 'number', 'required' => true, 'value' => $payment->amount,
                 'attrs' => 'min="0.01" step="0.01" max="99999999"'])

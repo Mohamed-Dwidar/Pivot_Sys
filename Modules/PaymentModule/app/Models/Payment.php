@@ -23,8 +23,9 @@ class Payment extends Model
 {
     use SafeMorphHelper, SoftDeletes;
 
+    // the UI names (2026-10-14): money in = "Cash In" (+ withholding), money out = refunds (and expenses: "Cash Out")
     const TYPES = [
-        'payment' => 'Payment',
+        'payment' => 'Cash In',
         'refund' => 'Refund',
         'withholding' => 'Withholding',
     ];
@@ -179,7 +180,8 @@ class Payment extends Model
     }
 
     /**
-     * The list filters: search, for, method, dates (+ the older keys source / type / payment_method_id / income_category_id).
+     * The list filters: search, for, method, dates, direction (in = no refunds) (+ the older keys source / type / payment_method_id /
+     * income_category_id).
      * for = reservation | package | income (all other income) | category-{id} (one income category);
      * method = a payment method id | refund | withholding (the two types without their own method).
      */
@@ -209,6 +211,11 @@ class Payment extends Model
             $query->income();
         } elseif (isset(self::SOURCES[$for])) {
             $query->where('payable_type', (new (self::SOURCES[$for]))->getMorphClass());
+        }
+
+        // the Cash In tab (2026-10-14): no refunds (they are Cash Out)
+        if (($filters['direction'] ?? '') === 'in') {
+            $query->where('type', '!=', 'refund');
         }
 
         $method = (string) ($filters['method'] ?? '');

@@ -294,7 +294,37 @@ Steps 1–6 go into `to_run`.
 9. Package / reservation hooks (`recalculate` → `refresh`, `movePayments`)
 10. Sidebar items (shared layout — confirm) + import SQL + checks
 
-### Payments list (user, 2026-10-13 — simplified; built)
+### Cash In / Cash Out — the Payments page (user, 2026-10-14; built)
+UI names only (labels, titles, buttons, popups, PDFs, docs); code, tables, routes and URLs keep payment / expense.
+- **Names:** money in (payments, withholding) = **Cash In** / وارد; money out (expenses, refunds) = **Cash Out** / منصرف. Type labels
+  (`Payment::TYPES`): Cash In | Refund | Withholding; expenses = Cash Out. Titles "Cash In #N" / "Refund #N" / "Withholding #N" /
+  "Cash Out #N"; add buttons "+ Cash In" / "+ Cash Out"; receipt PDF "Cash In Receipt" / "إيصال استلام نقدية" (a refund: "Refund Receipt" /
+  "إيصال رد نقدية"; withholding unchanged); reservation / package views: block "Cash In", button "+ Cash In"; row menus "Add Cash In";
+  package statement PDF section "Cash In". Shift close popup / My Shift / shift popup / Daily Summary: columns Cash In | Refunds |
+  Cash Out | Net, sum rows Cash In, Refunds (−), Cash Out (−), Net to hand over (the "Total collected" row is gone), withholding apart;
+  My Shift / shift popup lists "Cash In and Refunds" + "Cash Out". Settings lists: Payment Methods / Income Categories count column
+  "Cash In", Expense Categories "Cash Out"; the settings page names (Payment Methods, Income / Expense Categories) are unchanged.
+- **One sidebar item:** Daily = Dashboard, Reservations, Packages, Payments, My Shift, Members (account + employee); no Expenses item;
+  Payments is active on the expense pages too.
+- **Page tabs** (links `?type=`, `CashListService::TYPES`, `.page-tabs`): **All** (default) | **Cash In** | **Cash Out**; the data stays
+  in `payments` / `expenses`. Buttons "+ Cash In" / "+ Cash Out" on every tab. Each tab keeps the list rules: date tabs Today (default) |
+  This Month | All + ONE date field (account); employees: their own rows, ONE day, no date tabs (server enforced).
+  - **Cash In** = the payments list above WITHOUT refunds (`Payment::scopeFilter` `direction=in`, sent in the table's data URL — not a
+    form field: Clear resets hidden fields and counts them); Method keeps Withholding, no Refunds option; summary "Cash In: …".
+  - **Cash Out** = expenses + refunds (user: refunds here, not on Cash In); filters search | date | Category (expense categories +
+    Refunds) | Method | Clear; summary "Cash Out: <out> (Refunds · Paid out) — per method".
+  - **All** = both, newest first (date, then added time); in green +, out red − (refunds + expenses; an imported negative expense =
+    green "Return"). Columns Date (time) | Type (Cash In / Refund / Withholding / Cash Out + no.) | Member / Category | For / Item |
+    Method | Amount | By (account only) | row menu (the payment's / expense's own). Filters search | date | Method | Clear. Summary
+    "In · Out · Net — per method net · Withholding" (withholding apart, not in In — user).
+  - All / Cash Out: `PaymentActions::cashData()` (route `{area}.payments.cash-data?direction=all|out`) + `CashListService`: ONE UNION ALL
+    of the payments and expenses queries (each with its own `filter()` / `tab()` / `collectedBy()`), count / order / page on it, then the
+    page's models in two queries; rows `row-payment-{id}` / `row-expense-{id}`, so an edit / delete answers `reload` (both update
+    answers now send `reload: true`; on the Cash In tab the row still updates in place). ~0.06–0.85 s on the real data (15,857 rows; All tab "All" dates the slowest).
+- **Old URLs:** `/account|employee/expenses` → `payments?type=out` (`ExpenseActions::index()`); the expense routes / popups stay;
+  `Expense/index` view unused (kept). `{area}.expenses.data` still feeds My Shift's Cash Out list.
+
+### Payments list (user, 2026-10-13 — simplified; built; = the Cash In tab since 2026-10-14)
 - **Tabs:** Today (default, `paid_at` = today) | This Month | All (`Payment::TABS`, `scopeTab`).
 - **Filters, one row:** search (no., reference, member name or phone) | **date** | **For** | **Method** | Clear.
   - Date = ONE date field (shared, 2026-10-13): `layoutmodule::partials.date-range-filter` right after search — flatpickr 4.6.13 range mode (MIT,
@@ -397,11 +427,13 @@ Steps 1–6 go into `to_run`.
   totals recalculated, "Edited after closing"). Files: `Models/{Expense, ExpenseCategory}`, `Services/{ExpenseService,
   ExpenseCategoryService}`, `Concerns/ExpenseActions` + `{Account, Employee}/Expense*ModuleController`, `Requests/ExpenseRequest`,
   `views/Expense/*`, `views/ExpenseCategory/*`; routes `{area}.expenses.*`, `account.expenses.{edit, update, delete, destroy}`,
-  `account.expense-categories.*`; sidebar Expenses (Daily, both areas), Settings › Expense Categories.
+  `account.expense-categories.*`; sidebar Expenses (Daily, both areas — since 2026-10-14 the Payments page tab Cash Out, see
+  "Cash In / Cash Out"), Settings › Expense Categories.
 - **Totals:** per method payments − refunds − expenses = **net to hand over** (`ShiftClosingService::summary()`: methods[…]['expenses'],
   `expenses` {count, total}, `expenses_total`, `net_total`, `no_method_expenses`); `shift_closings.cash_total` stays "collected"
   (payments − refunds), `expenses_total` new, net = `ShiftClosing::net_total`. Close popup / My Shift / shift popup / Daily Summary:
-  Total payments, Refunds (−), Total collected, Expenses (−), Net to hand over, withholding apart; My Shift lists its expenses
+  Total payments, Refunds (−), Total collected, Expenses (−), Net to hand over, withholding apart (since 2026-10-14: Cash In,
+  Refunds, Cash Out, Net to hand over); My Shift lists its expenses
   (`Expense/partials/list-table`, `?shift=open`); closing also sends the newest expense id shown (`up_to_expense_id`).
 - **Imported (`dwidar_pivot_api`):** `types` → `expense_categories` (ids kept; 16 "Building Expenses", 40 "Chamber of Commerce"
   translated — the only Arabic `name_en`); `expenses` → `expenses` (ids kept, type_id → category, method 5 "إشعار خصم" → 1 Cash (user

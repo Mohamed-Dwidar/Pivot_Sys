@@ -11,9 +11,10 @@
 @endphp
 
 <div class="form-section mt-8 payments-block__head">
-    <span>Payments</span>
+    {{-- "Cash In" (2026-10-14): its payments, withholding and refunds --}}
+    <span>Cash In</span>
     @if ($payable->canTakePayments())
-        <a href="{{ route($area . '.payments.create', ['payable' => $kind, 'payable_id' => $payable->getKey()]) }}" data-modal class="btn btn-primary btn-sm"><i data-lucide="plus"></i> Add Payment</a>
+        <a href="{{ route($area . '.payments.create', ['payable' => $kind, 'payable_id' => $payable->getKey()]) }}" data-modal class="btn btn-primary btn-sm"><i data-lucide="plus"></i> Cash In</a>
     @endif
 </div>
 
@@ -67,6 +68,6 @@
             </table>
         </div>
     @else
-        <div class="mt-3 text-slate-500">No payments yet.</div>
+        <div class="mt-3 text-slate-500">No cash in yet.</div>
     @endif
 @endif

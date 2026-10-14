@@ -146,7 +146,7 @@ class PaymentService
     {
         $type = $data['type'] ?? 'payment';
         if (!in_array($type, ['payment', 'withholding'], true)) {
-            throw ValidationException::withMessages(['type' => 'Only a payment or a withholding can be added here.']);
+            throw ValidationException::withMessages(['type' => 'Only a cash in or a withholding can be added here.']);
         }
         if ($type === 'withholding' && !self::withholdingOn($accountId)) {
             throw ValidationException::withMessages(['type' => 'Withholding tax is turned off (Settings › General).']);
@@ -154,7 +154,7 @@ class PaymentService
 
         $payable = !empty($data['payable']) ? $this->findPayable($accountId, $data['payable'], $data['payable_id'] ?? 0) : null;
         if ($payable && !$payable->canTakePayments()) {
-            throw ValidationException::withMessages(['payable_id' => 'This reservation is inside a package, add the payment to the package.']);
+            throw ValidationException::withMessages(['payable_id' => 'This reservation is inside a package, add the cash in to the package.']);
         }
         if (!$payable) {
             $this->assertCategory($accountId, $data['income_category_id'] ?? 0);

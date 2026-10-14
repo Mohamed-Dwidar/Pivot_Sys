@@ -5,7 +5,7 @@
 --}}
 @if (!empty($closedShift))
     <div class="mt-4 text-warning">
-        This payment is in the closed shift of {{ $closedShift->user?->userable?->displayName() ?? '-' }}
+        This {{ !empty($refund) ? 'cash in' : strtolower($payment->type_label ?? 'entry') }} is in the closed shift of {{ $closedShift->user?->userable?->displayName() ?? '-' }}
         (closed {{ $closedShift->closed_at?->format('d-m-Y h:i A') }}).
         @if (!empty($refund))
             The shift gets a log entry with your reason; its totals don't change.

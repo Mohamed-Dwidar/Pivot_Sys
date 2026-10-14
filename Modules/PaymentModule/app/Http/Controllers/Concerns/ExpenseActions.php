@@ -17,7 +17,8 @@ use Yajra\DataTables\Facades\DataTables;
 /**
  * Expenses actions shared by the account and the employee controllers (docs/payments-plan.md "Expenses"): both record and view
  * expenses (an expense joins the recorder's open shift); edit / delete = the account only (ExpenseAccountModuleController).
- * The list = the payments list rules: the account sees all (tabs Today | This Month | All + date range); an employee sees only
+ * No page of its own since 2026-10-14 (index() → the Payments page, tab Cash Out = expenses + refunds); data() = the expenses
+ * table of My Shift (shift=open) and any expenses list. The list = the payments list rules: the account sees all (tabs Today | This Month | All + date range); an employee sees only
  * their own, ONE day at a time (today by default, no tabs; forced on the server). shift=open (My Shift): the login's open
  * shift only. The controller gives area(): "account" | "employee" (route names {area}.expenses.*).
  */
@@ -61,15 +62,10 @@ trait ExpenseActions
         return route($this->area() . '.expenses.' . $name, $parameters);
     }
 
-    // the list page, the rows come from data() (DataTables)
+    // the old Expenses page (2026-10-14): expenses are listed on the Payments page, tab Cash Out (with the refunds)
     public function index()
     {
-        $accountId = $this->accountId();
-        $activeOnly = $this->area() === 'employee'; // employees: only the active categories / methods
-        return view('paymentmodule::Expense.index', [
-            'categories' => $this->categoryService->filterOptions($accountId, $activeOnly),
-            'methods' => $this->methodService->filterOptions($accountId, $activeOnly),
-        ]);
+        return redirect()->route($this->area() . '.payments.index', ['type' => 'out']);
     }
 
     // the list tab: today (default, also '') | month | all; employees have no tabs (one day: listFilters())
@@ -169,7 +165,7 @@ trait ExpenseActions
         $expense = $this->expenseService->create($this->accountId(), $request->validated(), Auth::user());
 
         return response()->json([
-            'message' => 'Expense #' . $expense->expense_no . ' has been added to your shift.',
+            'message' => 'Cash Out #' . $expense->expense_no . ' has been added to your shift.',
             'reload' => true,
             'redirect' => $this->route('show', $expense->id),
         ]);

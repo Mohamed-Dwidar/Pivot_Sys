@@ -182,7 +182,7 @@
     @endif
 
     {{-- 6. payments (refunds minus, withholding certificates apart; who collected is not shown) --}}
-    <div class="statement-section">Payments</div>
+    <div class="statement-section">Cash In</div>
     <table class="statement-table">
         <thead>
             <tr><th>Receipt No.</th><th>Date</th><th>Method</th><th class="num">Amount</th></tr>
@@ -204,7 +204,7 @@
                     <td class="num {{ $payment->type === 'refund' ? 'statement-owed' : '' }}">{{ $money($payment->signed_amount) }}</td>
                 </tr>
             @empty
-                <tr><td colspan="4" class="receipt-muted">No payments yet.</td></tr>
+                <tr><td colspan="4" class="receipt-muted">No cash in yet.</td></tr>
             @endforelse
         </tbody>
         <tfoot>

@@ -19,7 +19,7 @@
     <input type="hidden" name="back_to_shift" value="1">
 @endif
 
-<div class="form-section">Payment For</div>
+<div class="form-section">Cash In For</div>
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
     @include('layoutmodule::partials.field', ['name' => 'payable', 'label' => 'For', 'type' => 'select', 'required' => true,
         'options' => ['reservation' => 'Reservation', 'package' => 'Package', '' => 'Other Income'], 'value' => $kind])
@@ -41,12 +41,12 @@
         'hint' => empty($categories) ? 'No income categories yet, add them from Settings > Income Categories.' : null])
 </div>
 
-<div class="form-section mt-8">Payment</div>
+<div class="form-section mt-8">Cash In</div>
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
     {{-- Settings › General "Withholding tax" off: payments only --}}
     @if (\Modules\PaymentModule\app\Services\PaymentService::withholdingOn())
         @include('layoutmodule::partials.field', ['name' => 'type', 'label' => 'Type', 'type' => 'select', 'required' => true,
-            'options' => ['payment' => 'Payment', 'withholding' => 'Withholding'], 'value' => $payment->type,
+            'options' => ['payment' => 'Cash In', 'withholding' => 'Withholding'], 'value' => $payment->type,
             'hint' => 'Withholding: tax withheld by the customer (a certificate instead of money).'])
     @else
         <input type="hidden" name="type" value="payment">

@@ -75,7 +75,7 @@ class PaymentMethodService
     {
         $method = $this->findOne($accountId, $id);
         if ($method->payments_count > 0) {
-            return 'This payment method is used by payments, deactivate it instead.';
+            return 'This payment method is used by cash in, deactivate it instead.';
         }
         $method->delete();
         return null;

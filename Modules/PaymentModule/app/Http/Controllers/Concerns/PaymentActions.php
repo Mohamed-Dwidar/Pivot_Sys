@@ -9,6 +9,8 @@ use Modules\MemberModule\app\Services\MemberService;
 use Modules\PaymentModule\app\Http\Requests\PaymentRefundRequest;
 use Modules\PaymentModule\app\Http\Requests\PaymentRequest;
 use Modules\PaymentModule\app\Models\Payment;
+use Modules\PaymentModule\app\Services\CashListService;
+use Modules\PaymentModule\app\Services\ExpenseCategoryService;
 use Modules\PaymentModule\app\Services\IncomeCategoryService;
 use Modules\PaymentModule\app\Services\PaymentMethodService;
 use Modules\PaymentModule\app\Services\PaymentService;
@@ -24,6 +26,8 @@ use Yajra\DataTables\Facades\DataTables;
  * The controller gives area(): "account" | "employee" (route names {area}.payments.*), the views read it from the route.
  * show / create open in the popup (ajax), store answers JSON (custom.js ajax forms), receipt() is the PDF,
  * payables() fills the reservation / package drop menu of the form (custom.js [data-options-url]).
+ * The page (2026-10-14, docs/payments-plan.md "Cash In / Cash Out"): tabs All (default) | Cash In | Cash Out (?type=);
+ * Cash In = this payments list without refunds (table()), All / Cash Out = payments + expenses together (cashData()).
  */
 trait PaymentActions
 {
@@ -31,15 +35,20 @@ trait PaymentActions
     private PaymentMethodService $methodService;
     private IncomeCategoryService $categoryService;
     private MemberService $memberService;
+    private CashListService $cashListService;
+    private ExpenseCategoryService $expenseCategoryService;
 
     abstract protected function area(): string;
 
-    public function __construct(PaymentService $paymentService, PaymentMethodService $methodService, IncomeCategoryService $categoryService, MemberService $memberService)
+    public function __construct(PaymentService $paymentService, PaymentMethodService $methodService, IncomeCategoryService $categoryService, MemberService $memberService,
+        CashListService $cashListService, ExpenseCategoryService $expenseCategoryService)
     {
         $this->paymentService = $paymentService;
         $this->methodService = $methodService;
         $this->categoryService = $categoryService;
         $this->memberService = $memberService;
+        $this->cashListService = $cashListService;
+        $this->expenseCategoryService = $expenseCategoryService;
     }
 
     // the account itself, or the account of the logged in employee
@@ -68,15 +77,19 @@ trait PaymentActions
         return route($this->area() . '.payments.' . $name, $parameters);
     }
 
-    // the list page, the rows come from data() (DataTables)
-    public function index()
+    // the page: ?type= all (default) | in | out; the rows come from data() (Cash In) / cashData() (All, Cash Out)
+    public function index(Request $request)
     {
         $accountId = $this->accountId();
+        $type = isset(CashListService::TYPES[$request->input('type')]) ? $request->input('type') : 'all';
         $activeOnly = $this->area() === 'employee'; // employees: only the active methods / categories
         return view('paymentmodule::Payment.index', [
+            'type' => $type,
             'methods' => $this->methodService->filterOptions($accountId, $activeOnly),
-            // the "For" drop menu: Reservations, Packages, then the "Other income" group (each category)
+            // Cash In: the "For" drop menu: Reservations, Packages, then the "Other income" group (each category)
             'categories' => $this->categoryService->filterOptions($accountId, $activeOnly),
+            // Cash Out: the category filter (+ Refunds)
+            'expenseCategories' => $type === 'out' ? $this->expenseCategoryService->filterOptions($accountId, $activeOnly) : [],
         ]);
     }
 
@@ -99,7 +112,8 @@ trait PaymentActions
             $filters['date_from'] = $filters['date_to'] = preg_match('/^\d{4}-\d{2}-\d{2}$/', $day) && strtotime($day) ? $day : today()->toDateString();
         }
 
-        return ['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['for', 'method', 'date_from', 'date_to']);
+        // direction=in: the Cash In tab (no refunds, they are Cash Out)
+        return ['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['for', 'method', 'date_from', 'date_to', 'direction']);
     }
 
     // DataTables server side: tab + search + for / method / dates filters, + the summary line of those rows
@@ -159,6 +173,62 @@ trait PaymentActions
         return $table->with('html', ['payments-summary' => view('paymentmodule::Payment.partials.list-summary', compact('summary'))->render()]);
     }
 
+    /**
+     * The All / Cash Out tabs (DataTables server side, direction=all | out): payments and expenses together, newest first
+     * (CashListService, one UNION query; their models loaded in two queries). Columns: Date (time) | Type | Member or Category |
+     * For / Item | Method | Amount (in green +, out red −) | By (account only) | row menu (the payment's / expense's own).
+     * Same rules as the lists: tabs Today | This Month | All + one date field; employees: their own rows, ONE day, no tabs.
+     */
+    public function cashData(Request $request)
+    {
+        $input = ['search' => $request->input('search.value')] + $request->all();
+        $direction = ($input['direction'] ?? '') === 'out' ? 'out' : 'all';
+        $tab = $this->tab($input);
+        $filters = $this->listFilters($input) + Arr::only($input, $direction === 'out' ? ['category'] : []);
+        $accountId = $this->accountId();
+
+        $query = $this->cashListService->query($accountId, $direction, $filters, $tab, $this->collectorId());
+        $total = $this->cashListService->query($accountId, $direction, [], 'all', $this->collectorId())->count();
+        $filtered = (clone $query)->count();
+
+        $order = $request->input('order.0', []);
+        $column = $request->input('columns.' . ($order['column'] ?? '') . '.name', '');
+        $rows = $this->cashListService->order(clone $query, (string) $column, (string) ($order['dir'] ?? 'desc'))
+            ->offset(max(0, (int) $request->input('start', 0)))->limit(min(500, max(1, (int) $request->input('length', 25))))->get();
+
+        $data = array_map(fn ($item) => $this->cashRow($item['kind'], $item['model']), $this->cashListService->load($rows));
+        $summary = $this->cashListService->summary($query);
+
+        return response()->json([
+            'draw' => (int) $request->input('draw'),
+            'recordsTotal' => $total,
+            'recordsFiltered' => $filtered,
+            'data' => $data,
+            'html' => ['cash-summary' => view('paymentmodule::Payment.partials.cash-summary', compact('summary', 'direction'))->render()],
+        ]);
+    }
+
+    // one row of the All / Cash Out list (the cells: Payment/partials/cash-cell)
+    private function cashRow(string $kind, $model): array
+    {
+        $cell = fn ($name) => view('paymentmodule::Payment.partials.cash-cell', ['cell' => $name, 'kind' => $kind, 'item' => $model])->render();
+
+        return [
+            'DT_RowId' => 'row-' . $kind . '-' . $model->id,
+            'at_date' => e(($kind === 'payment' ? $model->paid_at : $model->spent_at)?->format(Reservation::DATE_FORMAT) ?? '-')
+                . '<div class="text-xs text-slate-500">' . e($model->created_at?->format(Reservation::TIME_FORMAT)) . '</div>',
+            'type' => $cell('type'),
+            'party' => $cell('party'),
+            'what' => $cell('what'),
+            'method' => e($kind === 'payment' ? ($model->paymentMethod?->name ?? '-') : $model->method_name),
+            'amount' => $cell('amount'),
+            'by' => e($model->creatable?->userable?->displayName() ?? '-'),
+            'actions' => $kind === 'payment'
+                ? view('paymentmodule::Payment.partials.row-actions', ['payment' => $model])->render()
+                : view('paymentmodule::Expense.partials.row-actions', ['expense' => $model])->render(),
+        ];
+    }
+
     // the updated row with the list filters (list[...]), null when it does not match them any more (or deleted)
     private function row(Request $request, $id)
     {
@@ -213,13 +283,13 @@ trait PaymentActions
         // a missed payment added from "My Shift": that page again (its open shift with the new payment)
         if ($request->boolean('back_to_shift')) {
             return response()->json([
-                'message' => 'Payment #' . $payment->payment_no . ' has been added to your shift.',
+                'message' => 'Cash In #' . $payment->payment_no . ' has been added to your shift.',
                 'redirect' => route($this->area() . '.shift.index'),
             ]);
         }
 
         return response()->json([
-            'message' => 'Payment #' . $payment->payment_no . ' has been added successfully.',
+            'message' => 'Cash In #' . $payment->payment_no . ' has been added successfully.',
             'reload' => true,
             'modal' => $request->boolean('back_to_payable') ? $payableUrl : null,
             'redirect' => $payableUrl ?? $this->route('show', $payment->id),
@@ -242,13 +312,19 @@ trait PaymentActions
 
         // the Cairo font of config/pdf.php when its files are there, else mpdf's DejaVu Sans (Arabic too)
         $config = is_file(config('pdf.font_path') . 'Cairo-Regular.ttf') ? [] : ['default_font' => 'dejavusans'];
-        $config += ['format' => 'A5'];
+        $config += ['format' => 'A5',
+            // the Arabic title / names: shaped and right to left (like the package statement)
+            'instanceConfigurator' => function ($mpdf) {
+                $mpdf->autoScriptToLang = true;
+                $mpdf->autoLangToFont = true;
+            },
+        ];
 
         // a normal response (the package's stream() echoes it itself, outside the Laravel response)
         $pdf = Pdf::loadView('paymentmodule::Payment.receipt-pdf', compact('payment', 'payableName', 'account'), [], $config)->output();
         return response($pdf, 200, [
             'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="receipt-' . $payment->payment_no . '.pdf"',
+            'Content-Disposition' => 'inline; filename="cash-in-receipt-' . $payment->payment_no . '.pdf"',
         ]);
     }
 

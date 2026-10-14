@@ -1,5 +1,5 @@
 {{--
-    Payment receipt (PDF, mpdf: PaymentActions::receipt()). Not an ETA e-receipt (phase 2 = invoices / receipts).
+    Cash In receipt (PDF, mpdf: PaymentActions::receipt()). Not an ETA e-receipt (phase 2 = invoices / receipts).
     mpdf can't read custom.css (CSS variables), its styles are in public/assets/css/pdf.css (file path, no inline CSS).
 --}}
 @php($dateFormat = \Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT)
@@ -7,7 +7,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Receipt #{{ $payment->payment_no }}</title>
+    <title>{{ $payment->type_label }} Receipt #{{ $payment->payment_no }}</title>
     <link rel="stylesheet" href="{{ public_path('assets/css/pdf.css') }}">
 </head>
 <body>
@@ -22,7 +22,13 @@
                 @if ($account?->address)<div class="receipt-muted">{{ $account->address }}</div>@endif
             </td>
             <td class="receipt-title-cell">
-                <div class="receipt-title">{{ $payment->type === 'withholding' ? 'Withholding Receipt' : 'Payment Receipt' }}</div>
+                @if ($payment->type === 'withholding')
+                    <div class="receipt-title">Withholding Receipt</div>
+                @else
+                    {{-- 2026-10-14: "Cash In Receipt" / "إيصال استلام نقدية" --}}
+                    <div class="receipt-title">{{ $payment->type === 'refund' ? 'Refund Receipt' : 'Cash In Receipt' }}</div>
+                    <div class="statement-title-ar" dir="rtl">{{ $payment->type === 'refund' ? 'إيصال رد نقدية' : 'إيصال استلام نقدية' }}</div>
+                @endif
                 <div class="receipt-no">No. {{ $payment->payment_no }}</div>
                 <div class="receipt-muted">{{ $payment->paid_at?->format($dateFormat) }}</div>
             </td>

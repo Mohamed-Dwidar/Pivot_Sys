@@ -35,8 +35,10 @@ class ExpenseAccountModuleController extends Controller
         $expense = $this->expenseService->update($this->accountId(), $id, $request->validated(), Auth::user());
 
         return response()->json([
-            'message' => 'Expense #' . $expense->expense_no . ' has been updated successfully.',
+            'message' => 'Cash Out #' . $expense->expense_no . ' has been updated successfully.',
             'row' => $this->row($request, $id),
+            // a list without this row id (Payments All / Cash Out: row-expense-{id}) reloads
+            'reload' => true,
             'modal' => route('account.expenses.show', $id),
             'redirect' => route('account.expenses.show', $id),
         ]);
@@ -55,7 +57,7 @@ class ExpenseAccountModuleController extends Controller
         $expense = $this->expenseService->delete($this->accountId(), $id, $request->input('delete_reason'), Auth::user());
 
         return response()->json([
-            'message' => 'Expense #' . $expense->expense_no . ' has been deleted.',
+            'message' => 'Cash Out #' . $expense->expense_no . ' has been deleted.',
             'row' => null,
             'reload' => true,
             'redirect' => route('account.expenses.index'),

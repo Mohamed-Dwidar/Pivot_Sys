@@ -7,7 +7,7 @@
 @php($timeFormat = \Modules\ReservationModule\app\Models\Reservation::TIME_FORMAT)
 
 @if (isset($closing) && $closing->count > $payments->count())
-    <div class="mb-2 text-xs text-slate-500">The newest {{ $payments->count() }} of {{ number_format($closing->count) }} payments.</div>
+    <div class="mb-2 text-xs text-slate-500">The newest {{ $payments->count() }} of {{ number_format($closing->count) }} cash in entries.</div>
 @endif
 <div class="table-wrap">
     <table class="data-table">
@@ -25,7 +25,7 @@
                     <td>@include('paymentmodule::Payment.partials.row-actions')</td>
                 </tr>
             @empty
-                <tr><td colspan="6" class="empty-state">No payments in this shift.</td></tr>
+                <tr><td colspan="6" class="empty-state">No cash in in this shift.</td></tr>
             @endforelse
         </tbody>
     </table>

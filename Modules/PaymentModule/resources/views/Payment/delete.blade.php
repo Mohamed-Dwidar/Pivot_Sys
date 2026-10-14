@@ -1,14 +1,14 @@
 @extends(request()->ajax() ? 'layoutmodule::modal' : Auth::user()->userable->layout())
 
 @section('title')
-    Delete Payment #{{ $payment->payment_no }}
+    Delete {{ $payment->type_label }} #{{ $payment->payment_no }}
 @endsection
 
 {{-- the owner only: soft delete, the reason + who deleted it are kept (audit report); in a closed shift: logged on it, its totals recalculated --}}
 @section('content')
     <form method="POST" action="{{ route('account.payments.destroy', $payment->id) }}" data-ajax data-row="{{ $payment->id }}"
-        data-confirm="Payment #{{ $payment->payment_no }} will be deleted, the paid / remaining of what it pays are calculated again."
-        data-confirm-title="Delete this payment?"
+        data-confirm="{{ $payment->type_label }} #{{ $payment->payment_no }} will be deleted, the paid / remaining of what it pays are calculated again."
+        data-confirm-title="Delete it?"
         data-confirm-button="Delete"
         data-confirm-variant="danger">
         @csrf
@@ -19,7 +19,7 @@
 
         <div class="mt-6">
             @include('layoutmodule::partials.field', ['name' => 'delete_reason', 'label' => 'Reason', 'type' => 'textarea', 'required' => true,
-                'attrs' => 'maxlength="255"', 'hint' => 'Why the payment is deleted (kept with it).'])
+                'attrs' => 'maxlength="255"', 'hint' => 'Why it is deleted (kept with it).'])
         </div>
 
         <div class="form-actions">

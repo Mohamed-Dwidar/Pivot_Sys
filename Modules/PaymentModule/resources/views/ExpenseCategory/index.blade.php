@@ -25,7 +25,7 @@
             <thead>
                 <tr>
                     <th data-data="name_html" data-name="name">Name</th>
-                    <th data-data="expenses_count" data-name="expenses_count">Expenses</th>
+                    <th data-data="expenses_count" data-name="expenses_count">Cash Out</th>
                     <th data-data="status" data-name="is_active">Status</th>
                     <th data-data="actions"></th>
                 </tr>

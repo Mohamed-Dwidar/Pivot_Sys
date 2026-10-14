@@ -16,7 +16,7 @@
 @section('content')
     <dl class="detail-list">
         <div><dt>Closed</dt><dd>{{ $closing->closed_at?->format('d-m-Y h:i A') }} · {{ $closing->closedBy?->userable?->displayName() ?? '-' }}</dd></div>
-        <div><dt>Payments From → To</dt><dd>@include('paymentmodule::Shift.partials.period')</dd></div>
+        <div><dt>From → To</dt><dd>@include('paymentmodule::Shift.partials.period')</dd></div>
         @if ($closing->notes)
             <div><dt>Notes</dt><dd>{{ $closing->notes }}</dd></div>
         @endif
@@ -28,11 +28,11 @@
     <div class="form-section mt-8">Totals</div>
     @include('paymentmodule::Shift.partials.totals', ['summary' => $closing->totals ?? []])
 
-    <div class="form-section mt-8">Payments</div>
+    <div class="form-section mt-8">Cash In and Refunds</div>
     @include('paymentmodule::Shift.partials.payments', ['payments' => $closing->payments])
 
     @if ($closing->expenses->isNotEmpty())
-        <div class="form-section mt-8">Expenses</div>
+        <div class="form-section mt-8">Cash Out</div>
         @include('paymentmodule::Shift.partials.expenses', ['expenses' => $closing->expenses])
     @endif
 @endsection

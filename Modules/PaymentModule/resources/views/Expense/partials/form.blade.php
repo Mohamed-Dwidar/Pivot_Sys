@@ -5,7 +5,7 @@
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
     @include('layoutmodule::partials.field', ['name' => 'expense_category_id', 'label' => 'Category', 'type' => 'select', 'required' => true, 'searchable' => true,
         'options' => ['' => '- Select -'] + $categories, 'value' => $expense->expense_category_id ?: null,
-        'hint' => empty($categories) ? 'No expense categories yet: the account adds them from Settings › Expense Categories.' : null])
+        'hint' => empty($categories) ? 'No categories yet: the account adds them from Settings › Expense Categories.' : null])
     <div class="md:col-span-2">
         @include('layoutmodule::partials.field', ['name' => 'item', 'label' => 'Item', 'required' => true, 'value' => $expense->item, 'attrs' => 'maxlength="255"',
             'hint' => 'What was paid for, e.g. "Electricity bill October".'])
@@ -39,6 +39,6 @@
 @if (!empty($closedShift))
     <div class="mt-5">
         @include('layoutmodule::partials.field', ['name' => 'change_reason', 'label' => 'Reason for the Change', 'type' => 'textarea', 'required' => true,
-            'attrs' => 'maxlength="255"', 'hint' => 'This expense is in a closed shift: the reason is kept in the shift\'s log, its totals are calculated again.'])
+            'attrs' => 'maxlength="255"', 'hint' => 'This cash out is in a closed shift: the reason is kept in the shift\'s log, its totals are calculated again.'])
     </div>
 @endif

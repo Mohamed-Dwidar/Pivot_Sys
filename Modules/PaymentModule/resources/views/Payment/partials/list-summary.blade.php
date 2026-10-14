@@ -1,8 +1,9 @@
 {{--
-    The payments list summary line for the current filters (PaymentService::listSummary()):
-    "Total: <net> — <method> <amount> · … · Refunds −<amount> · Withholding <amount>"; withholding is not part of the total.
+    The Cash In tab summary line for the current filters (PaymentService::listSummary()):
+    "Cash In: <total> — <method> <amount> · … · Withholding <amount>"; withholding is not part of the total; no refunds on this tab
+    (they are Cash Out, 2026-10-14; the Refunds part stays for a list that has them).
 --}}
-<span class="font-medium">Total: {{ number_format($summary['total'], 2) }}</span>
+<span class="font-medium">Cash In: {{ number_format($summary['total'], 2) }}</span>
 @php($parts = [])
 @foreach ($summary['methods'] as $name => $amount)
     @php($parts[] = e(Str::humanize($name)) . ' ' . number_format($amount, 2))

@@ -12,9 +12,9 @@
 @section('content')
     <form id="withholding-filters" class="filter-bar">
         <input type="search" name="search" class="{{ config('layoutmodule.form.input') }}" placeholder="Number, payer or tax id" autocomplete="off">
-        <select name="match" class="{{ config('layoutmodule.form.select') }}" aria-label="Payments">
+        <select name="match" class="{{ config('layoutmodule.form.select') }}" aria-label="Withholding entries">
             <option value="">All</option>
-            <option value="1">Matches its payments</option>
+            <option value="1">Matches its withholding entries</option>
             <option value="0">Difference</option>
         </select>
         <input type="date" name="date_from" class="{{ config('layoutmodule.form.input') }} field-short" aria-label="Issued from" title="Issued from">
@@ -31,7 +31,7 @@
                     <th data-data="issued_at" data-name="issued_at" data-class="whitespace-nowrap">Issued</th>
                     <th data-data="payer" data-name="payer_name">Payer</th>
                     <th data-data="amount" data-name="amount">Amount</th>
-                    <th data-data="payments_count" data-name="payments_count">Payments</th>
+                    <th data-data="payments_count" data-name="payments_count">Entries</th>
                     <th data-data="difference_html">Difference</th>
                     <th data-data="actions"></th>
                 </tr>

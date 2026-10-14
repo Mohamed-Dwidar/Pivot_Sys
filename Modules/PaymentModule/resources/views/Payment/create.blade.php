@@ -2,15 +2,15 @@
 @extends(request()->ajax() ? 'layoutmodule::modal' : Auth::user()->userable->layout())
 
 @section('title')
-    Add Payment
+    Add Cash In
 @endsection
 
 @section('modal-size', 'lg')
 
 @section('content')
     <form method="POST" action="{{ route($area . '.payments.store') }}" data-ajax data-payment-form
-        data-confirm="The payment will be added. Only the account owner can change or delete it later."
-        data-confirm-title="Add this payment?"
+        data-confirm="The cash in will be added. Only the account owner can change or delete it later."
+        data-confirm-title="Add this cash in?"
         data-confirm-button="Add"
         data-confirm-variant="success">
         @csrf

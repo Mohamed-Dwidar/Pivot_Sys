@@ -27,7 +27,7 @@
         'options' => ['' => '- None -'] + $members, 'value' => $certificate?->member_id ?: null, 'hint' => 'Search by name or mobile.'])
 </div>
 
-<div class="form-section mt-8">Withholding Payments</div>
+<div class="form-section mt-8">Withholding Entries</div>
 <div data-field="payments">
     @if ($paymentOptions)
         <div class="checkbox-list">
@@ -39,9 +39,9 @@
                 </div>
             @endforeach
         </div>
-        <div class="{{ config('layoutmodule.form.hint') }}">The withholding payments this certificate covers (not on another certificate). Their total should equal the amount.</div>
+        <div class="{{ config('layoutmodule.form.hint') }}">The withholding entries this certificate covers (not on another certificate). Their total should equal the amount.</div>
     @else
-        <div class="text-slate-500">No withholding payments without a certificate. Add them from Payments (type Withholding).</div>
+        <div class="text-slate-500">No withholding entries without a certificate. Add them from Payments › Cash In (type Withholding).</div>
     @endif
     @foreach (['payments', 'payments.*'] as $errorKey)
         @foreach ($errors->get($errorKey) as $messages)

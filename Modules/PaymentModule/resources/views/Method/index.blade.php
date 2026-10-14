@@ -26,7 +26,7 @@
                 <tr>
                     <th data-data="sort_order" data-name="sort_order" data-class="w-24">Order</th>
                     <th data-data="name_html" data-name="name">Name</th>
-                    <th data-data="payments_count" data-name="payments_count">Payments</th>
+                    <th data-data="payments_count" data-name="payments_count">Cash In</th>
                     <th data-data="status" data-name="is_active">Status</th>
                     <th data-data="actions"></th>
                 </tr>

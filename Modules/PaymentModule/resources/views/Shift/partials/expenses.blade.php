@@ -8,7 +8,7 @@
 <div class="table-wrap">
     <table class="data-table">
         <thead>
-            <tr><th>Expense</th><th>Category</th><th>Date</th><th>Method</th><th>Amount</th><th></th></tr>
+            <tr><th>Cash Out</th><th>Category</th><th>Date</th><th>Method</th><th>Amount</th><th></th></tr>
         </thead>
         <tbody>
             @foreach ($expenses as $expense)
