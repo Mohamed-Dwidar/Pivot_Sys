@@ -1072,3 +1072,83 @@ window.todayPage = (function () {
         },
     };
 })();
+
+
+// Drag and drop rows (a DataTables table with data-reorder-url, e.g. the units of a space): drag a row by its [data-drag-handle]
+// and drop it on another row (upper half = before it, lower half = after it); sends {id, target_id, position} (ids from the
+// rows' "row-{id}") as PATCH, then the list is drawn again. Native HTML drag and drop, no library.
+(function () {
+    var dragged = null;
+    function rowId(tr) {
+        return tr && tr.id ? tr.id.replace(/^row-/, "") : null;
+    }
+    function clearMarks(table) {
+        table.querySelectorAll("tr.drop-before, tr.drop-after").forEach(function (tr) { tr.classList.remove("drop-before", "drop-after"); });
+    }
+    function reorderTable(el) {
+        var table = el.closest && el.closest("table[data-reorder-url]");
+        return table && el.closest("tbody") ? table : null;
+    }
+
+    // only the handle starts a drag (text in the other cells stays selectable)
+    document.addEventListener("mousedown", function (e) {
+        var handle = e.target.closest && e.target.closest("[data-drag-handle]");
+        var tr = handle && handle.closest("tr");
+        if (tr && reorderTable(tr)) tr.draggable = true;
+    });
+    document.addEventListener("dragstart", function (e) {
+        var tr = e.target.closest && e.target.closest("tr[draggable=true]");
+        if (!tr || !reorderTable(tr)) return;
+        dragged = tr;
+        tr.classList.add("is-dragging");
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", rowId(tr));
+    });
+    document.addEventListener("dragover", function (e) {
+        var tr = dragged && e.target.closest && e.target.closest("tr");
+        var table = tr && reorderTable(tr);
+        if (!table || tr === dragged || !rowId(tr)) return;
+        e.preventDefault();
+        var box = tr.getBoundingClientRect();
+        var after = e.clientY > box.top + box.height / 2;
+        clearMarks(table);
+        tr.classList.add(after ? "drop-after" : "drop-before");
+    });
+    document.addEventListener("drop", function (e) {
+        var tr = dragged && e.target.closest && e.target.closest("tr");
+        var table = tr && reorderTable(tr);
+        if (!table || tr === dragged || !rowId(tr)) return;
+        e.preventDefault();
+        var position = tr.classList.contains("drop-after") ? "after" : "before";
+        clearMarks(table);
+        // moved at once on the page, saved, then the list is drawn again from the server
+        tr.parentNode.insertBefore(dragged, position === "after" ? tr.nextSibling : tr);
+        var data = new FormData();
+        data.append("_method", "PATCH");
+        data.append("id", rowId(dragged));
+        data.append("target_id", rowId(tr));
+        data.append("position", position);
+        fetch(table.dataset.reorderUrl, {
+            method: "POST",
+            body: data,
+            headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json", "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]').content },
+        })
+            .then(function (response) {
+                if (!response.ok) throw response;
+            })
+            .catch(function () {
+                toast("The order could not be saved, please try again.", "error");
+            })
+            .finally(function () {
+                if (window.dataTables) window.dataTables.reload();
+            });
+    });
+    document.addEventListener("dragend", function () {
+        if (!dragged) return;
+        dragged.classList.remove("is-dragging");
+        dragged.draggable = false;
+        var table = reorderTable(dragged);
+        if (table) clearMarks(table);
+        dragged = null;
+    });
+})();

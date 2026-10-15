@@ -67,6 +67,9 @@ class SpaceAccountModuleController extends Controller
             ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['subscription_type_id', 'is_active'])))
             ->setRowId(fn ($space) => 'row-' . $space->id)
             ->orderColumn('name', fn ($query, $order) => $query->orderByLocalized('name', $order))
+            // the default order of the list = the spaces' order (drag and drop)
+            ->orderColumn('sort_order', fn ($query, $order) => $query->orderBy('sort_order', $order)->orderByLocalized('name', $order))
+            ->addColumn('order', fn ($space) => view('layoutmodule::partials.drag-handle')->render())
             ->addColumn('image', fn ($space) => view('spacemodule::Account.Space.partials.row-image', compact('space'))->render())
             // the space page has its units
             ->addColumn('name_html', fn ($space) => '<a href="' . route('account.spaces.show', $space->id) . '" class="font-medium">' . e($space->name) . '</a>')
@@ -76,8 +79,8 @@ class SpaceAccountModuleController extends Controller
                 'url' => route('account.spaces.active', $space->id), 'row' => $space->id, 'name' => 'is_active', 'checked' => $space->is_active,
             ])->render())
             ->addColumn('actions', fn ($space) => view('spacemodule::Account.Space.partials.row-actions', compact('space'))->render())
-            ->rawColumns(['image', 'name_html', 'status', 'actions'])
-            ->only(['DT_RowId', 'image', 'name_html', 'subscription_types', 'units_count', 'images_count', 'status', 'actions']);
+            ->rawColumns(['order', 'image', 'name_html', 'status', 'actions'])
+            ->only(['DT_RowId', 'order', 'image', 'name_html', 'subscription_types', 'units_count', 'images_count', 'status', 'actions']);
     }
 
     // the updated row with the list filters (list[...]), null when it does not match them any more
@@ -136,6 +139,15 @@ class SpaceAccountModuleController extends Controller
             'row' => $this->row($request, $id),
             'redirect' => route('account.spaces.show', $id),
         ]);
+    }
+
+    // drag and drop in the Spaces list (custom.js [data-reorder-url]): the space before / after another one; the list is drawn again
+    public function reorder(Request $request)
+    {
+        $data = $request->validate(['id' => 'required|integer', 'target_id' => 'required|integer', 'position' => 'required|in:before,after']);
+        $this->spaceService->moveTo($this->accountId(), $data['id'], $data['target_id'], $data['position']);
+
+        return response()->json(['reload' => true]);
     }
 
     public function destroy($id)

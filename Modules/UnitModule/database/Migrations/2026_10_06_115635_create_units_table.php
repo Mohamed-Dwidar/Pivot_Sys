@@ -29,6 +29,8 @@ return new class extends Migration
             $table->integer('concurrent_usage')->default(1);
             $table->string('lease_period')->nullable();
             $table->boolean('is_active')->default(1);
+            // the order of the units in their space (↑ / ↓ in the space page list): the reservation form, the Today timeline rows
+            $table->unsignedInteger('sort_order')->default(0);
 
             $table->timestamps();
             $table->softDeletes();

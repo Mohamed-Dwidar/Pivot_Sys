@@ -10,6 +10,8 @@ use Modules\UnitModule\app\Http\Controllers\Admin\ColorAdminModuleController;
  */
 Route::prefix('account/spaces/{spaceId}/units')->name('account.spaces.units.')->middleware(['auth', 'user.active:' . Account::class])->group(function () {
     Route::get('data', [UnitAccountModuleController::class, 'data'])->name('data');
+    // drag and drop in the units list: id, target_id, position (before | after)
+    Route::patch('reorder', [UnitAccountModuleController::class, 'reorder'])->name('reorder');
     Route::get('create', [UnitAccountModuleController::class, 'create'])->name('create');
     Route::post('/', [UnitAccountModuleController::class, 'store'])->name('store');
     Route::get('{id}', [UnitAccountModuleController::class, 'show'])->name('show');

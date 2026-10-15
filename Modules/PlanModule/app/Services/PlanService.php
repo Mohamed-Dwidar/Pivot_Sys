@@ -47,7 +47,7 @@ class PlanService
     public function findOne($accountId, $id)
     {
         return $this->planRepository->forAccount($accountId)->with([
-            'spaces' => fn ($query) => $query->orderByLocalized('name'),
+            'spaces' => fn ($query) => $query->ordered(),
             'units' => fn ($query) => $query->with('space')->orderByLocalized('name'),
         ])->findOrFail($id);
     }

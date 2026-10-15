@@ -246,6 +246,26 @@ SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEM
   'SELECT ''renewal_of exists''');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
+-- spaces.sort_order (2026-10-16; also in the create migration): the account's spaces order (drag and drop in the Spaces list). Added
+-- once, then numbered 1…n per account in natural name order (as the lists showed them).
+SET @had_space_order = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'spaces' AND COLUMN_NAME = 'sort_order');
+SET @sql = IF(@had_space_order = 0, 'ALTER TABLE spaces ADD sort_order INT UNSIGNED NOT NULL DEFAULT 0 AFTER icon_id', 'SELECT ''spaces.sort_order exists''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql = IF(@had_space_order = 0,
+  'UPDATE spaces sp JOIN (SELECT id, ROW_NUMBER() OVER (PARTITION BY account_id ORDER BY REGEXP_REPLACE(name_en, ''[0-9]+'', ''''), CAST(REGEXP_SUBSTR(name_en, ''[0-9]+'') AS UNSIGNED), name_en, id) n FROM spaces) o ON o.id = sp.id SET sp.sort_order = o.n',
+  'SELECT ''spaces.sort_order kept''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
+-- units.sort_order (2026-10-16; also in the create migration): the units' order in their space (↑ / ↓ on the space page). Added once,
+-- then numbered 1…n per space in natural name order (Flux, Hall 1, Hall 2, O Space, P1, P2 … P10), as the Today timeline showed them.
+SET @had_unit_order = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'units' AND COLUMN_NAME = 'sort_order');
+SET @sql = IF(@had_unit_order = 0, 'ALTER TABLE units ADD sort_order INT UNSIGNED NOT NULL DEFAULT 0 AFTER is_active', 'SELECT ''units.sort_order exists''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql = IF(@had_unit_order = 0,
+  'UPDATE units u JOIN (SELECT id, ROW_NUMBER() OVER (PARTITION BY space_id ORDER BY REGEXP_REPLACE(name_en, ''[0-9]+'', ''''), CAST(REGEXP_SUBSTR(name_en, ''[0-9]+'') AS UNSIGNED), name_en, id) n FROM units) o ON o.id = u.id SET u.sort_order = o.n',
+  'SELECT ''units.sort_order kept''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
 -- reservations.package_id / repeat_id indexes (2026-10-15; also in the create migration): the package lists / options counted the
 -- reservations per package with a full scan (the reservation form took ~3 s)
 SET @sql = IF((SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reservations' AND INDEX_NAME = 'reservations_package_id_index') = 0,

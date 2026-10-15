@@ -66,6 +66,9 @@ class UnitAccountModuleController extends Controller
             })
             ->setRowId(fn ($unit) => 'row-' . $unit->id)
             ->orderColumn('name', fn ($query, $order) => $query->orderByLocalized('name', $order))
+            // the default order of the list = the units' order (drag and drop)
+            ->orderColumn('sort_order', fn ($query, $order) => $query->orderBy('sort_order', $order)->orderByLocalized('name', $order))
+            ->addColumn('order', fn ($unit) => view('layoutmodule::partials.drag-handle')->render())
             ->addColumn('image', fn ($unit) => view('unitmodule::Account.Unit.partials.row-image', compact('unit'))->render())
             ->addColumn('name_html', fn ($unit) => view('unitmodule::Account.Unit.partials.row-name', ['space' => $space, 'unit' => $unit])->render())
             ->addColumn('subscription_type', fn ($unit) => $unit->subscriptionType?->name ?? '-')
@@ -74,8 +77,8 @@ class UnitAccountModuleController extends Controller
                 'url' => route('account.spaces.units.active', [$space->id, $unit->id]), 'row' => $unit->id, 'name' => 'is_active', 'checked' => $unit->is_active,
             ])->render())
             ->addColumn('actions', fn ($unit) => view('unitmodule::Account.Unit.partials.row-actions', ['space' => $space, 'unit' => $unit])->render())
-            ->rawColumns(['image', 'name_html', 'status', 'actions'])
-            ->only(['DT_RowId', 'image', 'name_html', 'subscription_type', 'capacity', 'concurrent_usage', 'status', 'actions']);
+            ->rawColumns(['order', 'image', 'name_html', 'status', 'actions'])
+            ->only(['DT_RowId', 'order', 'image', 'name_html', 'subscription_type', 'capacity', 'concurrent_usage', 'status', 'actions']);
     }
 
     // the updated row with the list filters (list[...]), null when it does not match them any more
@@ -141,6 +144,15 @@ class UnitAccountModuleController extends Controller
             'row' => $this->row($request, $space, $id),
             'redirect' => route('account.spaces.units.show', [$space->id, $id]),
         ]);
+    }
+
+    // drag and drop in the units list (custom.js [data-reorder-url]): the unit before / after another one; the list is drawn again
+    public function reorder(Request $request, $spaceId)
+    {
+        $data = $request->validate(['id' => 'required|integer', 'target_id' => 'required|integer', 'position' => 'required|in:before,after']);
+        $this->unitService->moveTo($this->space($spaceId), $data['id'], $data['target_id'], $data['position']);
+
+        return response()->json(['reload' => true]);
     }
 
     public function destroy($spaceId, $id)

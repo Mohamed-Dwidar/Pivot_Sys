@@ -27,9 +27,12 @@
 
     <div class="table-wrap mt-5">
         <table class="data-table" data-datatable data-url="{{ route('account.spaces.data') }}"
-            data-filters="#spaces-filters" data-order='[[1, "asc"]]' data-empty="No spaces yet.">
+            data-filters="#spaces-filters" data-order='[[0, "asc"]]' data-page-length="100" data-empty="No spaces yet."
+            data-reorder-url="{{ route('account.spaces.reorder') }}">
             <thead>
                 <tr>
+                    {{-- drag a row by its handle = the spaces' order (drop menus, filters, the Today timeline); the list opens in this order --}}
+                    <th data-data="order" data-name="sort_order" data-class="w-10"></th>
                     <th data-data="image"></th>
                     <th data-data="name_html" data-name="name">Name</th>
                     <th data-data="subscription_types">Subscription Types</th>

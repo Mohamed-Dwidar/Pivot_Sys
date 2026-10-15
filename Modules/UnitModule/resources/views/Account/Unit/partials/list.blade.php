@@ -10,9 +10,12 @@
 
 <div class="table-wrap">
     <table class="data-table" data-datatable data-url="{{ route('account.spaces.units.data', $space->id) }}"
-        data-filters="#units-filters" data-order='[[1, "asc"]]' data-page-length="10" data-empty="No units in this space yet.">
+        data-filters="#units-filters" data-order='[[0, "asc"]]' data-page-length="100"
+        data-reorder-url="{{ route('account.spaces.units.reorder', $space->id) }}" data-empty="No units in this space yet.">
         <thead>
             <tr>
+                {{-- drag a row by its handle = the units' order in the space (the reservation form, the Today timeline); the list opens in this order --}}
+                <th data-data="order" data-name="sort_order" data-class="w-10"></th>
                 <th data-data="image"></th>
                 <th data-data="name_html" data-name="name">Name</th>
                 <th data-data="subscription_type">Subscription Type</th>

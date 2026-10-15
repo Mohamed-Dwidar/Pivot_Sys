@@ -12,6 +12,8 @@ Route::prefix('account')->name('account.')->middleware(['auth', 'user.active:' .
     Route::prefix('spaces')->name('spaces.')->group(function () {
         Route::get('/', [SpaceAccountModuleController::class, 'index'])->name('index');
         Route::get('data', [SpaceAccountModuleController::class, 'data'])->name('data');
+        // drag and drop in the list: id, target_id, position (before | after)
+        Route::patch('reorder', [SpaceAccountModuleController::class, 'reorder'])->name('reorder');
         Route::get('create', [SpaceAccountModuleController::class, 'create'])->name('create');
         Route::post('/', [SpaceAccountModuleController::class, 'store'])->name('store');
         Route::get('{id}', [SpaceAccountModuleController::class, 'show'])->name('show');

@@ -37,7 +37,7 @@ class UnitService
         return $this->unitRepository->forSpace($space->account_id, $space->id)
             ->where('is_active', true)
             ->when($subscriptionTypeId, fn ($query) => $query->where('subscription_type_id', $subscriptionTypeId))
-            ->orderByLocalized('name')->get()
+            ->ordered()->get()
             ->map(fn ($unit) => ['id' => $unit->id, 'name' => $unit->name, 'capacity' => (int) $unit->capacity])
             ->all();
     }
@@ -64,11 +64,37 @@ class UnitService
         $unit = $this->unitRepository->create($this->unitData($data) + [
             'account_id' => $space->account_id,
             'space_id' => $space->id,
+            // a new unit goes last in its space
+            'sort_order' => (int) Unit::where('space_id', $space->id)->max('sort_order') + 1,
         ]);
         $unit->plans()->sync($data['plans'] ?? []);
 
         $this->storeImages($unit, $data['images'] ?? []);
         return $unit;
+    }
+
+    /**
+     * Drag and drop in the space page units list: put the unit before / after another unit of the space; the space's units are
+     * numbered 1…n again in the new order (old rows all had 0). false = nothing to move (the same unit).
+     */
+    public function moveTo(Space $space, $id, $targetId, string $position): bool
+    {
+        $unit = $this->findOne($space, $id);
+        $target = $this->findOne($space, $targetId);
+        if ($unit->id === $target->id) {
+            return false;
+        }
+
+        return DB::transaction(function () use ($space, $unit, $target, $position) {
+            $ids = Unit::where('account_id', $space->account_id)->where('space_id', $space->id)->ordered()->lockForUpdate()->pluck('id')->all();
+            $ids = array_values(array_diff($ids, [$unit->id]));
+            $at = array_search($target->id, $ids) + ($position === 'after' ? 1 : 0);
+            array_splice($ids, $at, 0, [$unit->id]);
+            foreach ($ids as $place => $unitId) {
+                Unit::whereKey($unitId)->toBase()->update(['sort_order' => $place + 1]);
+            }
+            return true;
+        });
     }
 
     public function update(Space $space, $id, array $data)

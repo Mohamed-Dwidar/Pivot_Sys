@@ -20,6 +20,8 @@ return new class extends Migration
             $table->string('name_en');
             $table->boolean('is_active')->default(1);
             $table->integer('icon_id')->default(0);
+            // the order of the account's spaces (drag and drop in the Spaces list): drop menus, filters, the Today timeline groups
+            $table->unsignedInteger('sort_order')->default(0);
             $table->timestamps();
             $table->softDeletes();
         });

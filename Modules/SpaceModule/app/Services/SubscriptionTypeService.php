@@ -46,7 +46,7 @@ class SubscriptionTypeService
     // 404 when the subscription type belongs to another account
     public function findOne($accountId, $id)
     {
-        return $this->subscriptionTypeRepository->forAccount($accountId)->with(['spaces' => fn ($query) => $query->orderByLocalized('name')->latest('id')])->findOrFail($id);
+        return $this->subscriptionTypeRepository->forAccount($accountId)->with(['spaces' => fn ($query) => $query->ordered()->latest('id')])->findOrFail($id);
     }
 
     public function create($accountId, array $data)

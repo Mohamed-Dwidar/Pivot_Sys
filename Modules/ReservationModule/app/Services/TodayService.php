@@ -120,8 +120,7 @@ class TodayService
 
         $slots = intdiv((int) $windowStart->diffInMinutes($windowEnd), self::SLOT_MINUTES);
         $units = Unit::where('account_id', $type->account_id)->where('subscription_type_id', $type->id)->where('is_active', true)
-            ->whereIn('space_id', $type->spaces->pluck('id'))->with('color')->get()
-            ->sortBy(fn ($unit) => $unit->name, SORT_NATURAL | SORT_FLAG_CASE);
+            ->whereIn('space_id', $type->spaces->pluck('id'))->with('color')->ordered()->get();
         // a reservation of a unit not shown (inactive / moved): its own row, so nothing is hidden
         $missing = $reservations->pluck('unit_id')->unique()->diff($units->pluck('id'));
         if ($missing->isNotEmpty()) {
@@ -130,7 +129,7 @@ class TodayService
 
         $rows = $units->map(fn ($unit) => $this->timelineRow($unit, $reservations->where('unit_id', $unit->id), $windowStart, $windowEnd, $slots));
         $spaceIds = $units->pluck('space_id')->unique();
-        $spaces = Space::withTrashed()->whereIn('id', $spaceIds)->orderByLocalized('name')->get();
+        $spaces = Space::withTrashed()->whereIn('id', $spaceIds)->ordered()->get();
         $groups = $spaces->map(fn ($space) => ['space' => $space, 'rows' => $rows->filter(fn ($row) => (int) $row['unit']->space_id === (int) $space->id)->values()])
             ->filter(fn ($group) => $group['rows']->isNotEmpty())->values();
 

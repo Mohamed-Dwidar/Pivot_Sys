@@ -31,8 +31,14 @@ class Unit extends Model
 
     protected $fillable = [
         'account_id', 'space_id', 'subscription_type_id', 'name_ar', 'name_en', 'color_id',
-        'description_ar', 'description_en', 'notes_ar', 'notes_en', 'capacity', 'concurrent_usage', 'lease_period', 'is_active',
+        'description_ar', 'description_en', 'notes_ar', 'notes_en', 'capacity', 'concurrent_usage', 'lease_period', 'is_active', 'sort_order',
     ];
+
+    // the units' order in their space (sort_order, moved with ↑ / ↓ on the space page), then the name
+    public function scopeOrdered($query)
+    {
+        return $query->orderBy('sort_order')->orderByLocalized('name');
+    }
 
     protected $casts = [
         'is_active' => 'boolean',

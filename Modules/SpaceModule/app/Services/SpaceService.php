@@ -36,7 +36,7 @@ class SpaceService
     // [id => name] in the active language
     public function options($accountId): array
     {
-        return $this->spaceRepository->forAccount($accountId)->orderByLocalized('name')->get()->pluck('name', 'id')->all();
+        return $this->spaceRepository->forAccount($accountId)->ordered()->get()->pluck('name', 'id')->all();
     }
 
     // the list filters: [id => ['name', 'active']], the active ones first (the account sees the inactive ones too, marked;
@@ -44,7 +44,7 @@ class SpaceService
     public function filterOptions($accountId, bool $activeOnly = false): array
     {
         return $this->spaceRepository->forAccount($accountId)->when($activeOnly, fn ($query) => $query->where('is_active', true))
-            ->orderByDesc('is_active')->orderByLocalized('name')->get()
+            ->orderByDesc('is_active')->ordered()->get()
             ->mapWithKeys(fn ($item) => [$item->id => ['name' => $item->name, 'active' => (bool) $item->is_active]])->all();
     }
 
@@ -54,7 +54,30 @@ class SpaceService
         return $this->spaceRepository->forAccount($accountId)
             ->whereHas('subscriptionTypes', fn ($query) => $query->where('subscription_types.id', $subscriptionTypeId))
             ->where('is_active', true)
-            ->orderByLocalized('name')->get()->pluck('name', 'id')->all();
+            ->ordered()->get()->pluck('name', 'id')->all();
+    }
+
+    /**
+     * Drag and drop in the Spaces list: put the space before / after another space of the account; the account's spaces are
+     * numbered 1…n again in the new order. false = nothing to move (the same space).
+     */
+    public function moveTo($accountId, $id, $targetId, string $position): bool
+    {
+        $space = $this->findOne($accountId, $id);
+        $target = $this->findOne($accountId, $targetId);
+        if ($space->id === $target->id) {
+            return false;
+        }
+
+        return DB::transaction(function () use ($accountId, $space, $target, $position) {
+            $ids = Space::where('account_id', $accountId)->ordered()->lockForUpdate()->pluck('id')->all();
+            $ids = array_values(array_diff($ids, [$space->id]));
+            array_splice($ids, array_search($target->id, $ids) + ($position === 'after' ? 1 : 0), 0, [$space->id]);
+            foreach ($ids as $place => $spaceId) {
+                Space::whereKey($spaceId)->toBase()->update(['sort_order' => $place + 1]);
+            }
+            return true;
+        });
     }
 
     public function findOne($accountId, $id)
@@ -65,7 +88,9 @@ class SpaceService
     public function create($accountId, array $data)
     {
         $space = DB::transaction(function () use ($accountId, $data) {
-            $space = $this->spaceRepository->create($this->spaceData($data) + ['account_id' => $accountId]);
+            // a new space goes last
+            $space = $this->spaceRepository->create($this->spaceData($data) + ['account_id' => $accountId,
+                'sort_order' => (int) Space::where('account_id', $accountId)->max('sort_order') + 1]);
             $space->subscriptionTypes()->sync($data['subscription_types'] ?? []);
             $space->plans()->sync($data['plans'] ?? []);
             return $space;

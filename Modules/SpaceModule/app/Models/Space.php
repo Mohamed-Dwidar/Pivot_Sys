@@ -18,7 +18,13 @@ class Space extends Model {
     // read in the active language: $model->name (see App\Helpers\LocalizedHelper)
     protected array $localizedFields = ['name'];
 
-    protected $fillable = ['account_id', 'name_ar', 'name_en', 'is_active', 'icon_id'];
+    protected $fillable = ['account_id', 'name_ar', 'name_en', 'is_active', 'icon_id', 'sort_order'];
+
+    // the account's spaces order (sort_order, drag and drop in the Spaces list), then the name
+    public function scopeOrdered($query)
+    {
+        return $query->orderBy('sort_order')->orderByLocalized('name');
+    }
 
     protected $casts = [
         'is_active' => 'boolean',
