@@ -241,7 +241,8 @@ function ajaxSubmit(form) {
         if (toggle) toggle.checked = !toggle.checked;
     };
 
-    fetch(form.action, {
+    // the attribute, not form.action: a field named "action" (the shift reminder / logout popups) hides that property
+    fetch(form.getAttribute("action") || window.location.href, {
         method: "POST",   // PUT / PATCH / DELETE go as _method (Laravel)
         body: data,
         headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" },
@@ -616,7 +617,8 @@ function reservationCalculate(form, source) {
 function reservationLockMember(form) {
     var packageEl = formField(form, "package_id");
     var memberEl = formField(form, "member_id");
-    if (!packageEl || !memberEl) return;
+    // the Renew form: both are fixed hidden inputs
+    if (!packageEl || !memberEl || !packageEl.selectedOptions) return;
     var option = packageEl.selectedOptions[0];
     var memberId = option && option.dataset.memberId;
     var searchable = memberEl.tomselect;
@@ -679,7 +681,7 @@ function reservationEndFromPlan(form, planChanged) {
 function reservationTypeOptions(form) {
     var typeEl = formField(form, "subscription_type_id");
     if (!typeEl) return;
-    var option = typeEl.selectedOptions[0];
+    var option = typeEl.selectedOptions ? typeEl.selectedOptions[0] : null;
     form.querySelectorAll("[data-type-allows]").forEach(function (box) {
         var key = box.dataset.typeAllows.replace(/-([a-z])/g, function (m, c) { return c.toUpperCase(); });
         var allowed = !!(option && option.dataset[key] === "1");
@@ -741,6 +743,8 @@ function reservationCapacity(form) {
     if (!unitEl || !peopleEl) return;
     var option = unitEl.selectedOptions[0];
     var capacity = option && option.dataset.capacity ? Number(option.dataset.capacity) : 0;
+    // the Renew form: a fixed hidden value
+    if (peopleEl.type === "hidden") return;
 
     peopleEl.max = capacity > 0 ? capacity : 100000;
     peopleEl.readOnly = capacity === 1;

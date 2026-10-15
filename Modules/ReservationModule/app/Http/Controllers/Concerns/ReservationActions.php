@@ -68,11 +68,13 @@ trait ReservationActions
     private function formOptions($reservation = null): array
     {
         $accountId = $this->accountId();
+        // the Renew form: member / package / type are fixed hidden inputs, their drop menus are not shown
+        $renewing = $reservation && !$reservation->exists && $reservation->renewal_of;
         $options = [
-            // with can repeat / can continue: the form shows those options only for these types
-            'subscriptionTypes' => $this->subscriptionTypeService->reservationOptions($accountId),
-            'packages' => $this->packageService->options($accountId, $reservation?->package_id),
-            'members' => $this->memberService->options($accountId),
+            // with can repeat: the form shows the repeat options only for these types
+            'subscriptionTypes' => $renewing ? [] : $this->subscriptionTypeService->reservationOptions($accountId),
+            'packages' => $renewing ? [] : $this->packageService->options($accountId, $reservation?->package_id),
+            'members' => $renewing ? [] : $this->memberService->options($accountId),
             'spaces' => [], 'units' => [], 'plans' => [],
         ];
 

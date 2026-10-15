@@ -36,13 +36,29 @@
     }
     // "Renewal of #": the account's edit form only (a mistake fix); the Renew form sends it hidden
     $renewalField = $reservation?->exists && $area === 'account' && $reservation->isPeriod();
+    // the Renew form (?renew=ID): member, package and subscription type stay the renewed period's (hidden, shown as text; the
+    // service enforces them too), no repeat; place, plan, dates and amounts can change
+    $renewing = $reservation && !$reservation->exists && $reservation->renewal_of;
+    $renewed = $renewing ? $reservation->renewalOf : null;
 @endphp
 
-@if ($reservation && !$reservation->exists && $reservation->renewal_of)
+@if ($renewing)
     <input type="hidden" name="renewal_of" value="{{ $reservation->renewal_of }}">
-    <div class="mb-5 text-primary">Renewal of #{{ $reservation->renewal_of }}: it starts the day after that period ends.</div>
-@endif
-
+    <input type="hidden" name="member_id" value="{{ $reservation->member_id }}">
+    <input type="hidden" name="package_id" value="{{ $reservation->package_id ?: '' }}">
+    <input type="hidden" name="subscription_type_id" value="{{ $reservation->subscription_type_id }}">
+    <div class="mb-5 text-primary">
+        Renewal of <b>{{ $reservation->member?->name ?? '-' }}</b>{{ $renewed?->unit ? ' · ' . $renewed->unit->name : '' }}:
+        the current period ends {{ $renewed?->realEnd()?->format(\Modules\ReservationModule\app\Models\Reservation::DATE_FORMAT) ?? '-' }}, the new one starts the day after.
+    </div>
+    <div class="form-section">Member</div>
+    <dl class="detail-list">
+        <div><dt>Member</dt><dd>{{ $reservation->member?->name ?? '-' }} @if ($reservation->member?->phone)<span class="text-xs text-slate-500">{{ $reservation->member->phone }}</span>@endif</dd></div>
+        @if ($reservation->package_id)
+            <div><dt>Package</dt><dd>{{ $reservation->package?->name ?? '#' . $reservation->package_id }}</dd></div>
+        @endif
+    </dl>
+@else
 <div class="form-section">Member</div>
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
     @include('layoutmodule::partials.field', ['name' => 'package_id', 'label' => 'Package', 'type' => 'select', 'searchable' => true,
@@ -54,14 +70,17 @@
         'options' => ['' => '- Select -'] + $members, 'value' => $reservation?->member_id,
         'hint' => empty($members) ? 'No members yet, add them from Members.' : 'Search by name or mobile.'])
 </div>
+@endif
 
 <div class="form-section mt-8">Place & Plan</div>
+@unless ($renewing)
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
     @include('layoutmodule::partials.field', ['name' => 'subscription_type_id', 'label' => 'Subscription Type', 'type' => 'select', 'required' => true, 'searchable' => true,
         'options' => ['' => '- Select -'] + $subscriptionTypes, 'value' => $reservation?->subscription_type_id ?: null,
         'hint' => empty($subscriptionTypes) ? 'No subscription types yet, add them from Spaces > Subscription Types.' : 'The spaces with this subscription type are shown.'])
 </div>
-<div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-3">
+@endunless
+<div class="grid grid-cols-1 gap-5 {{ $renewing ? '' : 'mt-5' }} md:grid-cols-3">
     @include('layoutmodule::partials.field', ['name' => 'space_id', 'label' => 'Space', 'type' => 'select', 'required' => true, 'searchable' => true,
         'options' => ['' => '- Select -'] + $spaces, 'value' => $reservation?->space_id,
         'attrs' => 'data-options-url="' . route($area . '.reservations.options.spaces') . '" data-parent="subscription_type_id" data-none="No spaces with this subscription type"' . (empty($spaces) ? ' disabled' : '')])
@@ -72,8 +91,13 @@
         'options' => ['' => '- Select -'] + $planOptions, 'value' => $reservation?->plan_id,
         'attrs' => 'data-options-url="' . route($area . '.reservations.options.plans') . '" data-parent="unit_id" data-none="No plans for this unit"' . (empty($planOptions) ? ' disabled' : ''),
         'hint' => 'The amount is filled from the plan.'])
-    @include('layoutmodule::partials.field', ['name' => 'number_of_peoples', 'label' => 'Number of People', 'type' => 'number', 'required' => true,
-    'value' => $reservation?->number_of_peoples ?? 1, 'attrs' => 'min="1" step="1" max="100000"', 'hint' => 'Not more than the unit capacity.'])
+    {{-- the Renew form keeps the renewed period's number of people (hidden) --}}
+    @if ($renewing)
+        <input type="hidden" name="number_of_peoples" value="{{ $reservation->number_of_peoples ?: 1 }}">
+    @else
+        @include('layoutmodule::partials.field', ['name' => 'number_of_peoples', 'label' => 'Number of People', 'type' => 'number', 'required' => true,
+        'value' => $reservation?->number_of_peoples ?? 1, 'attrs' => 'min="1" step="1" max="100000"', 'hint' => 'Not more than the unit capacity.'])
+    @endif
 </div>
 
 <div class="form-section mt-8">Dates</div>
@@ -86,8 +110,11 @@
             @include('layoutmodule::partials.field', ['name' => 'start_time', 'label' => 'Start Time', 'type' => 'time', 'required' => true, 'value' => $startTime])
         </div>
     </div>
+{{-- the Renew form: start and end on one line --}}
+@unless ($renewing)
 </div>
 <div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-3">
+@endunless
     <div class="date-time-pair">
         {{-- always required ("The reservation continues" removed 2026-10-15: a subscription is renewed by a new period, renewal_of) --}}
         @include('layoutmodule::partials.field', ['name' => 'end_at', 'label' => 'End Date', 'type' => 'date', 'required' => true,
@@ -115,7 +142,7 @@
 
 {{-- only when the subscription type can repeat (custom.js [data-type-allows]) --}}
 {{-- on create only: the copies are made when it is saved (not changed on edit) --}}
-@unless ($reservation?->exists)
+@unless ($reservation?->exists || $renewing)
     <div data-type-allows="can-repeat">
         <div class="form-section mt-8">Repeat</div>
         <div class="grid grid-cols-1 gap-5 md:grid-cols-4">

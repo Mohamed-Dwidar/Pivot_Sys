@@ -246,6 +246,13 @@ SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEM
   'SELECT ''renewal_of exists''');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
+-- reservations.package_id / repeat_id indexes (2026-10-15; also in the create migration): the package lists / options counted the
+-- reservations per package with a full scan (the reservation form took ~3 s)
+SET @sql = IF((SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reservations' AND INDEX_NAME = 'reservations_package_id_index') = 0,
+  'ALTER TABLE reservations ADD INDEX reservations_package_id_index (package_id), ADD INDEX reservations_repeat_id_index (repeat_id)',
+  'SELECT ''reservations package_id index exists''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
 SET @had_hours = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'accounts' AND COLUMN_NAME = 'today_hours_from');
 SET @sql = IF(@had_hours = 0,
   'ALTER TABLE accounts ADD today_hours_from TINYINT UNSIGNED NOT NULL DEFAULT 8 AFTER vat_enabled, ADD today_hours_to TINYINT UNSIGNED NOT NULL DEFAULT 24 AFTER today_hours_from, ADD renewal_days TINYINT UNSIGNED NOT NULL DEFAULT 7 AFTER today_hours_to',

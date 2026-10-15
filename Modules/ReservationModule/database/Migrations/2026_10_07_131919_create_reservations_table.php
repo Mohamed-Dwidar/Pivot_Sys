@@ -16,7 +16,8 @@ return new class extends Migration {
             $table->bigInteger('space_id')->index();
             $table->bigInteger('unit_id')->index();
             $table->bigInteger('plan_id');
-            $table->bigInteger('package_id')->default(0);
+            // indexed (2026-10-15): package totals / lists / options look reservations up by package
+            $table->bigInteger('package_id')->default(0)->index();
             $table->integer('subscription_type_id')->default(0);
 
             $table->bigInteger('reservation_status_id')->default(1);
@@ -26,7 +27,7 @@ return new class extends Migration {
             $table->integer('subscription_day')->default(0);
 
             $table->boolean('all_day')->default(0);
-            $table->bigInteger('repeat_id')->default(0);
+            $table->bigInteger('repeat_id')->default(0)->index();
             // the period this reservation renews (Renew / repeat copies of a period type); at most one counted renewal per period
             $table->unsignedBigInteger('renewal_of')->nullable()->index();
             // a period marked "left" (the member did not renew): off the Today page's Not renewed list; left_by 0 = auto (to_run cutoff)

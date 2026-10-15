@@ -21,8 +21,9 @@ use Modules\UnitModule\app\Models\Unit;
  *   (grouped by space when the type has more than one space); an item ended before "from" = the Earlier column, one starting
  *   after "to" = the Later column; the rest in the grid (15 minute slots, clipped at the edges), in lanes when they overlap
  * - full_day: by their DATE (start_at day = D: the form gives a full day reservation the business date at night)
- * - period: running on D per space (+ Other), renewals: Due today (last day = D) | Not renewed (ended before D, no counted
- *   renewal, not left) | Next N days (last day D+1 … D+N); a renewed one shows its renewal's end
+ * - period (no running counts per space, user 2026-10-15): renewals by the RENEWAL DATE (the day after the last day, user 2026-10-15):
+ *   Renews today (= D) | Not renewed (before D, no counted renewal, not left) | Next N days (D+1 … D+N); a renewed one shows
+ *   its renewal's end
  * Only counted reservations (not cancelled like ones).
  */
 class TodayService
@@ -214,37 +215,25 @@ class TodayService
         $date = $context['date'];
         $base = fn () => $this->reservations($type, $context['accountId']);
 
-        // running on D (started by D, last day D or later): per space, the type's spaces first (by name), then "Other"
-        $running = $base()->where('start_at', '<', $date->copy()->addDay())
-            ->where(fn ($query) => $query->whereRaw(Reservation::END_DATE_SQL . ' >= ?', [$date->toDateString()])->orWhereNull('end_at'))
-            ->toBase()->selectRaw('space_id, COUNT(*) n')->groupBy('space_id')->pluck('n', 'space_id');
-        $linked = $type->spaces->sortBy(fn ($space) => $space->name, SORT_NATURAL | SORT_FLAG_CASE);
-        $counts = $linked->filter(fn ($space) => $space->is_active || ($running[$space->id] ?? 0))
-            ->map(fn ($space) => ['name' => $space->name, 'count' => (int) ($running[$space->id] ?? 0)])->values();
-        $other = $running->except($linked->pluck('id')->all())->sum();
-        if ($other) {
-            $counts->push(['name' => 'Other', 'count' => (int) $other]);
-        }
-
         $periods = fn () => $base()->renewalPeriods()->with('renewedBy');
-        $endDate = Reservation::END_DATE_SQL;
-        $dueToday = $periods()->whereRaw("$endDate = ?", [$date->toDateString()])->orderBy('member_id')->get();
-        $notRenewed = $periods()->whereRaw("$endDate < ?", [$date->toDateString()])->notRenewed()
-            ->orderByRaw("$endDate")->orderBy('id')->get();
-        $next = $periods()->whereRaw("$endDate BETWEEN ? AND ?", [$date->copy()->addDay()->toDateString(), $date->copy()->addDays($context['renewalDays'])->toDateString()])
-            ->orderByRaw("$endDate")->orderBy('id')->get();
+        $renewalDate = Reservation::RENEWAL_DATE_SQL;
+        $renewsToday = $periods()->whereRaw("$renewalDate = ?", [$date->toDateString()])->orderBy('member_id')->get();
+        // the fewest days since the renewal date first (user 2026-10-15)
+        $notRenewed = $periods()->whereRaw("$renewalDate < ?", [$date->toDateString()])->notRenewed()
+            ->orderByRaw("$renewalDate DESC")->orderByDesc('id')->get();
+        $next = $periods()->whereRaw("$renewalDate BETWEEN ? AND ?", [$date->copy()->addDay()->toDateString(), $date->copy()->addDays($context['renewalDays'])->toDateString()])
+            ->orderByRaw($renewalDate)->orderBy('id')->get();
 
         return [
             'mode' => 'period',
             'type' => $type,
             'anchor' => 'today-renewals-' . $type->id,
-            'counts' => $counts,
-            'dueToday' => $dueToday,
+            'renewsToday' => $renewsToday,
             'notRenewed' => $notRenewed,
             'next' => $next,
             'renewalDays' => $context['renewalDays'],
-            // the summary "Renewals": due today not renewed yet + not renewed
-            'needAction' => $dueToday->whereNull('renewedBy')->count() + $notRenewed->count(),
+            // the summary "Renewals": renews today, not renewed yet + not renewed
+            'needAction' => $renewsToday->whereNull('renewedBy')->count() + $notRenewed->count(),
         ];
     }
 }

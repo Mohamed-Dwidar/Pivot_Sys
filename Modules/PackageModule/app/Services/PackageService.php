@@ -27,7 +27,8 @@ class PackageService
     // the active packages (+ $currentId even if inactive) for the reservation form: [id => ['name', 'member_id']]
     public function options($accountId, $currentId = null): array
     {
-        return $this->packageRepository->forAccount($accountId)
+        // not forAccount(): its reservations count (a subquery per package) is not needed here and made the form take ~3 s
+        return Package::with('member')->where('account_id', $accountId)
             ->where(fn ($query) => $query->where('is_active', true)->orWhere('id', (int) $currentId))
             ->orderBy('name')->get()
             ->mapWithKeys(fn ($package) => [$package->id => [

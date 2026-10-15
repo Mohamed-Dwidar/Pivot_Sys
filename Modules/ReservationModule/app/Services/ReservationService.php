@@ -55,6 +55,15 @@ class ReservationService
     {
         return DB::transaction(function () use ($accountId, $data, $creator) {
             $renewalOf = !empty($data['renewal_of']) ? (int) $data['renewal_of'] : null;
+            // a renewal keeps the renewed period's member, package and subscription type, never repeats (the Renew form shows them fixed)
+            if ($renewalOf && ($period = Reservation::where('account_id', $accountId)->find($renewalOf))) {
+                $data = array_merge($data, [
+                    'member_id' => $period->member_id,
+                    'package_id' => $period->package_id ?: null,
+                    'subscription_type_id' => $period->subscription_type_id,
+                    'is_repeat' => false,
+                ]);
+            }
             // the status is not chosen in the form: a new reservation gets the first active status
             $reservation = $this->reservationRepository->makeModel()->newInstance($this->reservationData($accountId, $data) + [
                 'account_id' => $accountId,
@@ -171,8 +180,8 @@ class ReservationService
     }
 
     /**
-     * The next period of a subscription (the "Renew" form, not saved): same member, type, space, unit, plan, amounts; no
-     * package / notes; renewal_of = the subscription. A time based plan starts when it ends, for the same length. A date plan:
+     * The next period of a subscription (the "Renew" form, not saved): same member, package, type, space, unit, plan,
+     * amounts; no notes; renewal_of = the subscription. A time based plan starts when it ends, for the same length. A date plan:
      * its last day = the DATE of its end (an imported end at 00:00 is that day, an app end is 23:59:59 of it — the next period
      * of the imported data starts the day after in 501 / 544 cases, 2026-10-14), so it starts the day after, no overlap, for
      * the same number of days.
@@ -185,15 +194,15 @@ class ReservationService
             $length = $subscription->start_at->diffInSeconds($end);
             $newEnd = $length > 0 ? $start->copy()->addSeconds($length) : $start->copy();
         } else {
-            $start = $end->copy()->startOfDay()->addDay();
+            $start = $subscription->renewalDate();
             $newEnd = $start->copy()->addDays((int) $subscription->start_at->copy()->startOfDay()->diffInDays($end->copy()->startOfDay()))->endOfDay();
         }
 
+        // the same package (the Renew form does not change it)
         $renewal = $subscription->replicate(['paid_amount', 'remaining', 'repeat_id', 'notes', 'left_at', 'left_by']);
         $renewal->forceFill([
             'start_at' => $start,
             'end_at' => $newEnd,
-            'package_id' => 0,
             'notes' => null,
             'renewal_of' => $subscription->id,
         ]);

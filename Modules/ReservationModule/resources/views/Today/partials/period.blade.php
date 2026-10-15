@@ -1,6 +1,6 @@
 {{--
-    A period section ($section, TodayService::periodSection()): running counts per space (count only, never "x / total"; "Other"
-    = outside the type's spaces), then the renewals: Due today | Not renewed | Next N days (empty groups hidden). A renewed
+    A period section ($section, TodayService::periodSection()): the renewals by the renewal date (the day after the last day): Renews today | Not renewed |
+    Next N days (empty groups hidden). A renewed
     period shows its renewal (renewal_of) instead of Renew.
 --}}
 @php($type = $section['type'])
@@ -12,17 +12,9 @@
         </div>
     </div>
 
-    @if ($section['counts']->isNotEmpty())
-        <div class="today-counts">
-            @foreach ($section['counts'] as $count)
-                <span class="today-counts__item">{{ $count['name'] }} <b>{{ $count['count'] }}</b></span>
-            @endforeach
-        </div>
-    @endif
-
     @php($groups = [
-        ['title' => 'Due today', 'rows' => $section['dueToday'], 'kind' => 'due'],
-        ['title' => 'Not renewed', 'rows' => $section['notRenewed'], 'kind' => 'ended'],
+        ['title' => $isToday ? 'Renews today' : 'Renews this day', 'rows' => $section['renewsToday'], 'kind' => 'today'],
+        ['title' => 'Not renewed', 'rows' => $section['notRenewed'], 'kind' => 'overdue'],
         ['title' => 'Next ' . $section['renewalDays'] . ' days', 'rows' => $section['next'], 'kind' => 'next'],
     ])
     @if (collect($groups)->every(fn ($group) => $group['rows']->isEmpty()))
@@ -33,7 +25,7 @@
                 @foreach ($groups as $group)
                     @continue($group['rows']->isEmpty())
                     <tbody>
-                        <tr class="today-renewals__group"><td colspan="4">{{ $group['title'] }} ({{ $group['rows']->count() }})</td></tr>
+                        <tr class="today-renewals__group"><td colspan="5">{{ $group['title'] }} ({{ $group['rows']->count() }})</td></tr>
                         @foreach ($group['rows'] as $reservation)
                             @include('reservationmodule::Today.partials.renewal-row', ['kind' => $group['kind']])
                         @endforeach

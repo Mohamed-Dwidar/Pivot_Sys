@@ -1554,36 +1554,17 @@ a.today-summary__item:hover {
     color: rgb(100 116 139);
 }
 
-/* the period counts: "Space 34 │ Space 9" */
-.today-counts {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.3rem 0;
-    margin-bottom: 1rem;
-}
-
-.today-counts__item {
-    padding: 0 0.9rem;
-    color: rgb(71 85 105);
-    border-left: 1px solid rgb(203 213 225);
-}
-
-.today-counts__item:first-child {
-    padding-left: 0;
-    border-left: 0;
-}
-
-.today-counts__item b {
-    margin-left: 0.25rem;
-    font-size: 1.05rem;
-    color: rgb(30 41 59);
-}
-
 .data-table tr.today-renewals__group > td {
     padding-top: 0.6rem;
     padding-bottom: 0.6rem;
     font-weight: 600;
     background-color: rgb(248 250 252);
+}
+
+.today-renewals__amount {
+    font-weight: 500;
+    white-space: nowrap;
+    text-align: right;
 }
 
 .today-renewals__actions {

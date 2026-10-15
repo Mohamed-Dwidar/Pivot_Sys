@@ -446,6 +446,16 @@ class Reservation extends Model implements Payable
     // the end date of a period as SQL: its last day (DATE of the end; an end before the start = the start, realEnd())
     const END_DATE_SQL = 'DATE(GREATEST(reservations.end_at, reservations.start_at))';
 
+    // the renewal date of a period as SQL: the day after its last day (= the start of its renewal, renewalOf()); the Today renewals
+    const RENEWAL_DATE_SQL = 'DATE_ADD(' . self::END_DATE_SQL . ', INTERVAL 1 DAY)';
+
+    // the renewal date (the day after its last day = DATE of the real end; an imported end at 00:00 is that day itself, an app
+    // end is 23:59:59 of it): the same day its renewal starts (ReservationService::renewalOf())
+    public function renewalDate(): ?Carbon
+    {
+        return ($this->realEnd() ?? $this->start_at)?->copy()->startOfDay()->addDay();
+    }
+
     /**
      * The periods of the Today page renewals (period types, counted, with a member and an end, not marked left), by their
      * last day (END_DATE_SQL): ending on / between the dates; renewed or not decided by the caller.
