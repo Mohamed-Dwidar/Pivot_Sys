@@ -77,7 +77,8 @@
     {{-- ?v= file time: the browser loads the new file after every change --}}
     <script src="{{ asset('assets/js/custom.js') }}?v={{ filemtime(public_path('assets/js/custom.js')) }}"></script>
     <script src="{{ asset('assets/js/themes/dagger.js') }}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    {{-- SweetAlert2 11.26.25 (MIT), local copy: no CDN --}}
+    <script src="{{ asset('assets/vendor/sweetalert2/sweetalert2.all.min.js') }}"></script>
     @stack('scripts')
 </body>
 
