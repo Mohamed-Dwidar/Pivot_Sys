@@ -205,8 +205,8 @@ trait ReservationActions
         return response()->json(collect($this->planService->optionsForUnit($unit))->map(fn ($plan) => ['name' => Str::humanize($plan['name'])] + $plan)->values());
     }
 
-    // ?renew=ID (Renew: the Today page, the view, the list): the form pre-filled from that period, starting the day after it ends
-    // (renewal_of = it); else ?subscription_type_id / space_id / unit_id / start (the Today page: + New, a timeline slot)
+    // ?renew=ID (Renew: the Schedule page, the view, the list): the form pre-filled from that period, starting the day after it ends
+    // (renewal_of = it); else ?subscription_type_id / space_id / unit_id / start (the Schedule page: + New, a timeline slot)
     public function create(Request $request)
     {
         $reservation = $request->filled('renew')
@@ -276,7 +276,7 @@ trait ReservationActions
         ]);
     }
 
-    // Mark left / undo (the Today page's Not renewed list, the view): the list row, back to the view when asked
+    // Mark left / undo (the Schedule page's Not renewed list, the view): the list row, back to the view when asked
     public function markLeft(Request $request, $id)
     {
         $this->reservationService->markLeft($this->accountId(), $id, Auth::user());

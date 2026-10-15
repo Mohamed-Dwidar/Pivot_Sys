@@ -296,7 +296,7 @@ function ajaxSubmit(form) {
                 done = tables.reload();
             }
 
-            // the Today page: its sections are loaded again (no list rows there, no redirect away)
+            // the Schedule page: its sections are loaded again (no list rows there, no redirect away)
             if (!done && window.todayPage && window.todayPage.active()) {
                 window.todayPage.refresh();
                 done = true;
@@ -984,7 +984,7 @@ document.addEventListener("keydown", function (e) {
 });
 
 
-// Today page ([data-today], ReservationModule Today/*): todayPage.refresh() loads its sections again (data-url) after every save
+// Schedule page ([data-today], ReservationModule Schedule/*): todayPage.refresh() loads its sections again (data-url) after every save
 // in a popup (ajaxSubmit, status menu); Timeline | List per type ([data-today-toggle], remembered in localStorage, optional);
 // the now line of today's timelines (.tl[data-tl-start] = the first hour, unix seconds; 15 minute slots, custom.css .tl-from-N)
 window.todayPage = (function () {
@@ -1042,7 +1042,25 @@ window.todayPage = (function () {
         showView(toggle, button.dataset.view);
     });
 
+    // the date field next to ‹ › ([data-today-date], flatpickr): opens the page of the picked day
+    function datePicker() {
+        var input = document.querySelector("[data-today-date]");
+        if (!input || !window.flatpickr) return;
+        var arabic = document.documentElement.lang === "ar" && flatpickr.l10ns.ar;
+        flatpickr(input, {
+            dateFormat: "D d-m-Y",
+            defaultDate: flatpickr.parseDate(input.dataset.date, "Y-m-d"),
+            locale: arabic || "default",
+            onChange: function (dates) {
+                if (!dates.length) return;
+                var day = flatpickr.formatDate(dates[0], "Y-m-d");
+                if (day !== input.dataset.date) window.location.href = input.dataset.url + "?date=" + day;
+            },
+        });
+    }
+
     document.addEventListener("DOMContentLoaded", function () {
+        datePicker();
         var box = root();
         if (!box) return;
         init(box);

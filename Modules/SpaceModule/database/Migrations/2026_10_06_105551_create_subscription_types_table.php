@@ -18,9 +18,9 @@ return new class extends Migration
             $table->bigInteger('account_id')->default(1);
             $table->string('name')->nullable();
             $table->boolean('show_home')->default(0);
-            // the Today page section of the type: hourly = timeline, full_day = the day's list, period = counts + renewals (replaces full_day)
+            // the Schedule page section of the type: hourly = timeline, full_day = the day's list, period = counts + renewals (replaces full_day)
             $table->enum('booking_mode', ['hourly', 'full_day', 'period'])->default('hourly');
-            // the order of the sections on the Today page
+            // the order of the sections on the Schedule page
             $table->unsignedSmallInteger('home_order')->default(0);
             $table->boolean('can_repeat')->default(0);
             $table->boolean('auto_renew')->default(0);

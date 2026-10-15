@@ -1,5 +1,5 @@
 {{--
-    A period section ($section, TodayService::periodSection()): the renewals by the renewal date (the day after the last day): Renews today | Not renewed |
+    A period section ($section, ScheduleService::periodSection()): the renewals by the renewal date (the day after the last day): Renews today | Not renewed |
     Next N days (empty groups hidden). A renewed
     period shows its renewal (renewal_of) instead of Renew.
 --}}
@@ -27,7 +27,7 @@
                     <tbody>
                         <tr class="today-renewals__group"><td colspan="5">{{ $group['title'] }} ({{ $group['rows']->count() }})</td></tr>
                         @foreach ($group['rows'] as $reservation)
-                            @include('reservationmodule::Today.partials.renewal-row', ['kind' => $group['kind']])
+                            @include('reservationmodule::Schedule.partials.renewal-row', ['kind' => $group['kind']])
                         @endforeach
                     </tbody>
                 @endforeach

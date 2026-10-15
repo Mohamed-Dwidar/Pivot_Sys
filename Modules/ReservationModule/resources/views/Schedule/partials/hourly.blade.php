@@ -1,5 +1,5 @@
 {{--
-    An hourly section ($section, TodayService::hourlySection()): Timeline | List (custom.js todayPage, remembered per type).
+    An hourly section ($section, ScheduleService::hourlySection()): Timeline | List (custom.js todayPage, remembered per type).
     Timeline: rows = the type's active units (by space when it has more than one), columns = the hours of Settings › General
     (15 minute slots: custom.css .tl-from-N / .tl-span-N / .tl-lane-N); a block opens the reservation, an empty hour opens a new
     one for that unit and hour; Earlier / Later columns for what is outside the hours; the now line on today.
@@ -118,7 +118,7 @@
                                 </td>
                                 <td><a href="{{ route($area . '.reservations.show', $reservation->id) }}" data-modal class="font-medium">{{ $reservation->member?->name ?? '-' }}</a></td>
                                 <td>{{ $reservation->unit?->name ?? '-' }}</td>
-                                <td>@include('reservationmodule::Today.partials.pay-badge')</td>
+                                <td>@include('reservationmodule::Schedule.partials.pay-badge')</td>
                                 <td class="whitespace-nowrap">@include('paymentmodule::Payment.partials.remaining-amount', ['payable' => $reservation])</td>
                             </tr>
                         @endforeach

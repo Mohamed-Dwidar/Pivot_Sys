@@ -211,7 +211,7 @@ class ReservationService
     }
 
     /**
-     * A new reservation pre-filled from the Today page (not saved): ?subscription_type_id / space_id / unit_id (only the
+     * A new reservation pre-filled from the Schedule page (not saved): ?subscription_type_id / space_id / unit_id (only the
      * account's, a unit of that type) / start (Y-m-d H:i, or a date: the time = now). null when nothing is given.
      * The form's own checks run on save.
      */
@@ -283,7 +283,7 @@ class ReservationService
     }
 
     /**
-     * Mark a not renewed period "left" (the member did not renew; off the Today page's Not renewed list) — $by = the user,
+     * Mark a not renewed period "left" (the member did not renew; off the Schedule page's Not renewed list) — $by = the user,
      * or undo it. Only a counted period of a period type that is not renewed; undo only when marked.
      */
     public function markLeft($accountId, $id, Model $by): Reservation

@@ -31,7 +31,7 @@
             data-reorder-url="{{ route('account.spaces.reorder') }}">
             <thead>
                 <tr>
-                    {{-- drag a row by its handle = the spaces' order (drop menus, filters, the Today timeline); the list opens in this order --}}
+                    {{-- drag a row by its handle = the spaces' order (drop menus, filters, the Schedule timeline); the list opens in this order --}}
                     <th data-data="order" data-name="sort_order" data-class="w-10"></th>
                     <th data-data="image"></th>
                     <th data-data="name_html" data-name="name">Name</th>

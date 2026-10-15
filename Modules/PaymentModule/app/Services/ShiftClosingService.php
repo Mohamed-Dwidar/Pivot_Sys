@@ -120,7 +120,7 @@ class ShiftClosingService
     }
 
     /**
-     * The open shift in numbers only (the Today page strip; two aggregate queries, no rows): null when nothing is open, else
+     * The open shift in numbers only (the Schedule page strip; two aggregate queries, no rows): null when nothing is open, else
      * ['since', 'cash_in' (payments), 'cash_out' (refunds + expenses)] — withholding apart (not cash), as in summary()
      */
     public function openTotals($accountId, $userId): ?array

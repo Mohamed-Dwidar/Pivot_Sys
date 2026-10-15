@@ -1,17 +1,17 @@
 @php
     /*
      * The employee sidebar (2026-10-13): their daily pages only, direct links (Members since 2026-10-14; order + Payments = Cash In & Cash Out, no Expenses item: 2026-10-14;
-     * Today first instead of Dashboard: 2026-10-14);
+     * Schedule first instead of Dashboard: 2026-10-14);
      * Change Password stays in the header menu (employee/main $menuLinks).
      */
     $items = [
         ['divider' => 'Daily'],
-        // Today = the employee's home page (2026-10-14); no Dashboard item (employee.dashboard = their profile: header menu "My Profile")
+        // Schedule (was Today, 2026-10-16) = the employee's home page (2026-10-14); no Dashboard item (employee.dashboard = their profile: header menu "My Profile")
         [
-            'title' => 'Today',
+            'title' => 'Schedule',
             'icon' => 'calendar-days',
-            'url' => route('employee.today.index'),
-            'active' => request()->routeIs('employee.today.*'),
+            'url' => route('employee.schedule.index'),
+            'active' => request()->routeIs('employee.schedule.*'),
         ],
         [
             'title' => 'Reservations',

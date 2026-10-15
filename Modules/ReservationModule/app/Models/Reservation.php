@@ -457,7 +457,7 @@ class Reservation extends Model implements Payable
     }
 
     /**
-     * The periods of the Today page renewals (period types, counted, with a member and an end, not marked left), by their
+     * The periods of the Schedule page renewals (period types, counted, with a member and an end, not marked left), by their
      * last day (END_DATE_SQL): ending on / between the dates; renewed or not decided by the caller.
      */
     public function scopeRenewalPeriods($query)

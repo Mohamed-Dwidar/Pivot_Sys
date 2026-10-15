@@ -21,7 +21,7 @@ class SubscriptionType extends Model
     ];
 
     /**
-     * How the type is booked (replaces the old full_day flag) = its Today page section: hourly = a timeline of its units,
+     * How the type is booked (replaces the old full_day flag) = its Schedule page section: hourly = a timeline of its units,
      * full_day = the day's list (booked by date), period = running counts + renewals (subscriptions / contracts: one
      * reservation per period, renewed by a new period with renewal_of)
      */

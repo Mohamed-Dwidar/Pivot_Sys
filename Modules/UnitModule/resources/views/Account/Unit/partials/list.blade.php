@@ -14,7 +14,7 @@
         data-reorder-url="{{ route('account.spaces.units.reorder', $space->id) }}" data-empty="No units in this space yet.">
         <thead>
             <tr>
-                {{-- drag a row by its handle = the units' order in the space (the reservation form, the Today timeline); the list opens in this order --}}
+                {{-- drag a row by its handle = the units' order in the space (the reservation form, the Schedule timeline); the list opens in this order --}}
                 <th data-data="order" data-name="sort_order" data-class="w-10"></th>
                 <th data-data="image"></th>
                 <th data-data="name_html" data-name="name">Name</th>

@@ -1,7 +1,7 @@
 @extends('layoutmodule::account.main')
 
 {{--
-    Settings › General (the account only, docs/payments-plan.md): two switches stored on the account + the Today page settings (timeline hours, renewals window).
+    Settings › General (the account only, docs/payments-plan.md): two switches stored on the account + the Schedule page settings (timeline hours, renewals window).
     Withholding tax OFF: no new withholding anywhere (payment type, Method filter, certificates page + menu); existing withholding
     records stay and are still shown. VAT: for Phase 2 (OFF = prices tax free); nothing else changes now.
 --}}
@@ -26,7 +26,7 @@
                 'hint' => 'For invoices (coming next): off = all prices are tax free, no tax rates or tax lines. Nothing changes today.'])
         </div>
 
-        <div class="form-section mt-8">Today Page</div>
+        <div class="form-section mt-8">Schedule Page</div>
         @php($hourOptions = collect(range(0, 30))->mapWithKeys(fn ($hour) => [$hour => sprintf('%02d:00', $hour % 24) . ($hour >= 24 ? ' · Next Day' : '')])->all())
         <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
             @include('layoutmodule::partials.field', ['name' => 'today_hours_from', 'label' => 'Timeline From', 'type' => 'select', 'required' => true,

@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ config('app.name') }} - @yield('title')</title>
+    <title>{{ config('app.name') }} - {!! trim(strip_tags($__env->yieldContent('title'))) !!}</title>
 
     <link rel="icon" href="{{ asset('assets/images/favicon.jpg') }}" type="image/png">
     <link rel="stylesheet" href="{{ asset('assets/css/vendors/simplebar.css') }}">

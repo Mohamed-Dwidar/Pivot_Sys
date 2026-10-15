@@ -30,7 +30,7 @@ return new class extends Migration {
             $table->bigInteger('repeat_id')->default(0)->index();
             // the period this reservation renews (Renew / repeat copies of a period type); at most one counted renewal per period
             $table->unsignedBigInteger('renewal_of')->nullable()->index();
-            // a period marked "left" (the member did not renew): off the Today page's Not renewed list; left_by 0 = auto (to_run cutoff)
+            // a period marked "left" (the member did not renew): off the Schedule page's Not renewed list; left_by 0 = auto (to_run cutoff)
             $table->dateTime('left_at')->nullable();
             $table->bigInteger('left_by')->default(0);
             $table->boolean('is_repeat')->default(0);

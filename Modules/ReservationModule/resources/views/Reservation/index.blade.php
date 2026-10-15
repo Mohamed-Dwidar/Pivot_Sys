@@ -29,7 +29,7 @@
             <option value="">All Spaces</option>
             @include('layoutmodule::partials.filter-options', ['options' => $spaces])
         </select>
-        {{-- ?subscription_type_id= (the Today page "View all"): chosen when the list opens (datatables.js [data-initial]) --}}
+        {{-- ?subscription_type_id= (the Schedule page "View all"): chosen when the list opens (datatables.js [data-initial]) --}}
         <select name="subscription_type_id" class="{{ config('layoutmodule.form.select') }}" aria-label="Type" @if (request()->filled('subscription_type_id')) data-initial="{{ (int) request('subscription_type_id') }}" @endif>
             <option value="">All Types</option>
             @foreach ($types as $id => $name)

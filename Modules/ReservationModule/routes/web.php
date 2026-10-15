@@ -5,9 +5,9 @@ use Modules\AccountModule\app\Models\Account;
 use Modules\EmployeeModule\app\Models\Employee;
 use Modules\ReservationModule\app\Http\Controllers\Account\ReservationAccountModuleController;
 use Modules\ReservationModule\app\Http\Controllers\Account\ReservationStatusAccountModuleController;
-use Modules\ReservationModule\app\Http\Controllers\Account\TodayAccountModuleController;
+use Modules\ReservationModule\app\Http\Controllers\Account\ScheduleAccountModuleController;
 use Modules\ReservationModule\app\Http\Controllers\Employee\ReservationEmployeeModuleController;
-use Modules\ReservationModule\app\Http\Controllers\Employee\TodayEmployeeModuleController;
+use Modules\ReservationModule\app\Http\Controllers\Employee\ScheduleEmployeeModuleController;
 
 /**
  *  Reservations: managed by the account and by its employees (same actions, see Concerns\ReservationActions)
@@ -28,7 +28,7 @@ $reservationRoutes = function ($controller) {
     // a not counted reservation (cancelled ...) back to the default counted status, after the availability check
     Route::get('{id}/restore', [$controller, 'restoreForm'])->name('restore');
     Route::patch('{id}/restore', [$controller, 'restore'])->name('restore.store');
-    // a not renewed subscription period: marked "left" (off the Today page's Not renewed list) / undone
+    // a not renewed subscription period: marked "left" (off the Schedule page's Not renewed list) / undone
     Route::patch('{id}/left', [$controller, 'markLeft'])->name('left');
     Route::patch('{id}/left/undo', [$controller, 'undoLeft'])->name('left.undo');
     Route::delete('{id}', [$controller, 'destroy'])->name('destroy');
@@ -41,18 +41,22 @@ Route::prefix('employee/reservations')->name('employee.reservations.')->middlewa
     ->group(fn () => $reservationRoutes(ReservationEmployeeModuleController::class));
 
 /**
- *  The Today page (TodayActions): the same for the account (under Dashboard) and its employees (their home page)
+ *  The Schedule page (ScheduleActions): the same for the account (under Dashboard) and its employees (their home page);
+ *  renamed from Today 2026-10-16: the old /today URLs redirect (bookmarks)
  */
-$todayRoutes = function ($controller) {
+$scheduleRoutes = function ($controller) {
     Route::get('/', [$controller, 'index'])->name('index');
     Route::get('sections', [$controller, 'sections'])->name('sections');
 };
 
-Route::prefix('account/today')->name('account.today.')->middleware(['auth', 'user.active:' . Account::class])
-    ->group(fn () => $todayRoutes(TodayAccountModuleController::class));
+Route::prefix('account/schedule')->name('account.schedule.')->middleware(['auth', 'user.active:' . Account::class])
+    ->group(fn () => $scheduleRoutes(ScheduleAccountModuleController::class));
 
-Route::prefix('employee/today')->name('employee.today.')->middleware(['auth', 'user.active:' . Employee::class])
-    ->group(fn () => $todayRoutes(TodayEmployeeModuleController::class));
+Route::prefix('employee/schedule')->name('employee.schedule.')->middleware(['auth', 'user.active:' . Employee::class])
+    ->group(fn () => $scheduleRoutes(ScheduleEmployeeModuleController::class));
+
+Route::redirect('account/today', '/account/schedule');
+Route::redirect('employee/today', '/employee/schedule');
 
 /**
  *  Reservation statuses: only the account manages them

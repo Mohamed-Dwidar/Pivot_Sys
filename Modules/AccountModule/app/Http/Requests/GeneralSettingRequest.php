@@ -4,7 +4,7 @@ namespace Modules\AccountModule\app\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-// Settings › General of the logged in account (the routes are account only): the two tax switches + the Today page settings
+// Settings › General of the logged in account (the routes are account only): the two tax switches + the Schedule page settings
 class GeneralSettingRequest extends FormRequest
 {
     public function authorize(): bool

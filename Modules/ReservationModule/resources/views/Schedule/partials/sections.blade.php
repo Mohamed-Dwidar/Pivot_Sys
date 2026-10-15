@@ -1,13 +1,13 @@
-{{-- The Today page content (also answered alone by {area}.today.sections): night hint, shift strip, summary, the sections --}}
+{{-- The Schedule page content (also answered alone by {area}.schedule.sections): night hint, shift strip, summary, the sections --}}
 @if ($nightNow)
     <div class="today-night"><i data-lucide="moon"></i> Night shift · {{ $nightNow->format('d-m-Y h:i A') }}</div>
 @endif
 
-@include('reservationmodule::Today.partials.shift-strip')
-@include('reservationmodule::Today.partials.summary')
+@include('reservationmodule::Schedule.partials.shift-strip')
+@include('reservationmodule::Schedule.partials.summary')
 
 @forelse ($sections as $section)
-    @include('reservationmodule::Today.partials.' . ['hourly' => 'hourly', 'full_day' => 'full-day', 'period' => 'period'][$section['mode']])
+    @include('reservationmodule::Schedule.partials.' . ['hourly' => 'hourly', 'full_day' => 'full-day', 'period' => 'period'][$section['mode']])
 @empty
     <div class="today-empty">
         Nothing to show yet: turn on "Show on Home" for the subscription types that should appear here

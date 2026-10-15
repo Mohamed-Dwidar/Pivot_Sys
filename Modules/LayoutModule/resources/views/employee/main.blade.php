@@ -5,7 +5,7 @@
 
 @section('header')
     @include('layoutmodule::header', [
-        'homeUrl' => route('employee.today.index'),
+        'homeUrl' => route('employee.schedule.index'),
         'userName' => $authUser->userable->displayName(),
         'userSubtitle' => $authUser->email,
         'menuLinks' => [

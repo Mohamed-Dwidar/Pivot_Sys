@@ -1608,7 +1608,7 @@ input:disabled:not([type="checkbox"]):not([type="radio"]) {
 }
 
 
-/* ===== Today page (ReservationModule Today/*, TodayService) ===== */
+/* ===== Schedule page (ReservationModule Schedule/*, ScheduleService) ===== */
 /* a flex item of the content box: without min-width 0 the timeline's width would widen the page (it scrolls inside .tl-scroll) */
 .today {
     min-width: 0;
@@ -1624,6 +1624,20 @@ input:disabled:not([type="checkbox"]):not([type="radio"]) {
 .today-nav {
     display: flex;
     gap: 0.35rem;
+}
+
+/* the Schedule page title: "Today" badge when the shown day is the business date */
+.schedule-today-badge {
+    margin-left: 0.5rem;
+    vertical-align: middle;
+}
+
+/* the date field between ‹ ›(flatpickr, readonly): looks clickable, not disabled */
+.today-nav .today-nav__date[readonly] {
+    width: 9.5rem;
+    text-align: center;
+    cursor: pointer;
+    background-color: #fff;
 }
 
 .today-night {

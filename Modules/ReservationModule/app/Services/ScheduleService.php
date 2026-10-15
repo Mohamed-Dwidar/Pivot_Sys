@@ -11,7 +11,7 @@ use Modules\SpaceModule\app\Models\SubscriptionType;
 use Modules\UnitModule\app\Models\Unit;
 
 /**
- * The Today page (account + employees, same content): built ONLY from the account's own data — one section per subscription
+ * The Schedule page (account + employees, same content): built ONLY from the account's own data — one section per subscription
  * type with Show on Home (home_order, then name), its layout by booking_mode; nothing is named in code (multi account).
  *
  * The business day (Settings › General, Account::businessDay()): D = [D cutoff:00, D+1 cutoff:00), cutoff = timeline "to" − 24
@@ -26,7 +26,7 @@ use Modules\UnitModule\app\Models\Unit;
  *   its renewal's end
  * Only counted reservations (not cancelled like ones).
  */
-class TodayService
+class ScheduleService
 {
     // the timeline slot (minutes) — custom.css .tl-from-N / .tl-span-N (N = 1 … 120: 30 hours)
     const SLOT_MINUTES = 15;

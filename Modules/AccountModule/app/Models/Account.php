@@ -97,7 +97,7 @@ class Account extends Model implements Userable
     }
 
     /**
-     * The Today page timeline hours (Settings › General): from 0–23, to from + 1 … 30 (> 24 = the next morning, 26 = 02:00).
+     * The Schedule page timeline hours (Settings › General): from 0–23, to from + 1 … 30 (> 24 = the next morning, 26 = 02:00).
      * The business day of a date D = [D cutoff:00, D+1 cutoff:00), cutoff = to − 24 (0 when the day ends by midnight): a place
      * open through the night keeps its night (until the cutoff) on the day it started.
      */
@@ -125,7 +125,7 @@ class Account extends Model implements Userable
         return [$start, $start->copy()->addDay()];
     }
 
-    // the renewals window of the Today page (days after the business date)
+    // the renewals window of the Schedule page (days after the business date)
     public function renewalDays(): int
     {
         return min(90, max(1, (int) ($this->renewal_days ?? 7)));

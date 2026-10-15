@@ -1,4 +1,4 @@
-{{-- A full day section ($section, TodayService::fullDaySection()): the day's reservations by their date, by check-in time --}}
+{{-- A full day section ($section, ScheduleService::fullDaySection()): the day's reservations by their date, by check-in time --}}
 @php($type = $section['type'])
 <section id="{{ $section['anchor'] }}" class="today-section">
     <div class="today-section__head">
@@ -22,7 +22,7 @@
                                 <div class="text-xs text-slate-500">{{ $reservation->unit?->name }}</div>
                             </td>
                             <td class="whitespace-nowrap">{{ $reservation->today_in?->format(\Modules\ReservationModule\app\Models\Reservation::TIME_FORMAT) }}</td>
-                            <td>@include('reservationmodule::Today.partials.pay-badge')</td>
+                            <td>@include('reservationmodule::Schedule.partials.pay-badge')</td>
                             <td class="whitespace-nowrap">@include('paymentmodule::Payment.partials.remaining-amount', ['payable' => $reservation])</td>
                         </tr>
                     @endforeach

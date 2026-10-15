@@ -7,34 +7,34 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Modules\AccountModule\app\Models\Account;
 use Modules\PaymentModule\app\Services\ShiftClosingService;
-use Modules\ReservationModule\app\Services\TodayService;
+use Modules\ReservationModule\app\Services\ScheduleService;
 
 /**
- * The Today page, the same for the account and its employees (TodayService): ?date=Y-m-d (default: the business date).
+ * The Schedule page, the same for the account and its employees (ScheduleService): ?date=Y-m-d (default: the business date).
  * index() = the page; sections() = its content only (custom.js todayPage: ‹ › and after every save in a popup).
  * The shift strip: the logged in user's open shift (ShiftClosingService::openTotals(), hidden when nothing is open).
  */
-trait TodayActions
+trait ScheduleActions
 {
-    private TodayService $todayService;
+    private ScheduleService $scheduleService;
     private ShiftClosingService $shiftService;
 
     abstract protected function area(): string;
 
-    public function __construct(TodayService $todayService, ShiftClosingService $shiftService)
+    public function __construct(ScheduleService $scheduleService, ShiftClosingService $shiftService)
     {
-        $this->todayService = $todayService;
+        $this->scheduleService = $scheduleService;
         $this->shiftService = $shiftService;
     }
 
     public function index(Request $request)
     {
-        return view('reservationmodule::Today.index', $this->pageData($request));
+        return view('reservationmodule::Schedule.index', $this->pageData($request));
     }
 
     public function sections(Request $request)
     {
-        return view('reservationmodule::Today.partials.sections', $this->pageData($request));
+        return view('reservationmodule::Schedule.partials.sections', $this->pageData($request));
     }
 
     private function pageData(Request $request): array
@@ -44,7 +44,7 @@ trait TodayActions
         $input = (string) $request->query('date', '');
         $date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $input) && strtotime($input) ? Carbon::parse($input) : $account->businessDate();
 
-        return $this->todayService->page($accountId, $account, $date) + [
+        return $this->scheduleService->page($accountId, $account, $date) + [
             'area' => $this->area(),
             'shift' => $this->shiftService->openTotals($accountId, Auth::id()),
         ];
