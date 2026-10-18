@@ -15,10 +15,8 @@ use Modules\ReservationModule\app\Http\Controllers\Employee\ScheduleEmployeeModu
 $reservationRoutes = function ($controller) {
     Route::get('/', [$controller, 'index'])->name('index');
     Route::get('data', [$controller, 'data'])->name('data');
-    // the dependent drop menus of the form
-    Route::get('options/spaces', [$controller, 'spaces'])->name('options.spaces');
-    Route::get('options/units', [$controller, 'units'])->name('options.units');
-    Route::get('options/plans', [$controller, 'plans'])->name('options.plans');
+    // the form's live availability check (unit + dates + times; custom.js reservationAvailability())
+    Route::get('availability', [$controller, 'availability'])->name('availability');
     Route::get('create', [$controller, 'create'])->name('create');
     Route::post('/', [$controller, 'store'])->name('store');
     Route::get('{id}', [$controller, 'show'])->name('show');
@@ -47,6 +45,7 @@ Route::prefix('employee/reservations')->name('employee.reservations.')->middlewa
 $scheduleRoutes = function ($controller) {
     Route::get('/', [$controller, 'index'])->name('index');
     Route::get('sections', [$controller, 'sections'])->name('sections');
+    Route::get('cancelled', [$controller, 'cancelled'])->name('cancelled');
 };
 
 Route::prefix('account/schedule')->name('account.schedule.')->middleware(['auth', 'user.active:' . Account::class])

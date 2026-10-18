@@ -2,8 +2,15 @@
 @extends(request()->ajax() ? 'layoutmodule::modal' : Auth::user()->userable->layout())
 
 @section('title')
-    {{-- a renewal (?renew=) has renewal_of; a reservation pre-filled from the Schedule page (type / unit / start) is a new one --}}
-    {{ !empty($reservation?->renewal_of) ? 'Renew Subscription' : 'Add Reservation' }}
+    {{-- a renewal (?renew=) has renewal_of; a reservation pre-filled from the Schedule page (type / unit / start) is a new one,
+         named after its type (the type select is hidden there) --}}
+    @if (!empty($reservation?->renewal_of))
+        Renew Subscription
+    @elseif ($reservation && $reservation->subscription_type_id && isset($subscriptionTypes[$reservation->subscription_type_id]))
+        New Reservation · {{ $subscriptionTypes[$reservation->subscription_type_id]['name'] }}
+    @else
+        Add Reservation
+    @endif
 @endsection
 
 @section('modal-size', 'xl')

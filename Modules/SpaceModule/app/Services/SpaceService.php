@@ -48,15 +48,6 @@ class SpaceService
             ->mapWithKeys(fn ($item) => [$item->id => ['name' => $item->name, 'active' => (bool) $item->is_active]])->all();
     }
 
-    // [id => name] of the active spaces that have this subscription type, for the reservation form
-    public function optionsForSubscriptionType($accountId, $subscriptionTypeId): array
-    {
-        return $this->spaceRepository->forAccount($accountId)
-            ->whereHas('subscriptionTypes', fn ($query) => $query->where('subscription_types.id', $subscriptionTypeId))
-            ->where('is_active', true)
-            ->ordered()->get()->pluck('name', 'id')->all();
-    }
-
     /**
      * Drag and drop in the Spaces list: put the space before / after another space of the account; the account's spaces are
      * numbered 1…n again in the new order. false = nothing to move (the same space).

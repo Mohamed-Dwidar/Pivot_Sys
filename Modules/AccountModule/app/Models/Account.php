@@ -65,7 +65,10 @@ class Account extends Model implements Userable
     // the account (its settings) by id, loaded once per request — the views / services of its employees ask it too
     public static function settingsOf($accountId): ?self
     {
-        return self::$settings[(int) $accountId] ??= static::find((int) $accountId);
+        // the logged in account's own row when it is that account (no second query)
+        $userable = Auth::user()?->userable;
+        return self::$settings[(int) $accountId] ??= $userable instanceof self && (int) $userable->id === (int) $accountId
+            ? $userable : static::find((int) $accountId);
     }
 
     // after Settings › General is saved: the next settingsOf() reads it again

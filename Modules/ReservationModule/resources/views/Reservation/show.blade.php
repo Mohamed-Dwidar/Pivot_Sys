@@ -32,6 +32,10 @@
     @if ($reservation->isPeriod() && $reservation->isCounted() && !$reservation->renewedBy)
         <a href="{{ route($area . '.reservations.create', ['renew' => $reservation->id]) }}" data-modal class="btn btn-secondary"><i data-lucide="refresh-cw"></i> Renew</a>
     @endif
+    {{-- Pay: Add Cash In for this reservation (still owed, paid on its own: not inside a package / not counted) --}}
+    @if ($reservation->canTakePayments() && $reservation->remaining > 0)
+        <a href="{{ route($area . '.payments.create', ['payable' => 'reservation', 'payable_id' => $reservation->id]) }}" data-modal class="btn btn-primary"><i data-lucide="wallet"></i> Pay</a>
+    @endif
     <a href="{{ route($area . '.reservations.edit', $reservation->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
     @include('reservationmodule::Reservation.partials.delete-form')
 @endsection
@@ -49,19 +53,19 @@
     {{-- the period (the status is in the header menu) --}}
     <div class="mt-2 text-slate-500">{{ $reservation->period }}</div>
 
+    {{-- a unit for 1 person (capacity 1, or 0 = not set): always 1, not shown (like the form) --}}
+    @if ((int) $reservation->unit?->capacity > 1)
+        <div class="form-section">&nbsp;</div>
+
+        <dl class="detail-list">
+            <div><dt>Number of People</dt><dd>{{ $reservation->number_of_peoples }}</dd></div>
+        </dl>
+    @endif
+
    <div class="form-section">&nbsp;</div>
 
-    <dl class="detail-list">
-        <div><dt>Number of People</dt><dd>{{ $reservation->number_of_peoples }}</dd></div>
-    </dl>
-
-   <div class="form-section">&nbsp;</div>
-
-    <dl class="detail-list">
-        <div><dt>Amount</dt><dd>{{ number_format($reservation->amount, 2) }}</dd></div>
-        <div><dt>Discount</dt><dd>{{ number_format($reservation->discount_value, 2) }} ({{ rtrim(rtrim(number_format($reservation->discount_percentage, 2), '0'), '.') }}%)</dd></div>
-        <div><dt>Net Amount</dt><dd class="font-medium text-success">{{ number_format($reservation->net_amount, 2) }}</dd></div>
-    </dl>
+    {{-- Amount - Discount - Net Amount, then Paid - Remaining (only when it is paid on its own: not in a package / not counted) --}}
+    @include('paymentmodule::Payment.partials.amount-lines', ['payable' => $reservation, 'kind' => 'reservation', 'paidLine' => $reservation->canTakePayments()])
 
     {{-- a subscription period: the period it renews, its renewal, left (+ undo) --}}
     @if ($reservation->isPeriod() && ($reservation->renewal_of || $reservation->renewedBy || $reservation->left_at))
@@ -86,7 +90,8 @@
         </dl>
     @endif
 
-    @include('paymentmodule::Payment.partials.payable-payments', ['payable' => $reservation, 'kind' => 'reservation'])
+    {{-- the Cash In block without its Due / Paid / Remaining (shown above) --}}
+    @include('paymentmodule::Payment.partials.payable-payments', ['payable' => $reservation, 'kind' => 'reservation', 'summary' => false])
 
     <div class="form-section">&nbsp;</div>
 

@@ -12,7 +12,8 @@ return new class extends Migration {
         // money paid out from a drawer: it joins the open shift of whoever records it (docs/payments-plan.md "Expenses")
         Schema::create('expenses', function (Blueprint $table) {
             $table->id();
-            $table->bigInteger('account_id')->index();
+            // no own index (2026-10-18): the unique (account_id, expense_no) starts with it
+            $table->bigInteger('account_id');
             // per account: MAX + 1 (ExpenseService::nextNumber(), from config paymentmodule.number_start); imported = old id
             $table->unsignedInteger('expense_no');
             $table->bigInteger('expense_category_id')->default(0)->index();

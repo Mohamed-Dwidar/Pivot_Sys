@@ -11,7 +11,8 @@ return new class extends Migration {
     public function up(): void {
         Schema::create('payments', function (Blueprint $table) {
             $table->id();
-            $table->bigInteger('account_id')->index();
+            // (account_id, deleted_at) below = the account's lists / counts (2026-10-18; the plain account_id index was redundant)
+            $table->bigInteger('account_id');
             // per account: MAX + 1 (PaymentService::nextNumber())
             $table->unsignedInteger('payment_no');
 
@@ -30,7 +31,8 @@ return new class extends Migration {
             // a refund: the payment it gives money back for (0 = not a refund, or an imported refund with no link)
             $table->bigInteger('refund_of')->default(0)->index();
             // the collector's shift closing (0 = their open shift; the account's own payments too)
-            $table->bigInteger('shift_closing_id')->default(0);
+            // indexed (2026-10-18): the shift lists look payments up by closing
+            $table->bigInteger('shift_closing_id')->default(0)->index();
             $table->date('paid_at')->index();
             $table->string('reference')->nullable();
             $table->text('notes')->nullable();
@@ -48,6 +50,7 @@ return new class extends Migration {
             $table->index(['payable_type', 'payable_id']);
             // an employee's open period / a shift closing's payments
             $table->index(['account_id', 'creatable_id', 'shift_closing_id']);
+            $table->index(['account_id', 'deleted_at']);
         });
     }
 

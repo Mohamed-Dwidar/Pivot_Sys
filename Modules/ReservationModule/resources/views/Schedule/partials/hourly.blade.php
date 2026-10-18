@@ -1,5 +1,6 @@
 {{--
-    An hourly section ($section, ScheduleService::hourlySection()): Timeline | List (custom.js todayPage, remembered per type).
+    An hourly section ($section, ScheduleService::hourlySection()): Timeline | List (custom.js todayPage, remembered per type);
+    List = the reservations list columns (2026-10-18).
     Timeline: rows = the type's active units (by space when it has more than one), columns = the hours of Settings › General
     (15 minute slots: custom.css .tl-from-N / .tl-span-N / .tl-lane-N); a block opens the reservation, an empty hour opens a new
     one for that unit and hour; Earlier / Later columns for what is outside the hours; the now line on today.
@@ -104,22 +105,28 @@
         @if ($section['list']->isEmpty())
             <div class="today-empty">No {{ $type->name }} {{ $isToday ? 'today' : 'on this day' }}.</div>
         @else
+            {{-- the reservations list columns and cells (Reservation/partials/row-*, ReservationActions::table()) + its row menu --}}
             <div class="table-wrap">
                 <table class="data-table">
-                    <thead><tr><th>Time</th><th>Name</th><th>Unit</th><th>Status</th><th>Remaining</th></tr></thead>
+                    <thead><tr><th>Member</th><th>Space &rsaquo; Unit</th><th>Plan</th><th>Period</th><th>Amount</th><th>Paid</th><th>Remaining</th><th>Created By</th><th>Status</th><th></th></tr></thead>
                     <tbody>
                         @foreach ($section['list'] as $reservation)
-                            <tr>
+                            <tr @class(["row-muted" => !$reservation->isCounted()])>
+                                <td>@include('reservationmodule::Reservation.partials.row-member')</td>
+                                <td>@include('reservationmodule::Reservation.partials.row-place', ['stacked' => true])</td>
+                                <td>{{ $reservation->plan?->name ?? '-' }}</td>
                                 <td class="whitespace-nowrap">
-                                    {{ $reservation->start_at->format($timeFormat) }} – {{ $reservation->realEnd()?->format($timeFormat) ?? '…' }}
+                                    @include('reservationmodule::Reservation.partials.row-period')
                                     @unless ($reservation->today_own)
                                         <span class="badge badge-status-slate badge-small">from yesterday</span>
                                     @endunless
                                 </td>
-                                <td><a href="{{ route($area . '.reservations.show', $reservation->id) }}" data-modal class="font-medium">{{ $reservation->member?->name ?? '-' }}</a></td>
-                                <td>{{ $reservation->unit?->name ?? '-' }}</td>
-                                <td>@include('reservationmodule::Schedule.partials.pay-badge')</td>
-                                <td class="whitespace-nowrap">@include('paymentmodule::Payment.partials.remaining-amount', ['payable' => $reservation])</td>
+                                <td class="whitespace-nowrap"><span class="font-bold text-success">{{ number_format($reservation->net_amount, 2) }}</span></td>
+                                <td class="whitespace-nowrap">{{ number_format($reservation->paid_amount, 2) }}</td>
+                                <td class="whitespace-nowrap">@include('reservationmodule::Reservation.partials.row-remaining')</td>
+                                <td>{{ $reservation->creatable?->userable?->displayName() ?? '-' }}</td>
+                                <td>@include('reservationmodule::Reservation.partials.row-status')</td>
+                                <td>@include('reservationmodule::Reservation.partials.row-actions')</td>
                             </tr>
                         @endforeach
                     </tbody>

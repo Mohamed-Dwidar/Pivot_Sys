@@ -5,7 +5,7 @@ namespace Modules\PackageModule\app\Http\Controllers\Concerns;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
-use Modules\MemberModule\app\Services\MemberService;
+use Modules\CompanyModule\app\Services\CompanyService;
 use Modules\PackageModule\app\Http\Requests\PackageRequest;
 use Modules\PackageModule\app\Services\PackageService;
 use niklasravnsborg\LaravelPdf\Facades\Pdf;
@@ -19,14 +19,14 @@ use Yajra\DataTables\Facades\DataTables;
 trait PackageActions
 {
     private PackageService $packageService;
-    private MemberService $memberService;
+    private CompanyService $companyService;
 
     abstract protected function area(): string;
 
-    public function __construct(PackageService $packageService, MemberService $memberService)
+    public function __construct(PackageService $packageService, CompanyService $companyService)
     {
         $this->packageService = $packageService;
-        $this->memberService = $memberService;
+        $this->companyService = $companyService;
     }
 
     // the account itself, or the account of the logged in employee
@@ -100,8 +100,9 @@ trait PackageActions
 
     public function create()
     {
-        $members = $this->memberService->options($this->accountId());
-        return view('packagemodule::Package.create', compact('members'));
+        // the Member field searches the server (member-select); its quick add offers the account's companies
+        $companies = $this->companyService->options($this->accountId());
+        return view('packagemodule::Package.create', compact('companies'));
     }
 
     public function store(PackageRequest $request)
@@ -152,8 +153,8 @@ trait PackageActions
     public function edit($id)
     {
         $package = $this->packageService->findOne($this->accountId(), $id);
-        $members = $this->memberService->options($this->accountId());
-        return view('packagemodule::Package.edit', compact('package', 'members'));
+        $companies = $this->companyService->options($this->accountId());
+        return view('packagemodule::Package.edit', compact('package', 'companies'));
     }
 
     public function update(PackageRequest $request, $id)

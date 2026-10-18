@@ -989,6 +989,12 @@ div.dt-container div.dt-processing > div:last-child {
     grid-column: 1 / -1;
 }
 
+/* the money of a reservation / package (Payment/partials/amount-lines): 3 fixed columns, a line per dl */
+.detail-list.amount-lines {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem 1.5rem;
+}
+
 .account-logo {
     width: 5rem;
     height: 5rem;
@@ -1281,6 +1287,115 @@ tr.row-removing {
 /* ------------------------------------------------------------------ */
 /* sections shown by a checkbox (the grid classes would show them) */
 [data-show-if][hidden] {
+    display: none !important;
+}
+
+/* the reservation form's live availability line (custom.js reservationAvailability()) */
+.availability-line {
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
+}
+
+.availability-line[hidden] {
+    display: none !important;
+}
+
+.availability-line--free {
+    color: rgb(var(--color-success));
+}
+
+.availability-line--shared {
+    color: rgb(161 98 7);
+}
+
+.availability-line--busy {
+    font-weight: 500;
+    color: rgb(var(--color-danger));
+}
+
+/* Member field quick add (membermodule::partials.member-select): the "+ New member" link and the inline box; both take the
+   whole row of a grid form */
+.member-quick-link-row,
+.member-quick {
+    grid-column: 1 / -1;
+}
+
+.member-quick-link-row {
+    margin-top: -0.5rem;
+}
+
+.member-quick-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: rgb(var(--color-primary));
+}
+
+.member-quick-link svg {
+    width: 0.9rem;
+    height: 0.9rem;
+}
+
+.member-quick-link:hover {
+    text-decoration: underline;
+}
+
+.member-quick {
+    margin-top: 0.75rem;
+    padding: 1rem;
+    border: 1px dashed rgb(var(--color-primary) / 0.45);
+    border-radius: 0.5rem;
+    background-color: rgb(var(--color-primary) / 0.03);
+}
+
+.member-quick[hidden] {
+    display: none !important;
+}
+
+.member-quick__title {
+    margin-bottom: 0.75rem;
+    font-weight: 600;
+}
+
+.member-quick__duplicate {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding: 0.6rem 0.8rem;
+    font-size: 0.85rem;
+    color: rgb(var(--color-danger));
+    background-color: rgb(var(--color-danger) / 0.06);
+    border-radius: 0.4rem;
+}
+
+.member-quick__duplicate[hidden] {
+    display: none !important;
+}
+
+.member-quick__actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.9rem;
+}
+
+/* Tom Select: the "+ Add … as a new member" option */
+.ts-dropdown .create {
+    padding: 0.5rem 0.75rem;
+    color: rgb(var(--color-primary));
+    cursor: pointer;
+}
+
+[data-member-retry] {
+    color: rgb(var(--color-danger));
+    cursor: pointer;
+}
+
+/* a field hidden by custom.js (e.g. Number of People for a unit for 1 person) */
+[data-field][hidden] {
     display: none !important;
 }
 
@@ -1695,6 +1810,35 @@ input:disabled:not([type="checkbox"]):not([type="radio"]) {
     color: rgb(71 85 105);
     border: 1px solid rgb(226 232 240);
     border-radius: 0.5rem;
+}
+
+/* the same chips under a section title (period: Renews today / Not renewed per space), a row per group with its label */
+.today-summary--section {
+    align-items: center;
+    margin-top: 0;
+    margin-bottom: 0.6rem;
+}
+
+.today-summary__label {
+    min-width: 7.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: rgb(71 85 105);
+}
+
+/* a red chip (the summary "Cancelled") */
+.today-summary__item.today-summary__item--danger,
+.today-summary__item.today-summary__item--danger b {
+    color: rgb(var(--color-danger));
+}
+
+.today-summary__item.today-summary__item--danger {
+    background-color: rgb(var(--color-danger) / 0.06);
+    border-color: rgb(var(--color-danger) / 0.35);
+}
+
+a.today-summary__item.today-summary__item--danger:hover {
+    border-color: rgb(var(--color-danger) / 0.7);
 }
 
 a.today-summary__item:hover {

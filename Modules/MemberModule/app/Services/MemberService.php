@@ -4,6 +4,7 @@ namespace Modules\MemberModule\app\Services;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use Modules\MemberModule\app\Models\Member;
 use Modules\MemberModule\app\Repositories\MemberRepository;
 
 /**
@@ -24,11 +25,36 @@ class MemberService
         return $this->memberRepository->forAccount($accountId)->filter($filters);
     }
 
-    // [id => "name mobile"] (searchable by both), for the packages / reservations forms
-    public function options($accountId): array
+    /**
+     * The Member drop menus' server search (2026-10-18, {area}.members.search): name contains $q, or the phone by phone_key —
+     * an Egyptian mobile typed from its start (01…, 201…, +201…, 00201…) = a phone_key prefix (index), other digits = anywhere.
+     * [{id, text: "name phone"}], at most $limit, by name.
+     */
+    public function search($accountId, string $q, int $limit = 20): array
     {
-        return $this->memberRepository->forAccount($accountId)->orderBy('name')->get()
-            ->mapWithKeys(fn ($member) => [$member->id => $member->name . ' ' . $member->phone])->all();
+        $q = trim($q);
+        $digits = preg_replace('/\D/', '', $q);
+        $query = Member::where('account_id', $accountId)->where(function ($query) use ($q, $digits) {
+            $query->where('name', 'like', '%' . $q . '%');
+            if (strlen($digits) >= 3) {
+                // a number typed from its start: 01 / 201 / 00201 then the mobile's digits = the start of its phone_key
+                if (preg_match('/^(?:0020|20|0)(1\d*)$/', $digits, $match)) {
+                    $query->orWhere('phone_key', 'like', $match[1] . '%');
+                } else {
+                    $query->orWhere('phone_key', 'like', '%' . $digits . '%');
+                }
+            }
+        });
+
+        return $query->orderBy('name')->limit($limit)->get(['id', 'name', 'phone'])
+            ->map(fn ($member) => ['id' => $member->id, 'text' => $member->name . ' ' . $member->phone])->all();
+    }
+
+    // the member with this phone (by phone_key) in the account, or null: the quick add duplicate check
+    public function findByPhone($accountId, ?string $phone): ?Member
+    {
+        $key = Member::phoneKey($phone);
+        return $key === '' ? null : Member::where('account_id', $accountId)->where('phone_key', $key)->first();
     }
 
     // 404 when the member belongs to another account
@@ -57,9 +83,10 @@ class MemberService
         return $member;
     }
 
+    // a real delete as before (soft deletes are for merged members only), so the phone can be added again
     public function deleteOne($accountId, $id)
     {
-        return $this->findOne($accountId, $id)->delete();
+        return $this->findOne($accountId, $id)->forceDelete();
     }
 
     private function memberData(array $data): array

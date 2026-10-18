@@ -2,6 +2,8 @@
     Add payment fields (no edit here: the owner's edit is step 6). Every drop menu is searchable (Tom Select).
     For: a reservation / a package of the member (loaded by ajax from the member + "for", custom.js [data-options-url]
     and [data-payment-form]), or other income (an income category, the member is optional).
+    Opened for one reservation / package ($payable: its view "Pay" / "+ Cash In", a list row menu): no For / member / item
+    drop menus — hidden inputs + its details (Payment/partials/payable-details: amount, discount, net, paid, remaining).
     [data-show-if="field=value ..."]: shown only while the select has one of the values (custom.js applyConditions).
     PaymentService::create() checks the rules again (amount > 0, a closed day, a reservation inside a package, the ownership).
 --}}
@@ -19,14 +21,20 @@
     <input type="hidden" name="back_to_shift" value="1">
 @endif
 
+@if ($payable ?? null)
+    <input type="hidden" name="payable" value="{{ $payableKind }}">
+    <input type="hidden" name="payable_id" value="{{ $payable->getKey() }}">
+    <input type="hidden" name="member_id" value="{{ $payment->member_id ?: '' }}">
+    @include('paymentmodule::Payment.partials.payable-details', ['payable' => $payable, 'kind' => $payableKind])
+@else
 <div class="form-section">Cash In For</div>
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
     @include('layoutmodule::partials.field', ['name' => 'payable', 'label' => 'For', 'type' => 'select', 'required' => true,
         'options' => ['reservation' => 'Reservation', 'package' => 'Package', '' => 'Other Income'], 'value' => $kind])
 </div>
 <div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-1">
-    @include('layoutmodule::partials.field', ['name' => 'member_id', 'label' => 'Member', 'type' => 'select', 'searchable' => true, 'width' => 'long',
-        'options' => ['' => '- Select -'] + $members, 'value' => $payment->member_id ?: null,
+    {{-- server search + quick add (membermodule::partials.member-select) --}}
+    @include('membermodule::partials.member-select', ['member' => $payment->member_id ? $payment->member : null, 'companies' => $companies,
         'hint' => 'Search by name or mobile. Required for a reservation / package, optional for other income.'])
 </div>
 <div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-1" data-show-if="payable=reservation package">
@@ -40,6 +48,7 @@
         'options' => ['' => '- Select -'] + $categories, 'value' => $payment->income_category_id ?: null,
         'hint' => empty($categories) ? 'No income categories yet, add them from Settings > Income Categories.' : null])
 </div>
+@endif
 
 <div class="form-section mt-8">Cash In</div>
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">

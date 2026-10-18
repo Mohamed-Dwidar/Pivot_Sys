@@ -487,9 +487,11 @@ document.addEventListener("click", function (e) {
 //    [data-show-if="field=value other"]: shown only while the field (a select) has one of the values ("field=" = empty)
 //  - [data-disable-if="checkbox name"]: disabled (and emptied) while the checkbox is checked,
 //    data-default-from="field": its value when enabled again and empty
-//  - select[data-options-url][data-parent="field"]: its options are loaded by ajax (?field=value) when the parent changes
+//  - select[data-options-url][data-parent="field"]: its options are loaded by ajax (?field=value) when the parent changes;
+//    select[data-place][data-parent="field"] (the reservation form): the same from the form's [data-place-tree], no request
 //    (data-also="other_field ...": their values are sent too),
-//    with a loading spinner; it is disabled while the parent is empty; the json is [{id, name, ...}], the other keys become data-*
+//    with a loading spinner; it is disabled while the parent is empty; the json is [{id, name, ...}], the other keys become data-*;
+//    data-auto-single: a list with only one option selects it (also on page / popup load: reservationAutoSingle())
 //  - Reservation form ([data-reservation-form]): package -> member (locked), plan -> amount, discount % / discount value / net, unit capacity -> people, subscription type -> repeat options
 //  - Package price ([data-package-price]): discount % <-> after discount (from the amount)
 //  - Payment form ([data-payment-form]): "for" (reservation / package) -> the member's list is loaded again
@@ -542,6 +544,13 @@ function loadOptions(select) {
         return;
     }
 
+    // data-place (the reservation form): the options are in the form already ([data-place-tree]), no request
+    if (select.dataset.place) {
+        placeFill(select, placeItems(select));
+        done();
+        return;
+    }
+
     select.add(new Option("Loading...", ""));
     select.disabled = true;
     wrapper.classList.add("is-loading");
@@ -559,16 +568,7 @@ function loadOptions(select) {
         })
         .then(function (items) {
             if (token !== select._request) return;
-            select.innerHTML = "";
-            select.add(new Option(items.length ? placeholder : select.dataset.none || "Nothing to select", ""));
-            items.forEach(function (item) {
-                var option = new Option(item.name, item.id);
-                Object.keys(item).forEach(function (key) {
-                    if (key !== "id" && key !== "name") option.dataset[key] = item[key];
-                });
-                select.add(option);
-            });
-            select.disabled = items.length === 0;
+            placeFill(select, items);
         })
         .catch(function () {
             if (token !== select._request) return;
@@ -581,6 +581,44 @@ function loadOptions(select) {
             wrapper.classList.remove("is-loading");
             done();
         });
+}
+
+// a dependent drop menu's new options [{id, name, ...}] (the other keys become data-*); data-auto-single: the only option is
+// selected (the change sent after it fills the next list of the chain)
+function placeFill(select, items) {
+    select.innerHTML = "";
+    select.add(new Option(items.length ? "- Select -" : select.dataset.none || "Nothing to select", ""));
+    items.forEach(function (item) {
+        var option = new Option(item.name, item.id);
+        Object.keys(item).forEach(function (key) {
+            if (key !== "id" && key !== "name") option.dataset[key] = item[key];
+        });
+        select.add(option);
+    });
+    select.disabled = items.length === 0;
+    if (items.length === 1 && select.hasAttribute("data-auto-single")) select.value = String(items[0].id);
+}
+
+// the reservation form's place chain from [data-place-tree] (ReservationService::placeTree()): spaces of the type, units of
+// "type-space", plans of the unit
+function placeItems(select) {
+    var form = select.form;
+    if (!form._placeTree) {
+        var script = form.querySelector("script[data-place-tree]");
+        try {
+            form._placeTree = script ? JSON.parse(script.textContent) : {};
+        } catch (e) {
+            form._placeTree = {};
+        }
+    }
+    var tree = form._placeTree;
+    var value = function (name) {
+        var field = formField(form, name);
+        return field ? field.value : "";
+    };
+    if (select.dataset.place === "spaces") return (tree.spaces || {})[value("subscription_type_id")] || [];
+    if (select.dataset.place === "units") return (tree.units || {})[value("subscription_type_id") + "-" + value("space_id")] || [];
+    return (tree.plans || {})[value("unit_id")] || [];
 }
 
 function round2(number) {
@@ -623,12 +661,27 @@ function reservationLockMember(form) {
     var memberId = option && option.dataset.memberId;
     var searchable = memberEl.tomselect;
     if (memberId) {
-        searchable ? searchable.setValue(memberId, true) : (memberEl.value = memberId);
+        if (searchable) {
+            // the Member field searches the server: the package's member is added as its option first (data-member-text)
+            if (!searchable.options[memberId]) searchable.addOption({ value: String(memberId), text: option.dataset.memberText || ("#" + memberId) });
+            searchable.setValue(String(memberId), true);
+        } else {
+            if (!memberEl.querySelector('option[value="' + memberId + '"]')) memberEl.add(new Option(option.dataset.memberText || "#" + memberId, memberId));
+            memberEl.value = memberId;
+        }
     }
     if (searchable) {
         memberId ? searchable.disable() : searchable.enable();
     } else {
         memberEl.disabled = !!memberId;
+    }
+    // with a package: no "+ New member" (the member is the package's); an open quick add box is closed
+    var field = memberEl.closest("[data-field]");
+    var linkRow = field && field.nextElementSibling;
+    if (linkRow && linkRow.matches(".member-quick-link-row")) {
+        linkRow.hidden = !!memberId;
+        var box = memberQuickBox(memberEl);
+        if (memberId && box && !box.hidden) memberQuickClose(box);
     }
 }
 
@@ -681,7 +734,8 @@ function reservationEndFromPlan(form, planChanged) {
 function reservationTypeOptions(form) {
     var typeEl = formField(form, "subscription_type_id");
     if (!typeEl) return;
-    var option = typeEl.selectedOptions ? typeEl.selectedOptions[0] : null;
+    // a fixed type (the Schedule page: a hidden input) carries the flags itself
+    var option = typeEl.selectedOptions ? typeEl.selectedOptions[0] : typeEl;
     form.querySelectorAll("[data-type-allows]").forEach(function (box) {
         var key = box.dataset.typeAllows.replace(/-([a-z])/g, function (m, c) { return c.toUpperCase(); });
         var allowed = !!(option && option.dataset[key] === "1");
@@ -736,7 +790,84 @@ function reservationTimeBased(form) {
     });
 }
 
-// the number of people follows the unit capacity: max = capacity, a unit for 1 person locks it to 1
+// the live availability line under the dates ([data-availability], {area}.reservations.availability): asked 400 ms after the
+// unit / plan / dates / times change, once the unit, plan and dates (+ the times of a time based plan) are all set; an older
+// answer is ignored. Exclusive unit: "Unit busy: <member> <period>" (3 at most + "and N more"); shared (concurrent usage > 1):
+// "<used> of <limit> in use at that time"; free: "Available". Saving checks it again on the server.
+function reservationAvailability(form) {
+    var line = form.querySelector("[data-availability]");
+    if (!line) return;
+    clearTimeout(line._timer);
+    line._timer = setTimeout(function () {
+        var value = function (name) {
+            var field = formField(form, name);
+            return field ? field.value : "";
+        };
+        var plan = formField(form, "plan_id");
+        var option = plan && plan.selectedOptions ? plan.selectedOptions[0] : null;
+        var timeBased = !!(option && option.dataset.timeBased === "1");
+        var token = (line._token = (line._token || 0) + 1);
+        if (!value("unit_id") || !value("plan_id") || !value("start_at") || !value("end_at") || (timeBased && (!value("start_time") || !value("end_time")))) {
+            line.hidden = true;
+            return;
+        }
+        var params = new URLSearchParams({ unit_id: value("unit_id"), plan_id: value("plan_id"), start_at: value("start_at"), end_at: value("end_at"),
+            start_time: timeBased ? value("start_time") : "", end_time: timeBased ? value("end_time") : "", ignore: line.dataset.ignore || "" });
+        fetch(line.dataset.url + "?" + params.toString(), { headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" } })
+            .then(function (response) {
+                if (!response.ok) throw response;
+                return response.json();
+            })
+            .then(function (json) {
+                if (token !== line._token) return;
+                line.className = "availability-line";
+                line.textContent = "";
+                if (!json.state) {
+                    line.hidden = true;
+                    return;
+                }
+                var list = (json.items || []).map(function (item) { return item.member + " " + item.period; }).join(", ")
+                    + (json.more ? " and " + json.more + " more" : "");
+                if (json.state === "free") {
+                    line.classList.add("availability-line--free");
+                    line.textContent = "Available";
+                } else if (json.limit > 1) {
+                    line.classList.add(json.full ? "availability-line--busy" : "availability-line--shared");
+                    line.textContent = json.used + " of " + json.limit + " in use at that time" + (json.full ? " — full: " + list : "");
+                } else {
+                    line.classList.add("availability-line--busy");
+                    line.textContent = "Unit busy: " + list;
+                }
+                line.hidden = false;
+            })
+            .catch(function () {
+                if (token === line._token) line.hidden = true;
+            });
+    }, 400);
+}
+
+// the first empty list of the chain (space, unit, plan) with only one option selects it on load (a new reservation: e.g. the
+// Schedule page fixed the type and it has one space); its change loads the next list, which selects its only option too
+function reservationAutoSingle(form) {
+    var names = ["space_id", "unit_id", "plan_id"];
+    for (var i = 0; i < names.length; i++) {
+        var select = form.querySelector('select[name="' + names[i] + '"][data-auto-single]');
+        if (!select || select.disabled) continue;
+        if (select.value) continue;
+        var options = Array.prototype.filter.call(select.options, function (option) { return option.value !== ""; });
+        if (options.length !== 1) return;
+        if (select.tomselect) {
+            select.tomselect.setValue(options[0].value); // sends the change (bubbles)
+        } else {
+            select.value = options[0].value;
+            select.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        return;
+    }
+}
+
+// the number of people follows the unit capacity: max = capacity; a unit for 1 person (capacity 1, or 0 = not set) = 1 person,
+// the field is hidden
 function reservationCapacity(form) {
     var unitEl = formField(form, "unit_id");
     var peopleEl = formField(form, "number_of_peoples");
@@ -746,13 +877,13 @@ function reservationCapacity(form) {
     // the Renew form: a fixed hidden value
     if (peopleEl.type === "hidden") return;
 
-    peopleEl.max = capacity > 0 ? capacity : 100000;
-    peopleEl.readOnly = capacity === 1;
-    peopleEl.tabIndex = capacity === 1 ? -1 : 0;
-    if (capacity === 1) peopleEl.value = 1;
+    var single = !!(option && option.value) && capacity <= 1;
+    peopleEl.max = capacity > 1 ? capacity : 100000;
+    if (single) peopleEl.value = 1;
+    peopleEl.closest("[data-field]").hidden = single;
     // the hint under the field (the div after the input, not an error)
     var hint = peopleEl.closest("[data-field]").querySelector("input ~ div:not([data-ajax-error])");
-    if (hint) hint.textContent = capacity === 1 ? "This unit is for 1 person." : capacity > 0 ? "Up to " + capacity + " persons." : "Not more than the unit capacity.";
+    if (hint) hint.textContent = capacity > 1 ? "Up to " + capacity + " persons." : "Not more than the unit capacity.";
 }
 
 // $source: the field the user changed (amount | discount | result); the discount % and the after discount calculate each other
@@ -774,11 +905,15 @@ function packageCalculate(box, source) {
     }
 }
 
-// select[data-searchable]: type to search the options (e.g. members by name or mobile: the option text is "name - phone")
+// select[data-searchable]: type to search the options; select[data-member-select]: the options come from the server (memberSelect)
 function initSearchable(root) {
     if (!window.TomSelect) return;
     root.querySelectorAll("select[data-searchable]").forEach(function (select) {
         if (select.tomselect) return;
+        if (select.hasAttribute("data-member-select")) {
+            memberSelect(select);
+            return;
+        }
         var searchable = new TomSelect(select, {
             plugins: { dropdown_input: {} },
             maxOptions: null,
@@ -795,6 +930,239 @@ function initSearchable(root) {
     });
 }
 
+// ------------------------------------------------------------------
+// Member select (membermodule::partials.member-select, 2026-10-18): the reservation / package / cash in / withholding forms.
+//  - Tom Select over {area}.members.search?q= (2+ characters, 250 ms after the last key, 20 at most); the options are the last
+//    answer only (no client filtering: a phone typed as +20… still shows "name 01…"); an older answer is ignored.
+//  - "Searching…" while a request runs; '+ Add "<typed>" as a new member' only after an EMPTY answer for that text; a failed
+//    request = "Search failed — retry" (click = search again), never "No member found".
+//  - Quick add: the inline box under the field ([data-member-quick], opened by the + Add option or "+ New member"): Name, Mobile,
+//    Company; the mobile is looked up first ({area}.members.lookup, phone_key) → "This mobile belongs to …" + Use this member;
+//    Save = POST {area}.members.store?quick=1 (MemberRequest) → the new member is added and selected (its change event follows).
+// ------------------------------------------------------------------
+function memberSelect(select) {
+    var state = { token: 0, empty: null, failed: false };
+    // no empty option in the menu (it would hide "Search failed — retry"); an optional field (cash in, withholding) gets ×
+    var plugins = { dropdown_input: {} };
+    if (select.hasAttribute("data-member-optional")) plugins.clear_button = { title: "Clear" };
+    var ts = new TomSelect(select, {
+        plugins: plugins,
+        maxOptions: null,
+        allowEmptyOption: false,
+        placeholder: select.options[0] ? select.options[0].text : "",
+        loadThrottle: 250,
+        // the server already matched name / phone: show every option of its answer
+        score: function () { return function () { return 1; }; },
+        shouldLoad: function (query) { return query.trim().length >= 2; },
+        load: function (query, callback) {
+            var self = this;
+            var token = ++state.token;
+            state.empty = null;
+            state.failed = false;
+            fetch(select.dataset.searchUrl + "?q=" + encodeURIComponent(query), { headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" } })
+                .then(function (response) {
+                    if (!response.ok) throw response;
+                    return response.json();
+                })
+                .then(function (items) {
+                    if (token !== state.token) return callback();
+                    self.clearOptions();
+                    if (!items.length) state.empty = query;
+                    callback(items.map(function (item) { return { value: String(item.id), text: item.text }; }));
+                })
+                .catch(function () {
+                    if (token !== state.token) return callback();
+                    self.clearOptions();
+                    state.failed = true;
+                    callback();
+                })
+                .finally(function () {
+                    // the same text can be searched again (Tom Select remembers the searched texts)
+                    self.loadedSearches = {};
+                });
+        },
+        // "+ Add …" only once the answer for exactly this text came back empty
+        create: function (input, callback) {
+            callback();
+            this.close();
+            memberQuickOpen(select, input);
+        },
+        createFilter: function (input) { return !state.failed && state.empty !== null && state.empty === input; },
+        render: {
+            loading: function () { return '<div class="no-results">Searching…</div>'; },
+            option_create: function (data, escape) {
+                return '<div class="create">+ Add <strong>"' + escape(data.input) + '"</strong> as a new member</div>';
+            },
+            no_results: function (data) {
+                if (state.failed) return '<div class="no-results" data-member-retry>Search failed — <u>retry</u></div>';
+                return data.input.trim().length < 2 ? '<div class="no-results">Type 2 letters or digits</div>' : '<div class="no-results">Searching…</div>';
+            },
+        },
+    });
+    if (ts.control_input) ts.control_input.placeholder = "Search by name or mobile...";
+    // "Search failed — retry": search the same text again
+    ts.dropdown.addEventListener("mousedown", function (e) {
+        if (!e.target.closest("[data-member-retry]")) return;
+        e.preventDefault();
+        state.failed = false;
+        ts.loadedSearches = {};
+        ts.load(ts.control_input.value);
+    });
+}
+
+function memberQuickBox(select) {
+    var field = select.closest("[data-field]");
+    var box = field;
+    while (box && !box.matches("[data-member-quick]")) box = box.nextElementSibling;
+    return box;
+}
+
+function memberQuickError(box, name, message) {
+    var el = box.querySelector('[data-quick-error="' + name + '"]');
+    if (!el) return;
+    el.textContent = message || "";
+    el.hidden = !message;
+}
+
+function memberQuickReset(box) {
+    ["name", "phone", "company_id"].forEach(function (name) { memberQuickError(box, name, ""); });
+    box.querySelector("[data-quick-duplicate]").hidden = true;
+    box._duplicate = null;
+}
+
+// open the box under the Member field; typed digits (+, spaces allowed) → Mobile, other text → Name
+function memberQuickOpen(select, text) {
+    var box = memberQuickBox(select);
+    if (!box) return;
+    box._select = select;
+    memberQuickReset(box);
+    // a new member: the Member field is emptied (its change event: the form's own chains follow, e.g. the cash in items)
+    if (select.tomselect) {
+        select.tomselect.clear();
+    } else if (select.value) {
+        select.value = "";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    var nameEl = box.querySelector('[data-quick-field="name"]');
+    var phoneEl = box.querySelector('[data-quick-field="phone"]');
+    text = (text || "").trim();
+    var isPhone = text !== "" && /^\+?[\d\s()-]+$/.test(text);
+    nameEl.value = isPhone ? "" : text;
+    phoneEl.value = isPhone ? text : "";
+    box.querySelector('[data-quick-field="company_id"]').value = "";
+    box.hidden = false;
+    (isPhone ? nameEl : (text ? phoneEl : nameEl)).focus();
+    if (isPhone) memberQuickLookup(box);
+}
+
+function memberQuickClose(box) {
+    box.hidden = true;
+    memberQuickReset(box);
+}
+
+// the mobile already a member's? (same account, phone_key) → the "belongs to" line; resolves to that member or null
+function memberQuickLookup(box) {
+    var phone = box.querySelector('[data-quick-field="phone"]').value.trim();
+    var token = (box._lookup = (box._lookup || 0) + 1);
+    if (phone.replace(/\D/g, "").length < 8) {
+        box.querySelector("[data-quick-duplicate]").hidden = true;
+        box._duplicate = null;
+        return Promise.resolve(null);
+    }
+    return fetch(box.dataset.lookupUrl + "?phone=" + encodeURIComponent(phone), { headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" } })
+        .then(function (response) {
+            if (!response.ok) throw response;
+            return response.json();
+        })
+        .then(function (json) {
+            if (token !== box._lookup) return box._duplicate;
+            box._duplicate = json.member;
+            box.querySelector("[data-quick-duplicate-name]").textContent = json.member ? json.member.text : "";
+            box.querySelector("[data-quick-duplicate]").hidden = !json.member;
+            return json.member;
+        })
+        .catch(function () { return null; });
+}
+
+// choose a member in the Member field (its change event: the form's own chains follow) and close the box
+function memberQuickChoose(box, member) {
+    var ts = box._select && box._select.tomselect;
+    if (ts) {
+        ts.addOption({ value: String(member.id), text: member.text });
+        ts.setValue(String(member.id));
+    }
+    memberQuickClose(box);
+}
+
+function memberQuickSave(box, button) {
+    memberQuickReset(box);
+    var value = function (name) { return box.querySelector('[data-quick-field="' + name + '"]').value.trim(); };
+    button.disabled = true;
+    memberQuickLookup(box).then(function (existing) {
+        if (existing) {
+            button.disabled = false;
+            return;
+        }
+        var data = new FormData();
+        data.append("_token", document.querySelector('meta[name="csrf-token"]').content);
+        data.append("name", value("name"));
+        data.append("phone", value("phone"));
+        data.append("company_id", value("company_id"));
+        return fetch(box.dataset.storeUrl, { method: "POST", body: data, headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" } })
+            .then(function (response) {
+                return response.json().then(function (json) { return { ok: response.ok, status: response.status, json: json }; });
+            })
+            .then(function (result) {
+                button.disabled = false;
+                if (result.ok) {
+                    toast(result.json.message || "The member has been added.", "success");
+                    memberQuickChoose(box, result.json.member);
+                } else if (result.status === 422) {
+                    var errors = result.json.errors || {};
+                    Object.keys(errors).forEach(function (name) { memberQuickError(box, name, errors[name][0]); });
+                } else {
+                    toast("Could not add the member, please try again.", "error");
+                }
+            });
+    }).catch(function () {
+        button.disabled = false;
+        toast("Could not add the member, please try again.", "error");
+    });
+}
+
+document.addEventListener("click", function (e) {
+    var open = e.target.closest && e.target.closest("[data-member-quick-open]");
+    if (open) {
+        var row = open.closest(".member-quick-link-row");
+        var field = row && row.previousElementSibling;
+        var select = field && field.querySelector("select[data-member-select]");
+        if (select) memberQuickOpen(select, "");
+        return;
+    }
+    var box = e.target.closest && e.target.closest("[data-member-quick]");
+    if (!box) return;
+    if (e.target.closest("[data-quick-cancel]")) memberQuickClose(box);
+    if (e.target.closest("[data-quick-use]") && box._duplicate) memberQuickChoose(box, box._duplicate);
+    if (e.target.closest("[data-quick-save]")) memberQuickSave(box, e.target.closest("[data-quick-save]"));
+});
+
+// the mobile typed: look it up (500 ms after the last key)
+document.addEventListener("input", function (e) {
+    var input = e.target.closest && e.target.closest('[data-member-quick] [data-quick-field="phone"]');
+    if (!input) return;
+    var box = input.closest("[data-member-quick]");
+    clearTimeout(box._lookupTimer);
+    box._lookupTimer = setTimeout(function () { memberQuickLookup(box); }, 500);
+});
+
+// Enter in the box saves the member, not the whole form
+document.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter" || !e.target.closest || !e.target.closest("[data-member-quick] [data-quick-field]")) return;
+    e.preventDefault();
+    var box = e.target.closest("[data-member-quick]");
+    memberQuickSave(box, box.querySelector("[data-quick-save]"));
+});
+
 function initForms(root) {
     initSearchable(root);
     (root.tagName === "FORM" ? [root] : root.querySelectorAll("form")).forEach(function (form) {
@@ -804,6 +1172,8 @@ function initForms(root) {
             reservationCapacity(form);
             reservationTypeOptions(form);
             reservationTimeBased(form);
+            reservationAutoSingle(form);
+            reservationAvailability(form);
         }
     });
 }
@@ -820,7 +1190,7 @@ document.addEventListener("change", function (e) {
     if (form.querySelector('[data-show-if="' + name + '"], [data-show-if^="' + name + '="], [data-disable-if="' + name + '"]')) {
         applyConditions(form);
     }
-    form.querySelectorAll('select[data-options-url][data-parent="' + name + '"]').forEach(loadOptions);
+    form.querySelectorAll('select[data-options-url][data-parent="' + name + '"], select[data-place][data-parent="' + name + '"]').forEach(loadOptions);
 
     // the member's reservations / packages follow "for" too (the member is the data-parent)
     if (form.matches("[data-payment-form]") && name === "payable") {
@@ -838,6 +1208,8 @@ document.addEventListener("change", function (e) {
         if (["plan_id", "start_at", "start_time"].indexOf(name) >= 0) reservationEndFromPlan(form, name === "plan_id");
         // the amount follows the plan (and the start / end of a time based plan)
         if (["plan_id", "start_at", "start_time", "end_at", "end_time"].indexOf(name) >= 0) reservationPlanAmount(form);
+        // the live availability line (after the end was set from the plan above)
+        if (["unit_id", "plan_id", "start_at", "start_time", "end_at", "end_time"].indexOf(name) >= 0) reservationAvailability(form);
     }
 });
 
@@ -848,6 +1220,7 @@ document.addEventListener("input", function (e) {
         var sources = { amount: "amount", discount_percentage: "percentage", discount_value: "value", net_amount: "net" };
         if (sources[e.target.name]) reservationCalculate(form, sources[e.target.name]);
         if (e.target.name === "start_at") reservationEndAfterStart(form);
+        if (["start_at", "start_time", "end_at", "end_time"].indexOf(e.target.name) >= 0) reservationAvailability(form);
     }
     var box = e.target.closest("[data-package-price]");
     if (box && e.target.dataset.calc) packageCalculate(box, e.target.dataset.calc);

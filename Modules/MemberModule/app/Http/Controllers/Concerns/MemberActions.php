@@ -92,9 +92,33 @@ trait MemberActions
         return view('membermodule::Account.create', $this->formOptions());
     }
 
+    // the Member drop menus of the forms (member-select partial, Tom Select load): ?q= (2+ characters), 20 at most
+    public function search(Request $request)
+    {
+        $q = trim((string) $request->query('q', ''));
+        return response()->json(mb_strlen($q) < 2 ? [] : $this->memberService->search($this->accountId(), $q));
+    }
+
+    // the quick add duplicate check: ?phone= → {member: {id, name, phone, text}} or {member: null} (same account, by phone_key)
+    public function lookup(Request $request)
+    {
+        $member = $this->memberService->findByPhone($this->accountId(), (string) $request->query('phone', ''));
+        return response()->json(['member' => $member ? [
+            'id' => $member->id, 'name' => $member->name, 'phone' => $member->phone, 'text' => $member->name . ' ' . $member->phone,
+        ] : null]);
+    }
+
     public function store(MemberRequest $request)
     {
         $member = $this->memberService->create($this->accountId(), $request->validated(), Auth::user());
+
+        // quick add from a form's Member field (?quick=1): the new option, the form stays open
+        if ($request->boolean('quick')) {
+            return response()->json([
+                'message' => 'The member has been added.',
+                'member' => ['id' => $member->id, 'text' => $member->name . ' ' . $member->phone],
+            ]);
+        }
 
         return response()->json([
             'message' => 'The member has been added successfully.',

@@ -1,9 +1,9 @@
-{{-- Package create / edit fields. $package is null on create. $members = [id => "name mobile"] --}}
+{{-- Package create / edit fields. $package is null on create. $companies = the quick add member's companies --}}
 <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
     @include('layoutmodule::partials.field', ['name' => 'name', 'label' => 'Name', 'required' => true, 'value' => $package?->name, 'attrs' => 'autofocus'])
-    @include('layoutmodule::partials.field', ['name' => 'member_id', 'label' => 'Member', 'type' => 'select', 'required' => true,
-        'options' => ['' => '- Select -'] + $members, 'value' => $package?->member_id, 'searchable' => true, 'width' => 'xlong', 'wrapperClass' => 'md:col-span-2',
-        'hint' => empty($members) ? 'No members yet, add them from Members.' : 'The reservations of this package are for this member.'])
+    {{-- server search + quick add (membermodule::partials.member-select) --}}
+    @include('membermodule::partials.member-select', ['member' => $package?->member, 'required' => true, 'width' => 'xlong', 'wrapperClass' => 'md:col-span-2',
+        'hint' => 'Search by name or mobile. The reservations of this package are for this member.', 'companies' => $companies])
 </div>
 
 <div class="form-section mt-8">Price</div>

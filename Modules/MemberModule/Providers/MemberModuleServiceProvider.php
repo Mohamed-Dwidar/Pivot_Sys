@@ -22,7 +22,10 @@ class MemberModuleServiceProvider extends ModuleServiceProvider
      *
      * @var string[]
      */
-    // protected array $commands = [];
+    protected array $commands = [
+        // to_run STEP 5c: members sharing one phone (phone_key) → one member
+        \Modules\MemberModule\app\Console\MergeDuplicatesCommand::class,
+    ];
 
     /**
      * Provider classes to register.

@@ -6,6 +6,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Modules\AccountModule\app\Models\Account;
 use Modules\ReservationModule\app\Models\Reservation;
+use Modules\ReservationModule\app\Models\ReservationStatus;
 use Modules\SpaceModule\app\Models\Space;
 use Modules\SpaceModule\app\Models\SubscriptionType;
 use Modules\UnitModule\app\Models\Unit;
@@ -21,7 +22,7 @@ use Modules\UnitModule\app\Models\Unit;
  *   (grouped by space when the type has more than one space); an item ended before "from" = the Earlier column, one starting
  *   after "to" = the Later column; the rest in the grid (15 minute slots, clipped at the edges), in lanes when they overlap
  * - full_day: by their DATE (start_at day = D: the form gives a full day reservation the business date at night)
- * - period (no running counts per space, user 2026-10-15): renewals by the RENEWAL DATE (the day after the last day, user 2026-10-15):
+ * - period (no running counts per space, user 2026-10-15; the view shows the Renews today / Not renewed totals): renewals by the RENEWAL DATE (the day after the last day, user 2026-10-15):
  *   Renews today (= D) | Not renewed (before D, no counted renewal, not left) | Next N days (D+1 … D+N); a renewed one shows
  *   its renewal's end
  * Only counted reservations (not cancelled like ones).
@@ -52,13 +53,20 @@ class ScheduleService
             'renewalDays' => $account->renewalDays(),
         ];
 
-        $types = SubscriptionType::where('account_id', $accountId)->where('show_home', true)
-            ->orderBy('home_order')->orderBy('name')->with('spaces')->get();
+        // read once for the whole page (2026-10-18, 85 → ~16 queries): the account's types, units (+ colors), spaces, statuses;
+        // the sections ask one query each, then their rows get their relations in one go (hydrate())
+        $allTypes = SubscriptionType::where('account_id', $accountId)->orderBy('home_order')->orderBy('name')->get();
+        $types = $allTypes->where('show_home', true)->values();
+        $context['types'] = $allTypes->keyBy('id');
+        $context['account'] = $account;
+        $context['units'] = $this->unitsWithColor($accountId);
+        $context['spaces'] = Space::withTrashed()->where('account_id', $accountId)->get()->keyBy('id');
         $sections = $types->map(fn ($type) => match ($type->booking_mode) {
             'full_day' => $this->fullDaySection($type, $context),
             'period' => $this->periodSection($type, $context),
             default => $this->hourlySection($type, $context),
         });
+        $this->hydrate($sections, $context);
 
         return [
             'date' => $date,
@@ -70,13 +78,43 @@ class ScheduleService
             'windowStart' => $context['windowStart'],
             'sections' => $sections,
             // the summary row: hourly / full day counts, renewals that need action, the remaining of the day
-            'renewals' => $sections->where('mode', 'period')->sum('needAction'),
+            'renewals' => $sections->where('mode', 'period')->sum(fn ($section) => ($section['needAction'])()),
             'hasPeriod' => $sections->contains('mode', 'period'),
             'due' => round($sections->whereIn('mode', ['hourly', 'full_day'])->sum('due'), 2),
+            // the day's cancelled reservations (the summary "Cancelled", opens their list)
+            // (the same rule as cancelledQuery(), counted from the sections' own queries)
+            'cancelled' => $sections->sum('cancelled'),
             // + New: every type of the account (pick a type first), with its start for the selected day
-            'newTypes' => SubscriptionType::where('account_id', $accountId)->orderBy('home_order')->orderBy('name')->get()
-                ->map(fn ($type) => ['type' => $type, 'start' => $this->newStart($type, $context, $from)]),
+            'newTypes' => $allTypes->map(fn ($type) => ['type' => $type, 'start' => $this->newStart($type, $context, $from)]),
         ];
+    }
+
+    /**
+     * The day's cancelled reservations (a not counted status) of the page's types (Show on Home), by the sections' day rule:
+     * hourly = starting in the business day [D cutoff, D+1 cutoff), full day / period = starting on the date D.
+     * The summary "Cancelled" count + its popup (route {area}.schedule.cancelled).
+     */
+    public function cancelledQuery(int $accountId, Account $account, Carbon $date, ?Collection $types = null)
+    {
+        $date = $date->copy()->startOfDay();
+        [$dayStart, $dayEnd] = $account->businessDay($date);
+        // the page's types (Show on Home): given by page(), else read
+        $types ??= SubscriptionType::where('account_id', $accountId)->where('show_home', true)->get(['id', 'booking_mode']);
+        $hourly = $types->where('booking_mode', 'hourly')->pluck('id')->all() ?: [0];
+        $others = $types->where('booking_mode', '!=', 'hourly')->pluck('id')->all() ?: [0];
+
+        return Reservation::where('account_id', $accountId)
+            ->whereIn('reservation_status_id', ReservationStatus::notCountedIds() ?: [0])
+            ->where(fn ($query) => $query
+                ->where(fn ($query) => $query->whereIn('subscription_type_id', $hourly)->where('start_at', '>=', $dayStart)->where('start_at', '<', $dayEnd))
+                ->orWhere(fn ($query) => $query->whereIn('subscription_type_id', $others)->where('start_at', '>=', $date)->where('start_at', '<', $date->copy()->addDay())));
+    }
+
+    public function cancelled(int $accountId, Account $account, Carbon $date): Collection
+    {
+        return $this->cancelledQuery($accountId, $account, $date)
+            ->with('member', 'space', 'unit.color', 'subscriptionType', 'status')
+            ->orderBy('start_at')->orderBy('id')->get();
     }
 
     // the start of a new reservation of the type for the day (+ New, + <type>): hourly on today = now, on another day = the
@@ -89,11 +127,77 @@ class ScheduleService
         return $context['date']->format('Y-m-d');
     }
 
-    // the type's counted reservations for the page (member, unit, package for the badges)
-    private function reservations(SubscriptionType $type, int $accountId)
+    // the type's counted reservations for the page (their relations: hydrate()); $counted false = every status (the section
+    // splits the cancelled like ones off for the summary "Cancelled")
+    private function reservations(SubscriptionType $type, int $accountId, bool $counted = true)
     {
-        return Reservation::where('account_id', $accountId)->where('subscription_type_id', $type->id)->counted()
-            ->with('member', 'space', 'unit.color', 'package', 'status');
+        return Reservation::where('account_id', $accountId)->where('subscription_type_id', $type->id)->when($counted, fn ($query) => $query->counted());
+    }
+
+    // not counted (cancelled like): the summary "Cancelled" (the same rule as cancelledQuery(), split from the sections' rows)
+    private function notCounted(Reservation $reservation): bool
+    {
+        return in_array((int) $reservation->reservation_status_id, ReservationStatus::notCountedIds(), true);
+    }
+
+    // the account's units (deleted too) with their color, in ONE query (colors joined; the color relation set from it)
+    private function unitsWithColor(int $accountId): Collection
+    {
+        return Unit::withTrashed()->where('units.account_id', $accountId)
+            ->leftJoin('colors', 'colors.id', '=', 'units.color_id')
+            ->select('units.*', 'colors.name as joined_color_name', 'colors.value as joined_color_value')
+            ->get()
+            ->each(function ($unit) {
+                $color = $unit->color_id && $unit->joined_color_value !== null
+                    ? (new \Modules\UnitModule\app\Models\Color())->forceFill(['id' => $unit->color_id, 'name' => $unit->joined_color_name, 'value' => $unit->joined_color_value])
+                    : null;
+                $unit->setRelation('color', $color);
+                unset($unit->joined_color_name, $unit->joined_color_value);
+            })
+            ->keyBy('id');
+    }
+
+    /**
+     * The relations of every row of the page in one go: unit (+ color) / space / status / type from the lists read once by page(),
+     * member, package, plan, creator (+ its user type) and the renewal of the periods by one query each.
+     */
+    private function hydrate(Collection $sections, array $context): void
+    {
+        $rows = new \Illuminate\Database\Eloquent\Collection();
+        foreach ($sections as $section) {
+            $lists = match ($section['mode']) {
+                'hourly' => [$section['list']],
+                'full_day' => [$section['rows']],
+                default => [$section['renewsToday'], $section['notRenewed'], $section['next']],
+            };
+            foreach ($lists as $list) {
+                foreach ($list as $reservation) {
+                    $rows->push($reservation);
+                }
+            }
+        }
+        $statuses = ReservationStatus::allStatuses();
+        foreach ($rows as $reservation) {
+            $reservation->setRelation('unit', $context['units'][$reservation->unit_id] ?? null);
+            $reservation->setRelation('space', $context['spaces'][$reservation->space_id] ?? null);
+            $reservation->setRelation('status', $statuses[$reservation->reservation_status_id] ?? null);
+            $reservation->setRelation('subscriptionType', $context['types'][$reservation->subscription_type_id] ?? null);
+        }
+        $rows->load('member', 'package', 'plan', 'creatable');
+        // the creators' user types: the account's own login = the page's account (no query), the employees in one query
+        $users = $rows->pluck('creatable')->filter()->unique('id');
+        $accountType = (new Account())->getMorphClass();
+        $others = new \Illuminate\Database\Eloquent\Collection();
+        foreach ($users as $user) {
+            if ($user->userable_type === $accountType && (int) $user->userable_id === (int) $context['account']->id) {
+                $user->setRelation('userable', $context['account']);
+            } else {
+                $others->push($user);
+            }
+        }
+        $others->load('userable');
+        // the renewal of the periods only (Renewed → / the row menu's Renew)
+        (new \Illuminate\Database\Eloquent\Collection($rows->filter(fn ($reservation) => $reservation->isPeriod())->values()->all()))->load('renewedBy');
     }
 
     // remaining owed (> 0) of reservations paid on their own (not inside a package)
@@ -106,12 +210,16 @@ class ScheduleService
     {
         [$dayStart, $dayEnd, $windowStart, $windowEnd] = [$context['dayStart'], $context['dayEnd'], $context['windowStart'], $context['windowEnd']];
         $midnight = $context['date'];
-        // starting in the business day, or started before it and still running after midnight of D (the previous evening)
-        $reservations = $this->reservations($type, $context['accountId'])
-            ->where('start_at', '<', $dayEnd->max($windowEnd))
-            ->where(fn ($query) => $query->where('start_at', '>=', $dayStart)
-                ->orWhere(fn ($query) => $query->where('end_at', '>', $midnight)->orWhereNull('end_at')))
-            ->orderBy('start_at')->orderBy('id')->get()
+        // starting in the business day (every status: the cancelled ones are counted for the summary), or (counted) started before
+        // it and still running after midnight of D (the previous evening) — a UNION: each part uses its index (72 → 2 ms)
+        $starting = $this->reservations($type, $context['accountId'], false)
+            ->where('start_at', '>=', $dayStart)->where('start_at', '<', $dayEnd->max($windowEnd));
+        $running = $this->reservations($type, $context['accountId'])
+            ->where('start_at', '<', $dayStart)->where(fn ($query) => $query->where('end_at', '>', $midnight)->orWhereNull('end_at'));
+        $all = $starting->union($running)->get();
+        $cancelled = $all->filter(fn ($reservation) => $this->notCounted($reservation) && $reservation->start_at->lt($dayEnd))->count();
+        $reservations = $all->reject(fn ($reservation) => $this->notCounted($reservation))
+            ->sortBy(fn ($reservation) => [$reservation->start_at->getTimestamp(), $reservation->id])->values()
             // an end before the start (old same-day rows) = it ends at its start
             ->each(function ($reservation) use ($dayStart) {
                 $reservation->today_own = $reservation->start_at->gte($dayStart);
@@ -119,23 +227,25 @@ class ScheduleService
         $own = $reservations->where('today_own', true);
 
         $slots = intdiv((int) $windowStart->diffInMinutes($windowEnd), self::SLOT_MINUTES);
-        $units = Unit::where('account_id', $type->account_id)->where('subscription_type_id', $type->id)->where('is_active', true)
-            ->whereIn('space_id', $type->spaces->pluck('id'))->with('color')->ordered()->get();
+        // the type's active units (of a not deleted space), in their order (Unit::scopeOrdered: sort_order, name) — from the
+        // page's list (a unit gets its type from its space's types, so the type's spaces need no lookup)
+        $order = fn ($model) => [(int) $model->sort_order, mb_strtolower((string) $model->name)];
+        $units = $context['units']->filter(fn ($unit) => !$unit->trashed() && $unit->is_active && (int) $unit->subscription_type_id === (int) $type->id
+            && ($space = $context['spaces'][$unit->space_id] ?? null) && !$space->trashed())
+            ->sortBy($order)->values();
         // a reservation of a unit not shown (inactive / moved): its own row, so nothing is hidden
         $missing = $reservations->pluck('unit_id')->unique()->diff($units->pluck('id'));
-        if ($missing->isNotEmpty()) {
-            $units = $units->concat(Unit::withTrashed()->whereIn('id', $missing)->with('color')->get());
-        }
+        $units = $units->concat($missing->map(fn ($id) => $context['units'][$id] ?? null)->filter())->values();
 
         $rows = $units->map(fn ($unit) => $this->timelineRow($unit, $reservations->where('unit_id', $unit->id), $windowStart, $windowEnd, $slots));
-        $spaceIds = $units->pluck('space_id')->unique();
-        $spaces = Space::withTrashed()->whereIn('id', $spaceIds)->ordered()->get();
+        $spaces = $units->pluck('space_id')->unique()->map(fn ($id) => $context['spaces'][$id] ?? null)->filter()->sortBy($order)->values();
         $groups = $spaces->map(fn ($space) => ['space' => $space, 'rows' => $rows->filter(fn ($row) => (int) $row['unit']->space_id === (int) $space->id)->values()])
             ->filter(fn ($group) => $group['rows']->isNotEmpty())->values();
 
         return [
             'mode' => 'hourly',
             'type' => $type,
+            'cancelled' => $cancelled,
             'anchor' => 'today-type-' . $type->id,
             'count' => $own->count(),
             'due' => $this->dueOf($own),
@@ -146,6 +256,7 @@ class ScheduleService
             'hasEarlier' => $rows->contains(fn ($row) => $row['earlier']->isNotEmpty()),
             'hasLater' => $rows->contains(fn ($row) => $row['later']->isNotEmpty()),
             // the List view: the ones from yesterday first, then by start
+            // the List view = the reservations list columns (plan, Created By, the row menu's Renew check)
             'list' => $reservations->sortBy(fn ($reservation) => [$reservation->today_own ? 1 : 0, $reservation->start_at->getTimestamp(), $reservation->id])->values(),
         ];
     }
@@ -190,9 +301,12 @@ class ScheduleService
     private function fullDaySection(SubscriptionType $type, array $context): array
     {
         $date = $context['date'];
-        $rows = $this->reservations($type, $context['accountId'])
+        // every status: the cancelled ones only count for the summary "Cancelled"
+        $all = $this->reservations($type, $context['accountId'], false)
             ->where('start_at', '>=', $date)->where('start_at', '<', $date->copy()->addDay())
-            ->orderBy('created_at')->orderBy('id')->get()
+            ->orderBy('created_at')->orderBy('id')->get();
+        $cancelled = $all->filter(fn ($reservation) => $this->notCounted($reservation))->count();
+        $rows = $all->reject(fn ($reservation) => $this->notCounted($reservation))
             // "In": the check-in time — imported rows keep the old start time, the app saves the date only (00:00) → when added
             ->each(function ($reservation) {
                 $reservation->today_in = $reservation->start_at->format('H:i:s') === '00:00:00' ? $reservation->created_at : $reservation->start_at;
@@ -202,6 +316,7 @@ class ScheduleService
         return [
             'mode' => 'full_day',
             'type' => $type,
+            'cancelled' => $cancelled,
             'anchor' => 'today-type-' . $type->id,
             'count' => $rows->count(),
             'due' => $this->dueOf($rows),
@@ -212,27 +327,43 @@ class ScheduleService
     private function periodSection(SubscriptionType $type, array $context): array
     {
         $date = $context['date'];
-        $base = fn () => $this->reservations($type, $context['accountId']);
-
-        $periods = fn () => $base()->renewalPeriods()->with('renewedBy');
+        $day = $date->toDateString();
+        $last = $date->copy()->addDays($context['renewalDays'])->toDateString();
         $renewalDate = Reservation::RENEWAL_DATE_SQL;
-        $renewsToday = $periods()->whereRaw("$renewalDate = ?", [$date->toDateString()])->orderBy('member_id')->get();
+
+        // ONE query (the type is a period type: renewalPeriods()' rules without its type lookup): renewing on D … D+N, or before
+        // D and not renewed — then split by the renewal date
+        // + the cancelled like ones starting on D (the summary "Cancelled")
+        $all = $this->reservations($type, $context['accountId'], false)
+            ->where(fn ($query) => $query
+                ->where(fn ($query) => $query->counted()
+                    ->where('reservations.member_id', '>', 0)->whereNotNull('reservations.end_at')->whereNull('reservations.left_at')
+                    ->where(fn ($query) => $query->whereRaw("$renewalDate BETWEEN ? AND ?", [$day, $last])
+                        ->orWhere(fn ($query) => $query->whereRaw("$renewalDate < ?", [$day])->notRenewed())))
+                ->orWhere(fn ($query) => $query->whereIn('reservation_status_id', ReservationStatus::notCountedIds() ?: [0])
+                    ->where('start_at', '>=', $date)->where('start_at', '<', $date->copy()->addDay())))
+            ->get();
+        $cancelled = $all->filter(fn ($reservation) => $this->notCounted($reservation))->count();
+        $periods = $all->reject(fn ($reservation) => $this->notCounted($reservation))->values()
+            ->each(fn ($reservation) => $reservation->renews_on = $reservation->renewalDate()->toDateString());
+        $renewsToday = $periods->where('renews_on', $day)->sortBy(fn ($reservation) => [(int) $reservation->member_id, $reservation->id])->values();
         // the fewest days since the renewal date first (user 2026-10-15)
-        $notRenewed = $periods()->whereRaw("$renewalDate < ?", [$date->toDateString()])->notRenewed()
-            ->orderByRaw("$renewalDate DESC")->orderByDesc('id')->get();
-        $next = $periods()->whereRaw("$renewalDate BETWEEN ? AND ?", [$date->copy()->addDay()->toDateString(), $date->copy()->addDays($context['renewalDays'])->toDateString()])
-            ->orderByRaw($renewalDate)->orderBy('id')->get();
+        $notRenewed = $periods->filter(fn ($reservation) => $reservation->renews_on < $day)
+            ->sortBy(fn ($reservation) => [$reservation->renews_on, $reservation->id])->reverse()->values();
+        $next = $periods->filter(fn ($reservation) => $reservation->renews_on > $day)
+            ->sortBy(fn ($reservation) => [$reservation->renews_on, $reservation->id])->values();
 
         return [
             'mode' => 'period',
             'type' => $type,
+            'cancelled' => $cancelled,
             'anchor' => 'today-renewals-' . $type->id,
             'renewsToday' => $renewsToday,
             'notRenewed' => $notRenewed,
             'next' => $next,
             'renewalDays' => $context['renewalDays'],
-            // the summary "Renewals": renews today, not renewed yet + not renewed
-            'needAction' => $renewsToday->whereNull('renewedBy')->count() + $notRenewed->count(),
+            // the summary "Renewals": renews today, not renewed yet + not renewed (renewedBy: hydrate())
+            'needAction' => fn () => $renewsToday->filter(fn ($reservation) => !$reservation->renewedBy)->count() + $notRenewed->count(),
         ];
     }
 }

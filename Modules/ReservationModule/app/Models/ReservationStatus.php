@@ -56,10 +56,25 @@ class ReservationStatus extends Model
         return 'badge badge-status-' . (array_key_exists($this->color, self::COLORS) ? $this->color : 'slate');
     }
 
+    // every status (deleted ones too), read once per request (2026-10-18: notCountedIds() was asked 14 times by the Schedule
+    // page); a status saved / deleted reads them again
+    private static ?\Illuminate\Support\Collection $all = null;
+
+    protected static function booted(): void
+    {
+        static::saved(fn () => self::$all = null);
+        static::deleted(fn () => self::$all = null);
+    }
+
+    public static function allStatuses(): \Illuminate\Support\Collection
+    {
+        return self::$all ??= self::withTrashed()->get()->keyBy('id');
+    }
+
     // the ids of the statuses whose reservations are not counted (deleted ones too), for the totals
     public static function notCountedIds(): array
     {
-        return self::withTrashed()->where('is_counted', false)->pluck('id')->all();
+        return self::allStatuses()->filter(fn ($status) => !$status->is_counted)->keys()->all();
     }
 
     // the statuses order (lists, drop menus, the default status of a new reservation)

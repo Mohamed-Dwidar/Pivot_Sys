@@ -23,8 +23,9 @@
     @include('layoutmodule::partials.field', ['name' => 'payer_tax_id', 'label' => 'Payer Tax ID', 'value' => $certificate?->payer_tax_id, 'attrs' => 'maxlength="30"'])
     @include('layoutmodule::partials.field', ['name' => 'company_id', 'label' => 'Company', 'type' => 'select', 'searchable' => true,
         'options' => ['' => '- None -'] + $companies, 'value' => $certificate?->company_id ?: null])
-    @include('layoutmodule::partials.field', ['name' => 'member_id', 'label' => 'Member', 'type' => 'select', 'searchable' => true,
-        'options' => ['' => '- None -'] + $members, 'value' => $certificate?->member_id ?: null, 'hint' => 'Search by name or mobile.'])
+    {{-- server search + quick add (membermodule::partials.member-select) --}}
+    @include('membermodule::partials.member-select', ['member' => $certificate?->member_id ? $certificate->member : null, 'placeholder' => '- None -',
+        'width' => 'medium', 'companies' => $companies])
 </div>
 
 <div class="form-section mt-8">Withholding Entries</div>

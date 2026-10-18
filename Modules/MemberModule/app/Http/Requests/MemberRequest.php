@@ -27,9 +27,16 @@ class MemberRequest extends FormRequest
 
         return [
             'name' => 'required|string|max:255',
+            // unique by phone_key (Member::phoneKey(): 0122…, +20122…, 20122… are one number), not by the typed text
             'phone' => [
                 'required', 'regex:' . Account::PHONE_REGEX,
-                Rule::unique('members', 'phone')->where('account_id', $accountId)->ignore($this->route('id')),
+                function ($attribute, $value, $fail) use ($accountId) {
+                    $taken = Member::where('account_id', $accountId)->where('phone_key', Member::phoneKey($value))
+                        ->when($this->route('id'), fn ($query, $id) => $query->whereKeyNot($id))->exists();
+                    if ($taken) {
+                        $fail('There is already a member with this phone number.');
+                    }
+                },
             ],
             'email' => 'nullable|email:rfc,filter|max:255',
             'national_number' => 'nullable|digits_between:5,15',
@@ -44,7 +51,6 @@ class MemberRequest extends FormRequest
     {
         return [
             'phone.regex' => 'The phone must be a valid phone number: digits only (8-15), optionally starting with +.',
-            'phone.unique' => 'There is already a member with this phone number.',
         ];
     }
 

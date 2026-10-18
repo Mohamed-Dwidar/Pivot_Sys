@@ -8,7 +8,6 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Modules\CompanyModule\app\Services\CompanyService;
-use Modules\MemberModule\app\Services\MemberService;
 use Modules\PaymentModule\app\Http\Requests\WithholdingCertificateRequest;
 use Modules\PaymentModule\app\Services\WithholdingCertificateService;
 use Modules\ReservationModule\app\Models\Reservation;
@@ -20,13 +19,11 @@ class WithholdingCertificateAccountModuleController extends Controller
 {
     private $certificateService;
     private $companyService;
-    private $memberService;
 
-    public function __construct(WithholdingCertificateService $certificateService, CompanyService $companyService, MemberService $memberService)
+    public function __construct(WithholdingCertificateService $certificateService, CompanyService $companyService)
     {
         $this->certificateService = $certificateService;
         $this->companyService = $companyService;
-        $this->memberService = $memberService;
     }
 
     private function accountId()
@@ -38,8 +35,8 @@ class WithholdingCertificateAccountModuleController extends Controller
     {
         $accountId = $this->accountId();
         return [
+            // also the Member field's quick add companies (the member searches the server: member-select)
             'companies' => $this->companyService->options($accountId),
-            'members' => $this->memberService->options($accountId),
             'paymentOptions' => $this->certificateService->paymentOptions($accountId, $certificate),
         ];
     }

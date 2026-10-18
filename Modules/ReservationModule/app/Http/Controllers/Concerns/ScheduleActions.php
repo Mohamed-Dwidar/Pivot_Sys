@@ -37,12 +37,31 @@ trait ScheduleActions
         return view('reservationmodule::Schedule.partials.sections', $this->pageData($request));
     }
 
-    private function pageData(Request $request): array
+    // the summary "Cancelled": the day's cancelled reservations (popup)
+    public function cancelled(Request $request)
+    {
+        [$accountId, $account, $date] = $this->day($request);
+        return view('reservationmodule::Schedule.cancelled', [
+            'area' => $this->area(),
+            'date' => $date,
+            'reservations' => $this->scheduleService->cancelled($accountId, $account, $date),
+        ]);
+    }
+
+    // the account, its settings and the day (?date=Y-m-d, default: the business date)
+    private function day(Request $request): array
     {
         $accountId = Auth::user()->userable->ownerAccountId();
         $account = Account::settingsOf($accountId);
         $input = (string) $request->query('date', '');
         $date = preg_match('/^\d{4}-\d{2}-\d{2}$/', $input) && strtotime($input) ? Carbon::parse($input) : $account->businessDate();
+
+        return [$accountId, $account, $date];
+    }
+
+    private function pageData(Request $request): array
+    {
+        [$accountId, $account, $date] = $this->day($request);
 
         return $this->scheduleService->page($accountId, $account, $date) + [
             'area' => $this->area(),

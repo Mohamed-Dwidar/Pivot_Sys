@@ -215,6 +215,42 @@ class ReservationService
      * account's, a unit of that type) / start (Y-m-d H:i, or a date: the time = now). null when nothing is given.
      * The form's own checks run on save.
      */
+    /**
+     * Every choice of the form's place chain at once (2026-10-18; replaces the spaces / units / plans requests): the account's
+     * active spaces per subscription type (spaces order), the active units per "type-space" (units order) with their capacity,
+     * the active plans per unit (cheapest first) with what the form needs (amount, time based, period hours, lease period).
+     * custom.js filters them in the browser ([data-place-tree] + select[data-place]); the server checks the place, availability
+     * and amounts again on save. 4 queries.
+     * ['spaces' => [typeId => [[id, name]]], 'units' => ["typeId-spaceId" => [[id, name, capacity]]], 'plans' => [unitId => [[id, name, amount, timeBased, periodHours, leasePeriod]]]]
+     */
+    public function placeTree($accountId): array
+    {
+        $spaces = \Modules\SpaceModule\app\Models\Space::where('account_id', $accountId)->where('is_active', true)->ordered()
+            ->with('subscriptionTypes:id')->get();
+        $units = Unit::where('account_id', $accountId)->where('is_active', true)->whereIn('space_id', $spaces->pluck('id'))->ordered()
+            ->with(['plans' => fn ($query) => $query->where('plans.is_active', true)->orderBy('amount')->orderBy('name')])->get();
+
+        $tree = ['spaces' => [], 'units' => [], 'plans' => []];
+        foreach ($spaces as $space) {
+            foreach ($space->subscriptionTypes as $type) {
+                $tree['spaces'][$type->id][] = ['id' => $space->id, 'name' => \Illuminate\Support\Str::humanize($space->name)];
+            }
+        }
+        foreach ($units as $unit) {
+            $tree['units'][$unit->subscription_type_id . '-' . $unit->space_id][] = ['id' => $unit->id, 'name' => \Illuminate\Support\Str::humanize($unit->name), 'capacity' => (int) $unit->capacity];
+            $tree['plans'][$unit->id] = $unit->plans->map(fn ($plan) => [
+                'id' => $plan->id,
+                'name' => \Illuminate\Support\Str::humanize($plan->name) . ' (' . number_format((float) $plan->amount, 2) . ' / ' . ($plan->lease_period_label ?? '-') . ')',
+                'amount' => (float) $plan->amount, 'timeBased' => (int) $plan->is_time_based,
+                'periodHours' => Plan::PERIOD_HOURS[$plan->lease_period] ?? 1,
+                // the form sets the end from the start for one lease period (custom.js reservationEndFromPlan())
+                'leasePeriod' => (string) $plan->lease_period,
+            ])->values()->all();
+        }
+
+        return $tree;
+    }
+
     public function prefill($accountId, array $input): ?Reservation
     {
         $type = !empty($input['subscription_type_id']) ? SubscriptionType::where('account_id', $accountId)->find((int) $input['subscription_type_id']) : null;
@@ -387,6 +423,39 @@ class ReservationService
         return $this->periodsError($unit, $periods, $ignoreId);
     }
 
+    /**
+     * The form's live check (2026-10-18, {area}.reservations.availability): the unit (of the account) in the period of $data
+     * (period(): the plan decides full days or times), the reservation itself left out on edit. The same rule as the save check
+     * (availabilityError(): counted, overlapping, the busiest moment vs the unit's concurrent usage), repeats not included.
+     * ['limit' => concurrent usage, 'used' => at the busiest moment, 'full' => bool, 'items' => [[member, period]] (max 3), 'more' => n]
+     */
+    public function availability($accountId, array $data, $ignoreId = null): ?array
+    {
+        $unit = Unit::where('account_id', $accountId)->find($data['unit_id'] ?? null);
+        if (!$unit || empty($data['start_at']) || empty($data['end_at'])) {
+            return null;
+        }
+        [$startAt, $endAt] = $this->period($data);
+        if ($endAt && $endAt->lte($startAt)) {
+            return null;
+        }
+        $limit = max(1, (int) $unit->concurrent_usage);
+        $overlapping = Reservation::overlapping($unit->id, $startAt, $endAt)
+            ->when($ignoreId, fn ($query) => $query->whereKeyNot($ignoreId))
+            ->with('member', 'plan')->orderBy('start_at')->get();
+        $busiest = $this->busiestMoment($overlapping, $startAt, $endAt);
+        // an exclusive unit: every reservation in the way; a shared one: the ones at the busiest moment
+        $shown = $limit > 1 ? collect($busiest) : $overlapping;
+
+        return [
+            'limit' => $limit,
+            'used' => count($busiest),
+            'full' => count($busiest) >= $limit,
+            'items' => $shown->take(3)->map(fn ($reservation) => ['member' => $reservation->member?->name ?? '-', 'period' => $reservation->period])->values()->all(),
+            'more' => max(0, $shown->count() - 3),
+        ];
+    }
+
     // the first period (the reservation, then its repeats) where the unit is full: the reason (HTML), null when all are free
     private function periodsError(Unit $unit, array $periods, $ignoreId = null): ?string
     {
@@ -487,8 +556,8 @@ class ReservationService
             'is_repeat' => $isRepeat,
             'repeat_frequency' => $isRepeat ? $data['repeat_frequency'] : 'monthly',
             'repeat_interval' => $isRepeat ? (int) $data['repeat_interval'] : 1,
-            // a unit for 1 person is always 1 person (the form locks it too)
-            'number_of_peoples' => Unit::find($data['unit_id'])?->capacity == 1 ? 1 : $data['number_of_peoples'],
+            // a unit for 1 person (capacity 1, or 0 = not set) is always 1 person (the form hides the field)
+            'number_of_peoples' => (int) Unit::find($data['unit_id'])?->capacity <= 1 ? 1 : $data['number_of_peoples'],
             'amount' => round((float) $data['amount'], 2),
             'discount_percentage' => $discountPercentage,
             'discount_value' => $discountValue,

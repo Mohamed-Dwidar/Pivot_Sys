@@ -129,6 +129,10 @@ class Reservation extends Model implements Payable
     // a period of a period type (subscription / contract): it can be renewed, marked left
     public function isPeriod(): bool
     {
+        // its type already loaded (the Schedule page sets it): no lookup
+        if ($this->relationLoaded('subscriptionType') && $this->subscriptionType) {
+            return $this->subscriptionType->booking_mode === 'period';
+        }
         return in_array((int) $this->subscription_type_id, SubscriptionType::idsOf('period'), true);
     }
 

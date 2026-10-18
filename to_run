@@ -282,6 +282,45 @@ PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 SET @sql = IF(@had_hours = 0, 'UPDATE accounts SET today_hours_to = 26 WHERE id = 1', 'SELECT ''today_hours kept''');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 
+-- members.phone_key / merged_into / deleted_at (2026-10-18, quick add + duplicate merge; also in the create migration) — guarded.
+-- Expected on account 1: added once; a re-run: "members.phone_key exists"
+SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'members' AND COLUMN_NAME = 'phone_key') = 0,
+  'ALTER TABLE members ADD phone_key VARCHAR(20) NULL AFTER phone, ADD merged_into BIGINT UNSIGNED NULL AFTER created_by, ADD deleted_at TIMESTAMP NULL AFTER updated_at',
+  'SELECT ''members.phone_key exists''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+-- the unique (account_id, phone_key) is added after the merge (STEP 5d); a re-run drops it first (3.7b fills every phone_key again)
+SET @sql = IF((SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'members' AND INDEX_NAME = 'members_account_id_phone_key_unique') > 0,
+  'ALTER TABLE members DROP INDEX members_account_id_phone_key_unique', 'SELECT ''no members phone_key unique yet''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
+-- indexes (2026-10-18 audit; also in the create migrations): 4 new here (+ the members unique in STEP 5d), 4 redundant dropped —
+-- guarded (added only if missing, dropped only if present; a re-run changes nothing)
+SET @sql = IF((SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reservations' AND INDEX_NAME = 'reservations_account_id_subscription_type_id_start_at_index') = 0,
+  'ALTER TABLE reservations ADD INDEX reservations_account_id_subscription_type_id_start_at_index (account_id, subscription_type_id, start_at)', 'SELECT ''exists''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql = IF((SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reservations' AND INDEX_NAME = 'reservations_unit_id_end_at_index') = 0,
+  'ALTER TABLE reservations ADD INDEX reservations_unit_id_end_at_index (unit_id, end_at)', 'SELECT ''exists''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql = IF((SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'payments' AND INDEX_NAME = 'payments_shift_closing_id_index') = 0,
+  'ALTER TABLE payments ADD INDEX payments_shift_closing_id_index (shift_closing_id)', 'SELECT ''exists''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql = IF((SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'payments' AND INDEX_NAME = 'payments_account_id_deleted_at_index') = 0,
+  'ALTER TABLE payments ADD INDEX payments_account_id_deleted_at_index (account_id, deleted_at)', 'SELECT ''exists''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+-- the drops (each covered by a wider index above / an existing unique): only if present
+SET @sql = IF((SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reservations' AND INDEX_NAME = 'reservations_unit_id_index') > 0,
+  'ALTER TABLE reservations DROP INDEX reservations_unit_id_index', 'SELECT ''gone''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql = IF((SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reservations' AND INDEX_NAME = 'reservations_account_id_index') > 0,
+  'ALTER TABLE reservations DROP INDEX reservations_account_id_index', 'SELECT ''gone''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql = IF((SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'payments' AND INDEX_NAME = 'payments_account_id_index') > 0,
+  'ALTER TABLE payments DROP INDEX payments_account_id_index', 'SELECT ''gone''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql = IF((SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'expenses' AND INDEX_NAME = 'expenses_account_id_index') > 0,
+  'ALTER TABLE expenses DROP INDEX expenses_account_id_index', 'SELECT ''gone''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
 INSERT INTO migrations (migration, batch)
 SELECT m.migration, (SELECT MAX(batch) + 1 FROM migrations) FROM (
   SELECT '2026_10_11_100006_create_extras_table' migration
@@ -375,6 +414,13 @@ SELECT m.id, 1, m.name,
   CASE WHEN m.creatable_type LIKE '%UserModule%' AND m.creatable_id IN (SELECT id FROM dwidar_pivot_api.users) THEN m.creatable_id ELSE 1 END,
   m.created_at, m.updated_at
 FROM dwidar_pivot_api.members m;
+
+-- 3.7b phone_key of every member (2026-10-18; Member::phoneKey(): digits only; an Egyptian mobile → its 10 digits), the same
+--      key the app saves. Expected on account 1: 2,932 rows (the duplicates are merged in STEP 5c, after the imports)
+UPDATE members m
+JOIN (SELECT id, REGEXP_REPLACE(phone, '[^0-9]', '') d FROM members) x ON x.id = m.id
+SET m.phone_key = IF(REGEXP_LIKE(x.d, '^(0020|20|0)?1[0125][0-9]{8}$'), RIGHT(x.d, 10), x.d)
+WHERE m.merged_into IS NULL;
 
 -- 3.8 packages (price / net / paid / remaining are calculated again in step 4)
 INSERT INTO packages (id, account_id, member_id, name, date_from, date_to, is_active, discount_percentage, total_amount, amount, after_discount,
@@ -694,6 +740,30 @@ WHERE r.space_id = 1 AND r.deleted_at IS NULL AND r.left_at IS NULL AND r.member
   AND r.reservation_status_id NOT IN (SELECT id FROM reservation_statuses WHERE is_counted = 0)
   AND r.id NOT IN (SELECT renewal_of FROM (SELECT renewal_of FROM reservations WHERE deleted_at IS NULL AND renewal_of IS NOT NULL
                                          AND reservation_status_id NOT IN (SELECT id FROM reservation_statuses WHERE is_counted = 0)) n);
+
+-----
+STEP 5c — members sharing one phone → one member (every run: 3.7 reloads the members) (terminal), AFTER the members / packages /
+          reservations / payments imports (3.7–3.13), STEP 4–5 and STEP 5b (2026-10-18, user)
+-----
+# the members of an account with the same phone_key (3.7b): the primary = the most reservations (tie: lowest id); every
+# reference (reservations, packages, payments, withholding certificates) moves to it; its empty email / company / national
+# number / job / source are filled from the others, their notes appended; the others = soft deleted, merged_into = the primary,
+# phone_key NULL. Paid / remaining of the touched reservations / packages are refreshed and must stay the same (else rolled back).
+# Groups whose names differ are NOT merged (listed as skipped). Safe to run again (nothing found the second time).
+# Expected on account 1 (2026-10-18): 1 group — Habiba Yehia #1532 (primary, 2 reservations) ← #1533, #1534, #1535;
+# moved: reservations 3, packages 0, payments 1, withholding 0; fill: nothing. (#437 Vivo Company / #505 Farouk Mohamed are
+# different keys under this rule: not a group.) If "move packages" > 0: run STEP 4b again (recalculate() empties its dates).
+php artisan members:merge-duplicates --dry-run --account=1
+php artisan members:merge-duplicates --account=1
+
+-----
+STEP 5d — SQL, AFTER STEP 5c: one phone per member in an account (3.1 dropped it for the re-run)
+-----
+SET @sql = IF((SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'members' AND INDEX_NAME = 'members_account_id_phone_key_unique') = 0,
+  'ALTER TABLE members ADD UNIQUE INDEX members_account_id_phone_key_unique (account_id, phone_key)', 'SELECT ''members phone_key unique exists''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+-- check: must be 0 rows (else STEP 5c skipped a group with different names: merge / fix those by hand first)
+SELECT account_id, phone_key, COUNT(*) n FROM members WHERE phone_key IS NOT NULL GROUP BY account_id, phone_key HAVING n > 1;
 
 -----
 STEP 6 — checks (SQL): every "old" must equal its "new"

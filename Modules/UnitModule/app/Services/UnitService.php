@@ -30,18 +30,6 @@ class UnitService
         return $this->unitRepository->forSpace($space->account_id, $space->id);
     }
 
-    // the active units of the space with the subscription type (all of them when no type is given):
-    // [['id', 'name', 'capacity'], ...], for the reservation form
-    public function optionsForSpace(Space $space, $subscriptionTypeId = null): array
-    {
-        return $this->unitRepository->forSpace($space->account_id, $space->id)
-            ->where('is_active', true)
-            ->when($subscriptionTypeId, fn ($query) => $query->where('subscription_type_id', $subscriptionTypeId))
-            ->ordered()->get()
-            ->map(fn ($unit) => ['id' => $unit->id, 'name' => $unit->name, 'capacity' => (int) $unit->capacity])
-            ->all();
-    }
-
     // 404 when the unit is not one of the account's units (any space)
     public function findForAccount($accountId, $id)
     {

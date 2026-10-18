@@ -34,6 +34,8 @@ class PackageService
             ->mapWithKeys(fn ($package) => [$package->id => [
                 'name' => $package->name . ' - ' . ($package->member?->name ?? '?'),
                 'member_id' => $package->member_id,
+                // the reservation form shows the package's member in its Member field (server search: the option is added)
+                'member_text' => $package->member ? $package->member->name . ' ' . $package->member->phone : '',
             ]])->all();
     }
 

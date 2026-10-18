@@ -5,24 +5,22 @@ namespace Modules\ReservationModule\app\Http\Controllers\Concerns;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Str;
-use Modules\MemberModule\app\Services\MemberService;
+use Modules\CompanyModule\app\Services\CompanyService;
 use Modules\PackageModule\app\Services\PackageService;
-use Modules\PlanModule\app\Services\PlanService;
 use Modules\ReservationModule\app\Http\Requests\ReservationRequest;
 use Modules\ReservationModule\app\Models\Reservation;
 use Modules\ReservationModule\app\Services\ReservationService;
 use Modules\ReservationModule\app\Services\ReservationStatusService;
 use Modules\SpaceModule\app\Services\SpaceService;
 use Modules\SpaceModule\app\Services\SubscriptionTypeService;
-use Modules\UnitModule\app\Services\UnitService;
 use Yajra\DataTables\Facades\DataTables;
 
 /**
  * Reservations actions shared by the account and the employee controllers (both manage the account's reservations).
  * The controller gives area(): "account" | "employee" (route names {area}.reservations.*), the views read it from the route.
  * show / create / edit open in the popup (ajax), store / update / destroy answer JSON (custom.js ajax forms),
- * spaces() / units() / plans() fill the dependent drop menus of the form (custom.js [data-options-url]).
+ * The form's place chain (type → space → unit → plan) comes with the form (ReservationService::placeTree(), custom.js
+ * [data-place-tree]); availability() = the form's live check (custom.js reservationAvailability()).
  */
 trait ReservationActions
 {
@@ -31,25 +29,21 @@ trait ReservationActions
     private ReservationStatusService $statusService;
     private SubscriptionTypeService $subscriptionTypeService;
     private SpaceService $spaceService;
-    private UnitService $unitService;
-    private PlanService $planService;
     private PackageService $packageService;
-    private MemberService $memberService;
+    private CompanyService $companyService;
 
     abstract protected function area(): string;
 
     public function __construct(
         ReservationService $reservationService, ReservationStatusService $statusService, SubscriptionTypeService $subscriptionTypeService,
-        SpaceService $spaceService, UnitService $unitService, PlanService $planService, PackageService $packageService, MemberService $memberService
+        SpaceService $spaceService, PackageService $packageService, CompanyService $companyService
     ) {
         $this->reservationService = $reservationService;
         $this->statusService = $statusService;
         $this->subscriptionTypeService = $subscriptionTypeService;
         $this->spaceService = $spaceService;
-        $this->unitService = $unitService;
-        $this->planService = $planService;
         $this->packageService = $packageService;
-        $this->memberService = $memberService;
+        $this->companyService = $companyService;
     }
 
     // the account itself, or the account of the logged in employee
@@ -63,8 +57,8 @@ trait ReservationActions
         return route($this->area() . '.reservations.' . $name, $parameters);
     }
 
-    // the drop menus of the form; on edit the chain (spaces / units / plans) of the saved choices is filled already,
-    // only the active spaces / units / plans (an inactive saved one must be changed)
+    // the drop menus of the form; the place chain = placeTree (all of it, filtered in the browser); on edit / pre-filled the
+    // saved choices' lists are rendered from it already (only the active spaces / units / plans: an inactive saved one must be changed)
     private function formOptions($reservation = null): array
     {
         $accountId = $this->accountId();
@@ -74,18 +68,16 @@ trait ReservationActions
             // with can repeat: the form shows the repeat options only for these types
             'subscriptionTypes' => $renewing ? [] : $this->subscriptionTypeService->reservationOptions($accountId),
             'packages' => $renewing ? [] : $this->packageService->options($accountId, $reservation?->package_id),
-            'members' => $renewing ? [] : $this->memberService->options($accountId),
+            // the Member field searches the server (member-select); its quick add offers the account's companies
+            'companies' => $renewing ? [] : $this->companyService->options($accountId),
+            'placeTree' => $tree = $this->reservationService->placeTree($accountId),
             'spaces' => [], 'units' => [], 'plans' => [],
         ];
 
         if ($reservation) {
-            $options['spaces'] = $this->spaceService->optionsForSubscriptionType($accountId, $reservation->subscription_type_id);
-            if ($space = $reservation->space) {
-                $options['units'] = $this->unitService->optionsForSpace($space, $reservation->subscription_type_id);
-            }
-            if ($unit = $reservation->unit) {
-                $options['plans'] = $this->planService->optionsForUnit($unit);
-            }
+            $options['spaces'] = collect($tree['spaces'][$reservation->subscription_type_id] ?? [])->pluck('name', 'id')->all();
+            $options['units'] = $tree['units'][$reservation->subscription_type_id . '-' . $reservation->space_id] ?? [];
+            $options['plans'] = $reservation->unit_id ? ($tree['plans'][$reservation->unit_id] ?? []) : [];
         }
 
         return $options;
@@ -183,26 +175,23 @@ trait ReservationActions
         return $this->table((array) $request->input('list', []), $id)->toArray()['data'][0] ?? null;
     }
 
-    // dependent drop menus (json [{id, name, ...}])
-    // the option texts are humanized like the server rendered drop menus ("day_use" => "Day Use")
-    public function spaces(Request $request)
+    // the form's live availability line: ?unit_id, plan_id, start_at, end_at, start_time, end_time, ignore (edit: itself) —
+    // {state: free | busy | shared, ...ReservationService::availability()} or {state: null} when not enough is chosen yet
+    public function availability(Request $request)
     {
-        $spaces = $this->spaceService->optionsForSubscriptionType($this->accountId(), (int) $request->input('subscription_type_id'));
-        return response()->json(collect($spaces)->map(fn ($name, $id) => ['id' => $id, 'name' => Str::humanize($name)])->values());
-    }
+        $data = $request->only(['unit_id', 'plan_id', 'start_at', 'end_at', 'start_time', 'end_time']);
+        $valid = fn ($date) => is_string($date) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date);
+        $time = fn ($value) => !isset($value) || $value === '' || (is_string($value) && preg_match('/^\d{2}:\d{2}$/', $value));
+        if (!$valid($data['start_at'] ?? null) || !$valid($data['end_at'] ?? null) || !$time($data['start_time'] ?? null) || !$time($data['end_time'] ?? null)) {
+            return response()->json(['state' => null]);
+        }
+        $result = $this->reservationService->availability($this->accountId(), $data, $request->integer('ignore') ?: null);
+        if (!$result) {
+            return response()->json(['state' => null]);
+        }
+        $state = $result['used'] === 0 ? 'free' : ($result['limit'] > 1 && !$result['full'] ? 'shared' : 'busy');
 
-    public function units(Request $request)
-    {
-        // the units of the space with the chosen subscription type
-        $space = $this->spaceService->findOne($this->accountId(), (int) $request->input('space_id'));
-        $units = $this->unitService->optionsForSpace($space, (int) $request->input('subscription_type_id'));
-        return response()->json(collect($units)->map(fn ($unit) => ['name' => Str::humanize($unit['name'])] + $unit)->values());
-    }
-
-    public function plans(Request $request)
-    {
-        $unit = $this->unitService->findForAccount($this->accountId(), (int) $request->input('unit_id'));
-        return response()->json(collect($this->planService->optionsForUnit($unit))->map(fn ($plan) => ['name' => Str::humanize($plan['name'])] + $plan)->values());
+        return response()->json(['state' => $state] + $result);
     }
 
     // ?renew=ID (Renew: the Schedule page, the view, the list): the form pre-filled from that period, starting the day after it ends

@@ -12,6 +12,9 @@ use Modules\MemberModule\app\Http\Controllers\Employee\MemberEmployeeModuleContr
 $memberRoutes = function ($controller) {
     Route::get('/', [$controller, 'index'])->name('index');
     Route::get('data', [$controller, 'data'])->name('data');
+    // the Member drop menus of the reservation / package / cash in / withholding forms: search + the quick add duplicate check
+    Route::get('search', [$controller, 'search'])->name('search');
+    Route::get('lookup', [$controller, 'lookup'])->name('lookup');
     Route::get('create', [$controller, 'create'])->name('create');
     Route::post('/', [$controller, 'store'])->name('store');
     Route::get('{id}', [$controller, 'show'])->name('show');

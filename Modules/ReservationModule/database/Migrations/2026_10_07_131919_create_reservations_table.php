@@ -11,10 +11,12 @@ return new class extends Migration {
     public function up(): void {
         Schema::create('reservations', function (Blueprint $table) {
             $table->id();
-            $table->bigInteger('account_id')->default(1)->index();
+            // no own index (2026-10-18): (account_id, start_at) / (account_id, end_at) ... below start with it
+            $table->bigInteger('account_id')->default(1);
             $table->bigInteger('member_id')->index();
             $table->bigInteger('space_id')->index();
-            $table->bigInteger('unit_id')->index();
+            // (unit_id, end_at) below (2026-10-18): the availability check
+            $table->bigInteger('unit_id');
             $table->bigInteger('plan_id');
             // indexed (2026-10-15): package totals / lists / options look reservations up by package
             $table->bigInteger('package_id')->default(0)->index();
@@ -56,6 +58,9 @@ return new class extends Migration {
             // the list tabs / subscriptions (range comparisons on the dates, docs/reservations-list-plan.md)
             $table->index(['account_id', 'start_at']);
             $table->index(['account_id', 'end_at']);
+            // 2026-10-18 audit: the Schedule sections / type filter, the availability check (end_at > the start)
+            $table->index(['account_id', 'subscription_type_id', 'start_at']);
+            $table->index(['unit_id', 'end_at']);
         });
     }
 

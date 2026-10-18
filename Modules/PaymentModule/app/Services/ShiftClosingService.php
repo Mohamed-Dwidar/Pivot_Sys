@@ -125,16 +125,17 @@ class ShiftClosingService
      */
     public function openTotals($accountId, $userId): ?array
     {
+        // payments + expenses in ONE query (two one-row subqueries)
         $payments = $this->openPayments($accountId, $userId)->toBase()
-            ->selectRaw("MIN(created_at) since, COALESCE(SUM(CASE WHEN type = 'payment' THEN amount END), 0) cash_in, COALESCE(SUM(CASE WHEN type = 'refund' THEN amount END), 0) refunds")
-            ->first();
-        $expenses = $this->openExpenses($accountId, $userId)->toBase()->selectRaw('MIN(created_at) since, COALESCE(SUM(amount), 0) total')->first();
-        $since = collect([$payments->since, $expenses->since])->filter()->min();
+            ->selectRaw("MIN(created_at) p_since, COALESCE(SUM(CASE WHEN type = 'payment' THEN amount END), 0) cash_in, COALESCE(SUM(CASE WHEN type = 'refund' THEN amount END), 0) refunds");
+        $expenses = $this->openExpenses($accountId, $userId)->toBase()->selectRaw('MIN(created_at) e_since, COALESCE(SUM(amount), 0) total');
+        $row = DB::query()->fromSub($payments, 'p')->crossJoinSub($expenses, 'e')->first();
+        $since = collect([$row->p_since, $row->e_since])->filter()->min();
 
         return $since ? [
             'since' => Carbon::parse($since),
-            'cash_in' => round((float) $payments->cash_in, 2),
-            'cash_out' => round((float) $payments->refunds + (float) $expenses->total, 2),
+            'cash_in' => round((float) $row->cash_in, 2),
+            'cash_out' => round((float) $row->refunds + (float) $row->total, 2),
         ] : null;
     }
 

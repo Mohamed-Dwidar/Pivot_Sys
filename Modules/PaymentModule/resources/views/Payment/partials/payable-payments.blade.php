@@ -4,6 +4,7 @@
     $kind: reservation | package (PaymentService::PAYABLES). A reservation inside a package is paid through the package (link to it).
     Employees see ALL the payments of the item with the collector (to answer a customer / ask the colleague), payments-plan.md §2b.
     "Add payment" opens the payment form for it in the popup; after saving, the popup shows this view again (json "modal").
+    $summary (optional, default true): false = no Due / Paid / Remaining / Status lines (the reservation view shows them above).
 --}}
 @php
     $area = request()->routeIs('employee.*') ? 'employee' : 'account';
@@ -26,6 +27,7 @@
         @endif
     </div>
 @else
+    @if ($summary ?? true)
     <dl class="detail-list">
         <div><dt>Due</dt><dd>{{ number_format($payable->payableAmount(), 2) }}
             @if (method_exists($payable, 'extrasTotal') && $payable->extrasTotal() != 0)
@@ -36,6 +38,7 @@
         <div><dt>{{ $payable->remaining < 0 ? 'Credit' : 'Remaining' }}</dt><dd class="font-medium {{ $payable->remaining > 0 ? 'text-danger' : 'text-success' }}">{{ number_format(abs($payable->remaining), 2) }}</dd></div>
         <div><dt>Status</dt><dd><span class="badge {{ $payable->payment_status_badge_class }}">{{ $payable->payment_status_label }}</span></dd></div>
     </dl>
+    @endif
 
     @php($payments = $payable->paymentsList())
     @if ($payments->isNotEmpty())

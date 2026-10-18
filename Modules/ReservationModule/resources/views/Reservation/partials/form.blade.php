@@ -1,17 +1,20 @@
 {{--
     Reservation create / edit fields. $reservation is null on create (or not saved yet: a renewal pre-filled from a subscription). Every drop menu is searchable (Tom Select).
-    The drop menus chain (custom.js [data-options-url]): subscription type -> spaces -> units -> plans, loaded by ajax.
+    The drop menus chain: subscription type -> spaces -> units -> plans, all sent with the form ($placeTree, ReservationService::placeTree()
+    in [data-place-tree]) and filtered in the browser (custom.js select[data-place], no request); a list with only one (active)
+    option selects it (data-auto-single), so its own list follows. Unit + dates + times = the live availability line
+    ([data-availability], {area}.reservations.availability); saving checks it again.
     The package locks the member, the plan fills the amount; discount % / discount value / net amount calculate each other
     (custom.js "Reservation form"), the server calculates them again (and the subscription day from the start date).
     The status is not chosen here (a new reservation gets the first active status, it is changed in another place).
 --}}
 @php
     $area = request()->routeIs('employee.*') ? 'employee' : 'account';
-    // the unit capacity (data-capacity): 1 = the number of people is 1 and can not be changed (custom.js)
+    // the unit capacity (data-capacity): 1 or 0 = the number of people is 1, the field is hidden (custom.js reservationCapacity())
     $unitOptions = collect($units)->mapWithKeys(fn ($unit) => [$unit['id'] => ['name' => $unit['name'], 'data' => ['capacity' => $unit['capacity']]]])->all();
     // data-time-based: the plan reservations have a start / end time (custom.js shows the time inputs)
     $planOptions = collect($plans)->mapWithKeys(fn ($plan) => [$plan['id'] => ['name' => $plan['name'], 'data' => ['amount' => $plan['amount'], 'time-based' => $plan['timeBased'], 'period-hours' => $plan['periodHours'], 'lease-period' => $plan['leasePeriod']]]])->all();
-    $packageOptions = collect($packages)->map(fn ($package) => ['name' => $package['name'], 'data' => ['member-id' => $package['member_id']]])->all();
+    $packageOptions = collect($packages)->map(fn ($package) => ['name' => $package['name'], 'data' => ['member-id' => $package['member_id'], 'member-text' => $package['member_text']]])->all();
     // the date / time inputs need Y-m-d / H:i values (the browser shows them in the user's format)
     // create: today, now -> in 1 hour (pre-filled from the Schedule page: its start -> in 1 hour); edit / renew: the saved values
     // (the times only for a time based plan)
@@ -40,6 +43,10 @@
     // service enforces them too), no repeat; place, plan, dates and amounts can change
     $renewing = $reservation && !$reservation->exists && $reservation->renewal_of;
     $renewed = $renewing ? $reservation->renewalOf : null;
+    // opened from the Schedule page (+ New / a timeline slot: ?subscription_type_id=): the type is fixed (hidden, with its repeat
+    // flag for custom.js reservationTypeOptions()), the popup title names it (create.blade.php)
+    $fixedType = $reservation && !$reservation->exists && !$renewing && $reservation->subscription_type_id
+        && isset($subscriptionTypes[$reservation->subscription_type_id]) ? $subscriptionTypes[$reservation->subscription_type_id] : null;
 @endphp
 
 @if ($renewing)
@@ -66,30 +73,34 @@
         'hint' => 'With a package, the member is the package member.'])
 </div>
 <div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-1">
-    @include('layoutmodule::partials.field', ['name' => 'member_id', 'label' => 'Member', 'type' => 'select', 'required' => true, 'searchable' => true, 'width' => 'long',
-        'options' => ['' => '- Select -'] + $members, 'value' => $reservation?->member_id,
-        'hint' => empty($members) ? 'No members yet, add them from Members.' : 'Search by name or mobile.'])
+    {{-- server search + quick add (membermodule::partials.member-select) --}}
+    @include('membermodule::partials.member-select', ['member' => $reservation?->member, 'required' => true, 'companies' => $companies])
 </div>
 @endif
 
 <div class="form-section mt-8">Place & Plan</div>
-@unless ($renewing)
+{{-- every active space / unit / plan of the account by type (custom.js placeOptions()) --}}
+<script type="application/json" data-place-tree>@json($placeTree ?? ['spaces' => [], 'units' => [], 'plans' => []])</script>
+@if ($fixedType)
+    <input type="hidden" name="subscription_type_id" value="{{ $reservation->subscription_type_id }}" data-can-repeat="{{ $fixedType['data']['can-repeat'] }}">
+@endif
+@unless ($renewing || $fixedType)
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
     @include('layoutmodule::partials.field', ['name' => 'subscription_type_id', 'label' => 'Subscription Type', 'type' => 'select', 'required' => true, 'searchable' => true,
         'options' => ['' => '- Select -'] + $subscriptionTypes, 'value' => $reservation?->subscription_type_id ?: null,
         'hint' => empty($subscriptionTypes) ? 'No subscription types yet, add them from Spaces > Subscription Types.' : 'The spaces with this subscription type are shown.'])
 </div>
 @endunless
-<div class="grid grid-cols-1 gap-5 {{ $renewing ? '' : 'mt-5' }} md:grid-cols-3">
+<div class="grid grid-cols-1 gap-5 {{ $renewing || $fixedType ? '' : 'mt-5' }} md:grid-cols-3">
     @include('layoutmodule::partials.field', ['name' => 'space_id', 'label' => 'Space', 'type' => 'select', 'required' => true, 'searchable' => true,
         'options' => ['' => '- Select -'] + $spaces, 'value' => $reservation?->space_id,
-        'attrs' => 'data-options-url="' . route($area . '.reservations.options.spaces') . '" data-parent="subscription_type_id" data-none="No spaces with this subscription type"' . (empty($spaces) ? ' disabled' : '')])
+        'attrs' => 'data-place="spaces" data-parent="subscription_type_id" data-auto-single data-none="No spaces with this subscription type"' . (empty($spaces) ? ' disabled' : '')])
     @include('layoutmodule::partials.field', ['name' => 'unit_id', 'label' => 'Unit', 'type' => 'select', 'required' => true, 'searchable' => true,
         'options' => ['' => '- Select -'] + $unitOptions, 'value' => $reservation?->unit_id,
-        'attrs' => 'data-options-url="' . route($area . '.reservations.options.units') . '" data-parent="space_id" data-also="subscription_type_id" data-none="No active units for this space and subscription type"' . (empty($unitOptions) ? ' disabled' : '')])
+        'attrs' => 'data-place="units" data-parent="space_id" data-also="subscription_type_id" data-auto-single data-none="No active units for this space and subscription type"' . (empty($unitOptions) ? ' disabled' : '')])
     @include('layoutmodule::partials.field', ['name' => 'plan_id', 'label' => 'Plan', 'type' => 'select', 'required' => true, 'searchable' => true,
         'options' => ['' => '- Select -'] + $planOptions, 'value' => $reservation?->plan_id,
-        'attrs' => 'data-options-url="' . route($area . '.reservations.options.plans') . '" data-parent="unit_id" data-none="No plans for this unit"' . (empty($planOptions) ? ' disabled' : ''),
+        'attrs' => 'data-place="plans" data-parent="unit_id" data-auto-single data-none="No plans for this unit"' . (empty($planOptions) ? ' disabled' : ''),
         'hint' => 'The amount is filled from the plan.'])
     {{-- the Renew form keeps the renewed period's number of people (hidden) --}}
     @if ($renewing)
@@ -125,6 +136,9 @@
         </div>
     </div>
 </div>
+{{-- the live availability of the unit in these dates / times (custom.js reservationAvailability(); saving checks it again) --}}
+<div class="availability-line" data-availability data-url="{{ route($area . '.reservations.availability') }}"
+    @if ($reservation?->exists) data-ignore="{{ $reservation->id }}" @endif hidden></div>
 
 <div class="form-section mt-8">Amount</div>
 {{-- discount_type = the one typed last (percentage | value | net), the server keeps it and calculates the others --}}

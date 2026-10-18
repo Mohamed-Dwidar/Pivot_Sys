@@ -5,7 +5,7 @@ namespace Modules\PaymentModule\app\Http\Controllers\Concerns;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
-use Modules\MemberModule\app\Services\MemberService;
+use Modules\CompanyModule\app\Services\CompanyService;
 use Modules\PaymentModule\app\Http\Requests\PaymentRefundRequest;
 use Modules\PaymentModule\app\Http\Requests\PaymentRequest;
 use Modules\PaymentModule\app\Models\Payment;
@@ -34,19 +34,19 @@ trait PaymentActions
     private PaymentService $paymentService;
     private PaymentMethodService $methodService;
     private IncomeCategoryService $categoryService;
-    private MemberService $memberService;
+    private CompanyService $companyService;
     private CashListService $cashListService;
     private ExpenseCategoryService $expenseCategoryService;
 
     abstract protected function area(): string;
 
-    public function __construct(PaymentService $paymentService, PaymentMethodService $methodService, IncomeCategoryService $categoryService, MemberService $memberService,
+    public function __construct(PaymentService $paymentService, PaymentMethodService $methodService, IncomeCategoryService $categoryService, CompanyService $companyService,
         CashListService $cashListService, ExpenseCategoryService $expenseCategoryService)
     {
         $this->paymentService = $paymentService;
         $this->methodService = $methodService;
         $this->categoryService = $categoryService;
-        $this->memberService = $memberService;
+        $this->companyService = $companyService;
         $this->cashListService = $cashListService;
         $this->expenseCategoryService = $expenseCategoryService;
     }
@@ -254,6 +254,7 @@ trait PaymentActions
         // reservation | package | '' (other income)
         $payableKind = 'reservation';
         $payableOptions = [];
+        $payable = null;
 
         if (isset(PaymentService::PAYABLES[$request->input('payable')]) && $request->filled('payable_id')) {
             $payableKind = $request->input('payable');
@@ -268,8 +269,11 @@ trait PaymentActions
         return view('paymentmodule::Payment.create', [
             'payment' => $payment,
             'payableKind' => $payableKind,
+            // opened for one reservation / package (its view, a list row menu): shown as details, not chosen (hidden inputs)
+            'payable' => $payable,
             'payableOptions' => collect($payableOptions)->pluck('name', 'id')->all(),
-            'members' => $this->memberService->options($accountId),
+            // the Member field searches the server (member-select); its quick add offers the account's companies
+            'companies' => $this->companyService->options($accountId),
             'methods' => $this->methodService->options($accountId),
             'categories' => $this->categoryService->options($accountId),
         ]);
