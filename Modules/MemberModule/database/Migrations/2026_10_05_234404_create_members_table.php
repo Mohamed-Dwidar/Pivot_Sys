@@ -26,6 +26,7 @@ return new class extends Migration
             $table->string('from_where')->nullable();
             $table->string('push_token')->nullable();
             $table->integer('created_by')->default(1);
+            $table->morphs('creatable');
             // members:merge-duplicates: the member this one was merged into (then soft deleted)
             $table->unsignedBigInteger('merged_into')->nullable();
 

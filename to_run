@@ -6,7 +6,29 @@
    Each run empties and reloads members, packages, reservations, extras, payments, payment methods, income categories,
    withholding certificates, day closings: don't enter real data in those in the new system before go-live.
    Employees + their logins are upserted (kept on a re-run: positions / shifts / passwords you set stay).
- (The previous to_run is kept in storage/app/backups/to_run.before-2026-10-11.)
+ (The previous to_run is kept in storage/app/backups/to_run.before-2026-10-11 / -10-13 / -10-14 / -10-19.)
+ Last full re-run: 2026-10-19 (fresh live backup, done by Claude; see docs/progress.md).
+=====================================================================
+
+=====================================================================
+ GO-LIVE CHECKLIST (in this order; stop at the first error / BLOCKING row / unexplained difference)
+=====================================================================
+ [ ] 1. Stop the old system (no new bookings / payments from here on).
+ [ ] 2. Fresh backup of the old LIVE database restored into dwidar_pivot_api (READ ONLY from now on — never write to it).
+        Check: its newest payments / reservations created_at = today.
+ [ ] 3. Back up the target (STEP 1) — check the .sql file exists and its size is close to the previous backups.
+ [ ] 4. Real data entered in the new system since the last run is LOST (members, reservations, packages, payments,
+        expenses, extras, withholding, shift closings, manual Mark left / Renew links) — make sure it is test data
+        (or re-enter it after).
+ [ ] 5. STEP 3 — the SQL from "USE dwidar_res_portal;" down to the end of 3.15 (just before STEP 4) as ONE script.
+        3.0d / 3.0b / 3.0e must say 'ok' (no BLOCKING rows), else stop.
+ [ ] 6. STEP 4 (packages recalculate) → STEP 4b (SQL) → STEP 5 (payments:refresh, shifts:recalculate --imported).
+ [ ] 7. STEP 5b a) dry run → check the numbers → real run; then 5b b) and 5b c) SQL (CURDATE() based cutoffs).
+ [ ] 8. STEP 5c merge dry run → check the groups → real run (if packages moved: STEP 4b again).
+ [ ] 9. STEP 5d (unique index) — its duplicates check must return 0 rows.
+ [ ] 10. STEP 6 checks (every old = new, 6.6 / 6.11 all 0).
+ [ ] 11. php artisan optimize:clear; open Schedule, Reservations, Packages, Payments, My Shift, Members (account + employee).
+ SKIP: STEP 2 and everything in the ARCHIVE section at the end (one-time steps, already applied).
 =====================================================================
 
 -----
@@ -17,9 +39,10 @@ mysqldump -h 127.0.0.1 -u root -p --single-transaction --routines dwidar_res_por
 # restore if needed:  mysql -h 127.0.0.1 -u root -p dwidar_res_portal < storage/app/backups/dwidar_res_portal-YYYYMMDD-HHMM.sql
 
 -----
-STEP 2 — remove the 2 test employees' files (terminal)
+STEP 2 — [ONE-TIME, already applied 2026-10-11 — SKIP on re-run] remove the 2 test employees' files of the first run (terminal)
+         (employee ids 1 / 2 are real old users now: do NOT run this again)
 -----
-rm -rf storage/app/private/employees/1 storage/app/private/employees/2 public/uploads/employees/1 public/uploads/employees/2
+# rm -rf storage/app/private/employees/1 storage/app/private/employees/2 public/uploads/employees/1 public/uploads/employees/2
 
 -----
 STEP 3 — SQL (run as one script in dwidar_res_portal)
@@ -184,7 +207,7 @@ CREATE TABLE IF NOT EXISTS shift_closings (
   first_payment_at DATETIME NULL, last_payment_at DATETIME NULL,
   count INT UNSIGNED NOT NULL DEFAULT 0,
   cash_total DECIMAL(12,2) NOT NULL DEFAULT 0, withholding_total DECIMAL(12,2) NOT NULL DEFAULT 0, totals JSON NULL,
-  notes VARCHAR(255) NULL,
+  notes VARCHAR(255) NULL, is_imported TINYINT(1) NOT NULL DEFAULT 0,
   closed_by BIGINT NOT NULL, closed_at DATETIME NOT NULL,
   edited_at DATETIME NULL, edit_count INT UNSIGNED NOT NULL DEFAULT 0,
   created_at TIMESTAMP NULL, updated_at TIMESTAMP NULL,
@@ -210,6 +233,11 @@ PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 -- expenses in the shifts (2026-10-14): shift_closings.expenses_total, shift_events.expense_id + the expense_* actions
 SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'shift_closings' AND COLUMN_NAME = 'expenses_total') = 0,
   'ALTER TABLE shift_closings ADD expenses_total DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER withholding_total', 'SELECT ''expenses_total exists''');
+PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+-- shift_closings.is_imported (2026-10-19; also in the create migration): 1 = the "Imported from the old system" closing of a login
+-- (set in 3.15), hidden from the employee's My Closings, badged "Imported" for the account. Added once; a re-run: "exists"
+SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'shift_closings' AND COLUMN_NAME = 'is_imported') = 0,
+  'ALTER TABLE shift_closings ADD is_imported TINYINT(1) NOT NULL DEFAULT 0 AFTER notes', 'SELECT ''shift_closings.is_imported exists''');
 PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
 SET @sql = IF((SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'shift_events' AND COLUMN_NAME = 'expense_id') = 0,
   'ALTER TABLE shift_events MODIFY action ENUM(''close'',''close_on_behalf'',''logout_closed'',''logout_still_working'',''still_working'',''payment_edit'',''payment_delete'',''payment_refund'',''expense_edit'',''expense_delete'') NOT NULL, ADD expense_id BIGINT NOT NULL DEFAULT 0 AFTER payment_id, ADD INDEX shift_events_expense_id_index (expense_id)',
@@ -433,13 +461,14 @@ SELECT k.id, 1, k.member_id, k.name, k.date_from, k.date_to, COALESCE(k.is_activ
 FROM dwidar_pivot_api.packages k;
 
 -- 3.9 reservations: status 3 Cancelled (is_cancelled) else 2 Confirmed; subscription_id → subscription_type_id; date_from / date_to → start_at / end_at;
---     type_repeat → repeat_frequency; no discount in the old system: net = amount (the old columns are copied too);
+--     type_repeat → repeat_frequency; no discount in the old system: net = amount (the old copy columns status_id / subscription_id /
+--     created_by / date_from / date_to / type_repeat / is_cancelled were dropped from the new table by hand, 2026-10-19: not copied);
 --     the old is_continue is not imported (2026-10-15: no "continues", the column was dropped; the old end date is the end);
 --     a member deleted in the old system: kept as it is (no member, user decision); a package deleted in the old system: no package + Cancelled
 INSERT INTO reservations (id, account_id, member_id, space_id, unit_id, plan_id, package_id, subscription_type_id, reservation_status_id,
   start_at, end_at, subscription_day, all_day, repeat_id, is_repeat, repeat_frequency, repeat_interval, number_of_peoples,
   amount, discount_percentage, discount_value, net_amount, paid_amount, remaining, notes, creatable_type, creatable_id,
-  created_at, updated_at, deleted_at, status_id, subscription_id, created_by, date_from, date_to, type_repeat, is_cancelled)
+  created_at, updated_at, deleted_at)
 SELECT r.id, 1, r.member_id, r.space_id, r.unit_id, r.plan_id,
   -- a package deleted in the old system: no package, and the reservation is Cancelled (user decision 2026-10-11)
   IF(r.package_id > 0 AND r.package_id NOT IN (SELECT id FROM dwidar_pivot_api.packages), 0, COALESCE(r.package_id, 0)),
@@ -450,7 +479,7 @@ SELECT r.id, 1, r.member_id, r.space_id, r.unit_id, r.plan_id,
   ROUND(COALESCE(r.amount, 0), 2), 0, 0, ROUND(COALESCE(r.amount, 0), 2), 0, 0, r.notes,
   'Modules\\UserModule\\app\\Models\\User',
   CASE WHEN r.creatable_type LIKE '%UserModule%' AND r.creatable_id IN (SELECT id FROM dwidar_pivot_api.users) THEN r.creatable_id ELSE 1 END,
-  r.created_at, r.updated_at, r.deleted_at, COALESCE(r.status_id, 1), COALESCE(r.subscription_id, 0), COALESCE(r.created_by, 1), r.date_from, r.date_to, r.type_repeat, COALESCE(r.is_cancelled, 0)
+  r.created_at, r.updated_at, r.deleted_at
 FROM dwidar_pivot_api.reservations r;
 
 -- 3.9b no "continues" any more (user 2026-10-15; the app always saves an end date, a subscription is renewed by a new period;
@@ -563,8 +592,8 @@ SET @sql = CONCAT('ALTER TABLE payment_methods AUTO_INCREMENT = ', (SELECT GREAT
 --      Re-runnable: it only adds a shift for a login without one and links what is still open. The totals (count, collected,
 --      expenses, net per method) are set by STEP 5 `php artisan shifts:recalculate --imported` (the app's own code).
 INSERT INTO shift_closings (account_id, user_id, first_payment_at, last_payment_at, count, cash_total, withholding_total, expenses_total,
-  totals, notes, closed_by, closed_at, created_at, updated_at)
-SELECT 1, x.user_id, MIN(x.first_at), MAX(x.last_at), 0, 0, 0, 0, NULL, 'Imported from the old system', 1, MAX(x.last_at), NOW(), NOW()
+  totals, notes, is_imported, closed_by, closed_at, created_at, updated_at)
+SELECT 1, x.user_id, MIN(x.first_at), MAX(x.last_at), 0, 0, 0, 0, NULL, 'Imported from the old system', 1, 1, MAX(x.last_at), NOW(), NOW()
 FROM (
   SELECT p.creatable_id user_id, MIN(p.created_at) first_at, MAX(p.created_at) last_at FROM payments p
   WHERE p.account_id = 1 AND p.id < 100001 AND p.deleted_at IS NULL AND p.shift_closing_id = 0 GROUP BY p.creatable_id
@@ -574,6 +603,11 @@ FROM (
 ) x JOIN users u ON u.id = x.user_id
 WHERE x.user_id NOT IN (SELECT user_id FROM shift_closings WHERE notes = 'Imported from the old system')
 GROUP BY x.user_id;
+
+-- the flag (2026-10-19) on imported closings made before it existed (the 2026-10-19 trial DB: 15); a fresh run: 0 (created flagged above).
+-- Expected after 3.15 on the 2026-10-19 data: 15 imported closings (the account login 1 + 14 old users; old user 3 has no payment / expense)
+UPDATE shift_closings SET is_imported = 1 WHERE notes = 'Imported from the old system' AND is_imported = 0;
+SELECT COUNT(*) imported_closings_expected_15 FROM shift_closings WHERE is_imported = 1;
 
 UPDATE payments p
 JOIN shift_closings s ON s.account_id = p.account_id AND s.user_id = p.creatable_id AND s.notes = 'Imported from the old system'
@@ -601,88 +635,7 @@ WHERE s.notes = 'Imported from the old system' AND s.id NOT IN (SELECT shift_clo
 UPDATE shift_events e JOIN shift_closings s ON s.id = e.shift_closing_id
 SET e.created_at = s.closed_at
 WHERE s.notes = 'Imported from the old system' AND e.action = 'close';
-
------
-STEP 3.15b — ran 2026-10-13 (the account's imported payments → one closed shift; closed_at = last payment). Kept in git history.
-
------
-STEP 3.15c — ONE TIME on the already imported DB (2026-10-14: the old expenses; NOT for a fresh go-live run, 3.13b / 3.13c / 3.15 do it):
-first `php artisan migrate` (expense_categories, expenses) + the shift ALTERs of 3.1 (expenses_total, expense_id); then this SQL; then
-`php artisan shifts:recalculate --imported` (STEP 5) and the checks 6.11 + 6.13.
-The imported expenses join each login's existing "Imported" shift; its closed_at moves to the later of its last payment / expense
-(user 1: 04-10-2026 23:50 → 11-10-2026 14:01, user 6: +2 min, user 7: 18:15 → 19:20).
-
--- 3.13b expense categories = the old "types" (same ids); the English names that were Arabic translated
---       (user 2026-10-14: 16 "Building Expenses", 40 "Chamber of Commerce"; 3.0e lists any other)
-INSERT INTO expense_categories (id, account_id, name_ar, name_en, is_active, created_at, updated_at)
-SELECT t.id, 1, t.name_ar, CASE t.id WHEN 16 THEN 'Building Expenses' WHEN 40 THEN 'Chamber of Commerce' ELSE t.name_en END,
-  1, t.created_at, t.updated_at
-FROM dwidar_pivot_api.types t;
-
--- 3.13c expenses (id = expense_no = old id): type_id → category; old method 5 "إشعار خصم" → 1 Cash (user 2026-10-14: no "No method"
---       for expenses); the 2 negative rows (money returned) as they are; creator = creatable_type / creatable_id (old Admin /
---       empty / unknown user → the account login 1, old User X → login X); created_by ignored (user 2026-10-14)
-INSERT INTO expenses (id, account_id, expense_no, expense_category_id, item, amount, payment_method_id, spent_at, notes,
-  shift_closing_id, creatable_type, creatable_id, created_at, updated_at)
-SELECT e.id, 1, e.id, e.type_id, e.item, ROUND(e.amount, 2), IF(e.payment_method_id = 5, 1, e.payment_method_id), e.date,
-  NULLIF(TRIM(e.notes), ''), 0, 'Modules\\UserModule\\app\\Models\\User',
-  IF(e.creatable_type LIKE '%UserModule%' AND u.id IS NOT NULL, e.creatable_id, 1), e.created_at, e.updated_at
-FROM dwidar_pivot_api.expenses e LEFT JOIN users u ON u.id = e.creatable_id;
-
-SET @sql = 'ALTER TABLE expenses AUTO_INCREMENT = 100001'; PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
-SET @sql = CONCAT('ALTER TABLE expense_categories AUTO_INCREMENT = ', (SELECT COALESCE(MAX(id), 0) + 1 FROM expense_categories)); PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
-
--- 3.15 imported payments + expenses of each old login = ONE closed "Imported from the old system" shift per login (every old employee
---      AND the account login 1) — else years of open shift. Only imported rows (id < 100001): app rows stay in the open shift.
---      closed_at = the LATER of its last payment / last expense (created_at); its "close" event at the same time (user 2026-10-14).
---      Re-runnable: it only adds a shift for a login without one and links what is still open. The totals (count, collected,
---      expenses, net per method) are set by STEP 5 `php artisan shifts:recalculate --imported` (the app's own code).
-INSERT INTO shift_closings (account_id, user_id, first_payment_at, last_payment_at, count, cash_total, withholding_total, expenses_total,
-  totals, notes, closed_by, closed_at, created_at, updated_at)
-SELECT 1, x.user_id, MIN(x.first_at), MAX(x.last_at), 0, 0, 0, 0, NULL, 'Imported from the old system', 1, MAX(x.last_at), NOW(), NOW()
-FROM (
-  SELECT p.creatable_id user_id, MIN(p.created_at) first_at, MAX(p.created_at) last_at FROM payments p
-  WHERE p.account_id = 1 AND p.id < 100001 AND p.deleted_at IS NULL AND p.shift_closing_id = 0 GROUP BY p.creatable_id
-  UNION ALL
-  SELECT e.creatable_id, MIN(e.created_at), MAX(e.created_at) FROM expenses e
-  WHERE e.account_id = 1 AND e.id < 100001 AND e.deleted_at IS NULL AND e.shift_closing_id = 0 GROUP BY e.creatable_id
-) x JOIN users u ON u.id = x.user_id
-WHERE x.user_id NOT IN (SELECT user_id FROM shift_closings WHERE notes = 'Imported from the old system')
-GROUP BY x.user_id;
-
-UPDATE payments p
-JOIN shift_closings s ON s.account_id = p.account_id AND s.user_id = p.creatable_id AND s.notes = 'Imported from the old system'
-SET p.shift_closing_id = s.id
-WHERE p.account_id = 1 AND p.id < 100001 AND p.deleted_at IS NULL AND p.shift_closing_id = 0;
-
-UPDATE expenses e
-JOIN shift_closings s ON s.account_id = e.account_id AND s.user_id = e.creatable_id AND s.notes = 'Imported from the old system'
-SET e.shift_closing_id = s.id
-WHERE e.account_id = 1 AND e.id < 100001 AND e.deleted_at IS NULL AND e.shift_closing_id = 0;
-
--- every imported shift: its span + closed_at from its payments AND expenses (the later last one)
-UPDATE shift_closings s
-JOIN (SELECT r.shift_closing_id, MIN(r.created_at) first_at, MAX(r.created_at) last_at FROM (
-        SELECT shift_closing_id, created_at FROM payments WHERE deleted_at IS NULL AND shift_closing_id > 0
-        UNION ALL SELECT shift_closing_id, created_at FROM expenses WHERE deleted_at IS NULL AND shift_closing_id > 0) r
-      GROUP BY r.shift_closing_id) t ON t.shift_closing_id = s.id
-SET s.first_payment_at = t.first_at, s.last_payment_at = t.last_at, s.closed_at = t.last_at
-WHERE s.notes = 'Imported from the old system';
-
-INSERT INTO shift_events (account_id, user_id, shift_closing_id, by_user_id, action, reason, totals, created_at)
-SELECT s.account_id, s.user_id, s.id, 1, 'close', 'Imported from the old system', NULL, s.closed_at FROM shift_closings s
-WHERE s.notes = 'Imported from the old system' AND s.id NOT IN (SELECT shift_closing_id FROM shift_events WHERE action = 'close');
-
-UPDATE shift_events e JOIN shift_closings s ON s.id = e.shift_closing_id
-SET e.created_at = s.closed_at
-WHERE s.notes = 'Imported from the old system' AND e.action = 'close';
-
------
-STEP 3.15d — ONE TIME on the already imported DB (2026-10-14, user: no "No method" for expenses): the 25 imported expenses of old
-method 5 "إشعار خصم" (method 0, 23,135.00: 24 in the account's imported shift 33 = 23,045.00, 1 in user 8's shift 6 = 90.00) → 1 Cash.
-NOT for a fresh go-live run (3.13c maps 5 → 1). Then `php artisan shifts:recalculate --imported` (STEP 5) and the check 6.13.
-
-UPDATE expenses SET payment_method_id = 1 WHERE account_id = 1 AND payment_method_id = 0;
+-- ===== END OF STEP 3 (the SQL script ends here; 3.15b / c / d are in the ARCHIVE at the end: SKIP) =====
 
 -----
 STEP 4 — recalculate the packages (terminal): price / net from the reservations, then paid / remaining (net + extras − payments)
@@ -854,6 +807,8 @@ UNION ALL SELECT 'imported closings not closed at their last payment / expense (
           UNION ALL SELECT shift_closing_id, created_at FROM expenses WHERE deleted_at IS NULL AND shift_closing_id > 0) r
         GROUP BY r.shift_closing_id) t ON t.shift_closing_id = s.id
   WHERE s.notes = 'Imported from the old system' AND (s.closed_at <> t.last_at OR s.last_payment_at <> t.last_at)
+UNION ALL SELECT 'imported closings without the is_imported flag, or flagged without the note (0)', COUNT(*) FROM shift_closings
+  WHERE (COALESCE(notes, '') = 'Imported from the old system') <> (is_imported = 1)
 UNION ALL SELECT 'imported closings whose close event is not at closed_at (0)', COUNT(*) FROM shift_closings s
   LEFT JOIN shift_events e ON e.shift_closing_id = s.id AND e.action = 'close'
   WHERE s.notes = 'Imported from the old system' AND (e.id IS NULL OR e.created_at <> s.closed_at);
@@ -870,3 +825,91 @@ FROM (SELECT type_id, COUNT(*) n, ROUND(SUM(amount), 2) total FROM dwidar_pivot_
 LEFT JOIN (SELECT expense_category_id, COUNT(*) n, ROUND(SUM(amount), 2) total FROM expenses WHERE id < 100001 GROUP BY expense_category_id) n
   ON n.expense_category_id = o.type_id
 ORDER BY o.type_id;
+
+=====================================================================
+ ARCHIVE — ONE-TIME steps, ALREADY APPLIED to the old copy of dwidar_res_portal — SKIP them on a re-run / go-live
+ (a fresh run of STEP 3 already does all of this: 3.13b / 3.13c / 3.15 import the expenses, 3.13c maps old method 5 → Cash).
+ Kept only as a record. Re-run 2026-10-19 skipped them.
+=====================================================================
+-----
+STEP 3.15b — [ARCHIVED: ONE-TIME, already applied — SKIP on re-run] ran 2026-10-13 (the account's imported payments → one closed shift; closed_at = last payment). Kept in git history.
+
+-----
+STEP 3.15c — [ARCHIVED: ONE-TIME, already applied — SKIP on re-run] ONE TIME on the already imported DB (2026-10-14: the old expenses; NOT for a fresh go-live run, 3.13b / 3.13c / 3.15 do it):
+first `php artisan migrate` (expense_categories, expenses) + the shift ALTERs of 3.1 (expenses_total, expense_id); then this SQL; then
+`php artisan shifts:recalculate --imported` (STEP 5) and the checks 6.11 + 6.13.
+The imported expenses join each login's existing "Imported" shift; its closed_at moves to the later of its last payment / expense
+(user 1: 04-10-2026 23:50 → 11-10-2026 14:01, user 6: +2 min, user 7: 18:15 → 19:20).
+
+-- 3.13b expense categories = the old "types" (same ids); the English names that were Arabic translated
+--       (user 2026-10-14: 16 "Building Expenses", 40 "Chamber of Commerce"; 3.0e lists any other)
+INSERT INTO expense_categories (id, account_id, name_ar, name_en, is_active, created_at, updated_at)
+SELECT t.id, 1, t.name_ar, CASE t.id WHEN 16 THEN 'Building Expenses' WHEN 40 THEN 'Chamber of Commerce' ELSE t.name_en END,
+  1, t.created_at, t.updated_at
+FROM dwidar_pivot_api.types t;
+
+-- 3.13c expenses (id = expense_no = old id): type_id → category; old method 5 "إشعار خصم" → 1 Cash (user 2026-10-14: no "No method"
+--       for expenses); the 2 negative rows (money returned) as they are; creator = creatable_type / creatable_id (old Admin /
+--       empty / unknown user → the account login 1, old User X → login X); created_by ignored (user 2026-10-14)
+INSERT INTO expenses (id, account_id, expense_no, expense_category_id, item, amount, payment_method_id, spent_at, notes,
+  shift_closing_id, creatable_type, creatable_id, created_at, updated_at)
+SELECT e.id, 1, e.id, e.type_id, e.item, ROUND(e.amount, 2), IF(e.payment_method_id = 5, 1, e.payment_method_id), e.date,
+  NULLIF(TRIM(e.notes), ''), 0, 'Modules\\UserModule\\app\\Models\\User',
+  IF(e.creatable_type LIKE '%UserModule%' AND u.id IS NOT NULL, e.creatable_id, 1), e.created_at, e.updated_at
+FROM dwidar_pivot_api.expenses e LEFT JOIN users u ON u.id = e.creatable_id;
+
+SET @sql = 'ALTER TABLE expenses AUTO_INCREMENT = 100001'; PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+SET @sql = CONCAT('ALTER TABLE expense_categories AUTO_INCREMENT = ', (SELECT COALESCE(MAX(id), 0) + 1 FROM expense_categories)); PREPARE s FROM @sql; EXECUTE s; DEALLOCATE PREPARE s;
+
+-- 3.15 imported payments + expenses of each old login = ONE closed "Imported from the old system" shift per login (every old employee
+--      AND the account login 1) — else years of open shift. Only imported rows (id < 100001): app rows stay in the open shift.
+--      closed_at = the LATER of its last payment / last expense (created_at); its "close" event at the same time (user 2026-10-14).
+--      Re-runnable: it only adds a shift for a login without one and links what is still open. The totals (count, collected,
+--      expenses, net per method) are set by STEP 5 `php artisan shifts:recalculate --imported` (the app's own code).
+INSERT INTO shift_closings (account_id, user_id, first_payment_at, last_payment_at, count, cash_total, withholding_total, expenses_total,
+  totals, notes, closed_by, closed_at, created_at, updated_at)
+SELECT 1, x.user_id, MIN(x.first_at), MAX(x.last_at), 0, 0, 0, 0, NULL, 'Imported from the old system', 1, MAX(x.last_at), NOW(), NOW()
+FROM (
+  SELECT p.creatable_id user_id, MIN(p.created_at) first_at, MAX(p.created_at) last_at FROM payments p
+  WHERE p.account_id = 1 AND p.id < 100001 AND p.deleted_at IS NULL AND p.shift_closing_id = 0 GROUP BY p.creatable_id
+  UNION ALL
+  SELECT e.creatable_id, MIN(e.created_at), MAX(e.created_at) FROM expenses e
+  WHERE e.account_id = 1 AND e.id < 100001 AND e.deleted_at IS NULL AND e.shift_closing_id = 0 GROUP BY e.creatable_id
+) x JOIN users u ON u.id = x.user_id
+WHERE x.user_id NOT IN (SELECT user_id FROM shift_closings WHERE notes = 'Imported from the old system')
+GROUP BY x.user_id;
+
+UPDATE payments p
+JOIN shift_closings s ON s.account_id = p.account_id AND s.user_id = p.creatable_id AND s.notes = 'Imported from the old system'
+SET p.shift_closing_id = s.id
+WHERE p.account_id = 1 AND p.id < 100001 AND p.deleted_at IS NULL AND p.shift_closing_id = 0;
+
+UPDATE expenses e
+JOIN shift_closings s ON s.account_id = e.account_id AND s.user_id = e.creatable_id AND s.notes = 'Imported from the old system'
+SET e.shift_closing_id = s.id
+WHERE e.account_id = 1 AND e.id < 100001 AND e.deleted_at IS NULL AND e.shift_closing_id = 0;
+
+-- every imported shift: its span + closed_at from its payments AND expenses (the later last one)
+UPDATE shift_closings s
+JOIN (SELECT r.shift_closing_id, MIN(r.created_at) first_at, MAX(r.created_at) last_at FROM (
+        SELECT shift_closing_id, created_at FROM payments WHERE deleted_at IS NULL AND shift_closing_id > 0
+        UNION ALL SELECT shift_closing_id, created_at FROM expenses WHERE deleted_at IS NULL AND shift_closing_id > 0) r
+      GROUP BY r.shift_closing_id) t ON t.shift_closing_id = s.id
+SET s.first_payment_at = t.first_at, s.last_payment_at = t.last_at, s.closed_at = t.last_at
+WHERE s.notes = 'Imported from the old system';
+
+INSERT INTO shift_events (account_id, user_id, shift_closing_id, by_user_id, action, reason, totals, created_at)
+SELECT s.account_id, s.user_id, s.id, 1, 'close', 'Imported from the old system', NULL, s.closed_at FROM shift_closings s
+WHERE s.notes = 'Imported from the old system' AND s.id NOT IN (SELECT shift_closing_id FROM shift_events WHERE action = 'close');
+
+UPDATE shift_events e JOIN shift_closings s ON s.id = e.shift_closing_id
+SET e.created_at = s.closed_at
+WHERE s.notes = 'Imported from the old system' AND e.action = 'close';
+
+-----
+STEP 3.15d — [ARCHIVED: ONE-TIME, already applied — SKIP on re-run] ONE TIME on the already imported DB (2026-10-14, user: no "No method" for expenses): the 25 imported expenses of old
+method 5 "إشعار خصم" (method 0, 23,135.00: 24 in the account's imported shift 33 = 23,045.00, 1 in user 8's shift 6 = 90.00) → 1 Cash.
+NOT for a fresh go-live run (3.13c maps 5 → 1). Then `php artisan shifts:recalculate --imported` (STEP 5) and the check 6.13.
+
+UPDATE expenses SET payment_method_id = 1 WHERE account_id = 1 AND payment_method_id = 0;
+

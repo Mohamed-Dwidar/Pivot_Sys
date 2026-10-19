@@ -44,10 +44,11 @@ class ShiftClosingEmployeeModuleController extends Controller
             : ['message' => 'Noted. Remember to close your shift when you finish.']);
     }
 
-    // one of the employee's closings (as it was saved), with its payments
+    // one of the employee's closings (as it was saved), with its payments; the imported one is not theirs to see (404)
     public function show($id)
     {
         $closing = $this->shiftService->findOne($this->accountId(), $id, Auth::id());
+        abort_if($closing->is_imported, 404);
         $closing->setRelation('payments', $this->shiftService->popupPayments($closing));
         $closing->setRelation('expenses', $this->shiftService->popupExpenses($closing));
 

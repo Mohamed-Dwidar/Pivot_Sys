@@ -18,7 +18,7 @@ class ShiftClosing extends Model
 {
     protected $fillable = [
         'account_id', 'user_id', 'first_payment_at', 'last_payment_at', 'count', 'cash_total', 'withholding_total', 'expenses_total', 'totals', 'notes',
-        'closed_by', 'closed_at', 'edited_at', 'edit_count',
+        'is_imported', 'closed_by', 'closed_at', 'edited_at', 'edit_count',
     ];
 
     protected $casts = [
@@ -29,6 +29,7 @@ class ShiftClosing extends Model
         'withholding_total' => 'float',
         'expenses_total' => 'float',
         'totals' => 'array',
+        'is_imported' => 'boolean',
         'closed_at' => 'datetime',
         'edited_at' => 'datetime',
         'edit_count' => 'integer',
@@ -71,6 +72,12 @@ class ShiftClosing extends Model
     public function events(): HasMany
     {
         return $this->hasMany(ShiftEvent::class)->latest('id');
+    }
+
+    // the real closings only: not the "Imported from the old system" one of a login (to_run 3.15; the employee's My Closings)
+    public function scopeNotImported($query)
+    {
+        return $query->where('is_imported', 0);
     }
 
     // a payment of it was edited / deleted / refunded after closing (the "Edited after closing" badge)

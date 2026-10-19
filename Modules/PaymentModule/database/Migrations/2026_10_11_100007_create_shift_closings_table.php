@@ -27,6 +27,8 @@ return new class extends Migration {
             // ShiftClosingService::summary(): {methods: {method_id: {name, payments, refunds, net}}, withholding: {count, total}, cash_total, count}
             $table->json('totals')->nullable();
             $table->string('notes')->nullable();
+            // 1 = the "Imported from the old system" closing of a login (to_run 3.15): hidden from the employee's My Closings
+            $table->boolean('is_imported')->default(0);
 
             // the collector, or the account (closed on their behalf)
             $table->bigInteger('closed_by');

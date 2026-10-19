@@ -17,13 +17,13 @@ class RecalculateShiftsCommand extends Command
     public function handle(ShiftClosingService $shiftService): int
     {
         $query = ShiftClosing::query()
-            ->when($this->option('imported'), fn ($query) => $query->where('notes', ShiftClosingService::IMPORTED_NOTE))
+            ->when($this->option('imported'), fn ($query) => $query->where('is_imported', 1))
             ->when($this->option('account'), fn ($query, $accountId) => $query->where('account_id', (int) $accountId));
         $count = 0;
         foreach ($query->cursor() as $closing) {
             $shiftService->recalculate($closing);
             // an imported shift: its "close" event shows the same totals (to_run 3.15 creates it without)
-            if ($closing->notes === ShiftClosingService::IMPORTED_NOTE) {
+            if ($closing->is_imported) {
                 ShiftEvent::where('shift_closing_id', $closing->id)->where('action', 'close')->update(['totals' => json_encode($closing->totals)]);
             }
             $count++;

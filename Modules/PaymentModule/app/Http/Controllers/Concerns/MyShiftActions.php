@@ -42,11 +42,12 @@ trait MyShiftActions
         return view('paymentmodule::Shift.index', ['period' => $this->shiftService->openPeriod($this->accountId(), Auth::id())]);
     }
 
-    // DataTables server side: the login's own closings
+    // DataTables server side: the login's own closings (an employee: without the imported one — the account sees it, badged)
     public function data(Request $request)
     {
         // + the dates of its payments (paid_at first / last) for the Payments column
         $query = $this->shiftService->listQuery($this->accountId(), Auth::id())
+            ->when($this->area() === 'employee', fn ($query) => $query->notImported())
             ->withMin('payments', 'paid_at')->withMax('payments', 'paid_at');
 
         return DataTables::eloquent($query)
