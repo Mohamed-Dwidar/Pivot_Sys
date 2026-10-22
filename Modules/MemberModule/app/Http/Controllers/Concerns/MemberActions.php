@@ -62,7 +62,8 @@ trait MemberActions
     // the list columns, for data() and for one row after a change (row())
     private function table(array $filters, $id = null)
     {
-        $query = $this->memberService->listQuery($this->accountId());
+        // + how many reservations (not deleted; cancelled included), one subquery
+        $query = $this->memberService->listQuery($this->accountId())->withCount('reservations');
         if ($id) {
             $query->whereKey($id);
         }
@@ -74,11 +75,15 @@ trait MemberActions
             ->addColumn('name_html', fn ($member) => view('membermodule::Account.partials.row-name', compact('member'))->render())
             ->addColumn('company', fn ($member) => $member->company?->name ?? '-')
             ->addColumn('job', fn ($member) => $member->job?->name ?? '-')
+            // the count → the reservations list of this member (All tab)
+            ->addColumn('reservations_html', fn ($member) => $member->reservations_count
+                ? '<a href="' . route($this->area() . '.reservations.index', ['member_id' => $member->id]) . '" class="font-medium">' . $member->reservations_count . '</a>'
+                : '<span class="text-slate-400">0</span>')
             ->editColumn('created_at', fn ($member) => $member->created_at->format('Y-m-d'))
             ->addColumn('actions', fn ($member) => view('membermodule::Account.partials.row-actions', compact('member'))->render())
-            ->rawColumns(['name_html', 'actions'])
+            ->rawColumns(['name_html', 'reservations_html', 'actions'])
             // send only the table columns (not all the member fields)
-            ->only(['DT_RowId', 'name_html', 'phone', 'company', 'job', 'created_at', 'actions']);
+            ->only(['DT_RowId', 'name_html', 'phone', 'company', 'job', 'reservations_html', 'created_at', 'actions']);
     }
 
     // the updated row with the list filters (list[...]), null when it does not match them any more

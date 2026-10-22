@@ -282,6 +282,20 @@
     border-top: 1px dashed rgb(203 213 225 / 0.8);
 }
 
+/* the reservations list "Renewal" filter: the line under the filters, the Renewal cell (status + actions on one wrapping line) */
+.renewal-summary {
+    margin-top: 1rem;
+    font-size: 0.875rem;
+}
+
+.renewal-cell {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
+
 .filter-bar {
     display: flex;
     flex-wrap: wrap;
@@ -1324,6 +1338,12 @@ tr.row-removing {
     margin-top: -0.5rem;
 }
 
+/* the reservation form, Book For = Package: the package's member under the list */
+.package-member {
+    margin-top: -0.5rem;
+    font-size: 0.875rem;
+}
+
 .member-quick-link {
     display: inline-flex;
     align-items: center;
@@ -1558,11 +1578,41 @@ input:disabled:not([type="checkbox"]):not([type="radio"]) {
 }
 
 /* package view: the package net (green badge on the right of the member name), bigger than a normal badge */
-.badge.package-total {
-    padding: 0.35rem 1rem;
-    font-size: 1.25rem;
+/* the package view's top block (2026-10-21): Due | Paid | Remaining, each in its color */
+.money-box {
+    display: flex;
+    flex-wrap: wrap;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+
+.money-box__item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    padding: 0.4rem 1rem;
+    line-height: 1.2;
+}
+
+.money-box__item + .money-box__item {
+    border-left: 1px solid rgb(226 232 240);
+}
+
+.money-box__item span {
+    font-size: 0.75rem;
+    color: rgb(100 116 139);
+}
+
+.money-box__item b {
+    font-size: 1.15rem;
     font-weight: 600;
 }
+
+.money-box__item--due b { color: rgb(var(--color-primary)); }
+.money-box__item--paid b { color: rgb(var(--color-success)); }
+.money-box__item--owed b { color: rgb(var(--color-danger)); }
+.money-box__item--credit b { color: rgb(var(--color-info)); }
 
 /* a table that scrolls inside a fixed height (e.g. the reservations of a package), the header row stays visible */
 .table-wrap--scroll {
@@ -1631,6 +1681,31 @@ input:disabled:not([type="checkbox"]):not([type="radio"]) {
     align-items: center;
     justify-content: space-between;
     gap: 0.75rem;
+}
+
+/* the icons of a row in the Cash In / Extras blocks (print / edit / delete), on one line */
+.payments-block__icons {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.payments-block__icons .inline-form,
+.payments-block__icons button {
+    display: inline-flex;
+}
+
+/* the Add Cash In fields inside the reservation view (paymentmodule::Payment.partials.inline-form), under the Cash In title */
+.cash-in-inline {
+    margin-bottom: 1.25rem;
+    padding: 1rem;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 0.5rem;
+    background: rgb(248 250 252);
+}
+
+.cash-in-inline[hidden] {
+    display: none;
 }
 
 /* an inactive item in a list filter drop menu (partials/filter-options; the text also says "(Inactive)": macOS menus ignore colors) */

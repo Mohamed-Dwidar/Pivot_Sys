@@ -3,8 +3,6 @@
 
 @section('title')
     <div class="text-lg font-medium">{{ $package->name }}</div>
-    {{-- <span
-            class="badge {{ $package->is_active ? 'badge-active' : 'badge-inactive' }}">{{ $package->is_active ? 'Active' : 'Inactive' }}</span> --}}
 @endsection
 
 @section('modal-size', 'lg')
@@ -18,7 +16,10 @@
 @endsection
 
 @section('content')
-    {{-- left: the member name + phone (smaller); right: the package net (green badge) --}}
+    {{-- left: the member name + phone (smaller); right: Due | Paid | Remaining in one block, each in its color (2026-10-21) --}}
+    @php($due = $package->payableAmount())
+    @php($extras = $package->extrasTotal())
+    @php($remaining = (float) $package->remaining)
     <div class="flex flex-wrap items-center gap-4">
         <div>
             <div class="text-lg font-medium">
@@ -28,8 +29,17 @@
                 {{ $package->member ? $package->member->phone : '-' }}
             </div>
         </div>
-        <span class="badge badge-active package-total ml-auto"
-            title="Package net (the price - the discount)">{{ number_format($package->after_discount, 2) }}</span>
+        <div class="money-box ml-auto">
+            <div class="money-box__item money-box__item--due" title="Net + extras">
+                <span>Due</span><b>{{ number_format($due, 2) }}</b>
+            </div>
+            <div class="money-box__item money-box__item--paid">
+                <span>Paid</span><b>{{ number_format($package->paid_amount, 2) }}</b>
+            </div>
+            <div class="money-box__item {{ $remaining > 0 ? 'money-box__item--owed' : ($remaining < 0 ? 'money-box__item--credit' : 'money-box__item--paid') }}">
+                <span>{{ $remaining < 0 ? 'Credit' : 'Remaining' }}</span><b>{{ number_format(abs($remaining), 2) }}</b>
+            </div>
+        </div>
     </div>
 
     <div class="form-section mt-6">Package Data</div>
@@ -40,7 +50,7 @@
         </div>
         <div>
             <dt>Price <span class="text-slate-400">(reservations net)</span></dt>
-            <dd class="font-medium text-success">{{ number_format($package->amount, 2) }}</dd>
+            <dd class="font-medium">{{ number_format($package->amount, 2) }}</dd>
         </div>
         <div>
             <dt>Discount</dt>
@@ -48,7 +58,27 @@
         </div>
         <div>
             <dt>Net</dt>
-            <dd class="font-medium text-success">{{ number_format($package->after_discount, 2) }}</dd>
+            <dd class="font-medium">{{ number_format($package->after_discount, 2) }}</dd>
+        </div>
+        {{-- every amount (2026-10-21): + extras = due, paid, remaining (or credit) + the payment status --}}
+        <div>
+            <dt>Extras</dt>
+            <dd>{{ number_format($extras, 2) }}</dd>
+        </div>
+        <div>
+            <dt>Due <span class="text-slate-400">(net + extras)</span></dt>
+            <dd class="font-bold text-primary">{{ number_format($due, 2) }}</dd>
+        </div>
+        <div>
+            <dt>Paid</dt>
+            <dd class="font-bold text-success">{{ number_format($package->paid_amount, 2) }}</dd>
+        </div>
+        <div>
+            <dt>{{ $remaining < 0 ? 'Credit' : 'Remaining' }}</dt>
+            <dd class="font-bold {{ $remaining > 0 ? 'text-danger' : ($remaining < 0 ? 'text-info' : '') }}">
+                {{ number_format(abs($remaining), 2) }}
+                <span class="badge {{ $package->payment_status_badge_class }} ml-1">{{ $package->payment_status_label }}</span>
+            </dd>
         </div>
         @php($hours = $package->reservationsHours())
         <div>
@@ -74,7 +104,8 @@
 
     {{-- sales / adjustments added to what it owes, then its payments --}}
     @include('paymentmodule::Extra.partials.package-extras', ['package' => $package])
-    @include('paymentmodule::Payment.partials.payable-payments', ['payable' => $package, 'kind' => 'package'])
+    {{-- its Due / Paid / Remaining are in Package Data above --}}
+    @include('paymentmodule::Payment.partials.payable-payments', ['payable' => $package, 'kind' => 'package', 'summary' => false])
 
     <div class="form-section mt-8">Reservations ({{ $package->reservations->count() }})</div>
     @if ($package->reservations->isNotEmpty())

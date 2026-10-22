@@ -75,7 +75,7 @@ trait PackageActions
 
         return DataTables::eloquent($query)
             // inside filter() so "of N total" counts all the packages
-            ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['is_active', 'payment_status', 'date_from', 'date_to']))->tab($tab))
+            ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))] + Arr::only($filters, ['payment_status', 'date_from', 'date_to']))->tab($tab))
             ->setRowId(fn ($package) => 'row-' . $package->id)
             ->addColumn('name_html', fn ($package) => view('packagemodule::Package.partials.row-package', compact('package'))->render())
             ->addColumn('period', fn ($package) => view('packagemodule::Package.partials.row-period', compact('package'))->render())
@@ -96,6 +96,12 @@ trait PackageActions
     private function row(Request $request, $id)
     {
         return $this->table((array) $request->input('list', []), $id)->toArray()['data'][0] ?? null;
+    }
+
+    // Add Package: the suggested name for the chosen member (custom.js packageNameSuggest(), ?member_id=)
+    public function suggestName(Request $request)
+    {
+        return response()->json(['name' => $this->packageService->suggestName($this->accountId(), $request->input('member_id'))]);
     }
 
     public function create()
@@ -163,19 +169,6 @@ trait PackageActions
 
         return response()->json([
             'message' => 'The package has been updated successfully.',
-            'row' => $this->row($request, $id),
-            'redirect' => $this->route('show', $id),
-        ]);
-    }
-
-    // Activate / Deactivate (the row menu, with a confirmation; ajax)
-    public function toggleActive(Request $request, $id)
-    {
-        $request->validate(['is_active' => 'required|boolean']);
-        $package = $this->packageService->setActive($this->accountId(), $id, $request->boolean('is_active'));
-
-        return response()->json([
-            'message' => $package->is_active ? 'The package has been activated.' : 'The package has been deactivated.',
             'row' => $this->row($request, $id),
             'redirect' => $this->route('show', $id),
         ]);

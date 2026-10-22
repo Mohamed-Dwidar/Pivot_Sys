@@ -30,7 +30,7 @@ class PaymentAccountModuleController extends Controller
         $payment = $this->paymentService->findOne($this->accountId(), $id);
         return view('paymentmodule::Payment.edit', [
             'payment' => $payment,
-            'payableName' => $this->paymentService->payableName($payment->payable),
+            'payableName' => $this->paymentService->payableName($payment->payable, false),
             'closedShift' => $this->paymentService->closedShiftOf($payment),
             'methods' => $this->methodService->options($this->accountId(), $payment->payment_method_id),
             'categories' => $this->categoryService->options($this->accountId(), $payment->income_category_id),
@@ -55,7 +55,8 @@ class PaymentAccountModuleController extends Controller
     public function deleteForm($id)
     {
         $payment = $this->paymentService->findOne($this->accountId(), $id);
-        return view('paymentmodule::Payment.delete', ['payment' => $payment, 'closedShift' => $this->paymentService->closedShiftOf($payment)]);
+        return view('paymentmodule::Payment.delete', ['payment' => $payment, 'closedShift' => $this->paymentService->closedShiftOf($payment),
+            'payableName' => $this->paymentService->payableName($payment->payable, false)]);
     }
 
     public function destroy(PaymentDeleteRequest $request, $id)

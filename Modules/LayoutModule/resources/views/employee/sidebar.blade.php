@@ -19,12 +19,7 @@
             'url' => route('employee.reservations.index'),
             'active' => request()->routeIs('employee.reservations.*'),
         ],
-        [
-            'title' => 'Packages',
-            'icon' => 'package',
-            'url' => route('employee.packages.index'),
-            'active' => request()->routeIs('employee.packages.*'),
-        ],
+        // Payments before Packages (user 2026-10-22)
         [
             'title' => 'Payments',
             'icon' => 'wallet',
@@ -33,16 +28,23 @@
             'active' => request()->routeIs('employee.payments.*', 'employee.expenses.*'),
         ],
         [
-            'title' => 'My Shift',
-            'icon' => 'lock',
-            'url' => route('employee.shift.index'),
-            'active' => request()->routeIs('employee.shift.*'),
+            'title' => 'Packages',
+            'icon' => 'package',
+            'url' => route('employee.packages.index'),
+            'active' => request()->routeIs('employee.packages.*'),
         ],
         [
             'title' => 'Members',
             'icon' => 'users',
             'url' => route('employee.members.index'),
             'active' => request()->routeIs('employee.members.*'),
+        ],
+        // My Shift after Members (user 2026-10-22)
+        [
+            'title' => 'My Shift',
+            'icon' => 'lock',
+            'url' => route('employee.shift.index'),
+            'active' => request()->routeIs('employee.shift.*'),
         ],
     ];
 @endphp

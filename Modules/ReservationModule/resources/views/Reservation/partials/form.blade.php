@@ -47,6 +47,8 @@
     // flag for custom.js reservationTypeOptions()), the popup title names it (create.blade.php)
     $fixedType = $reservation && !$reservation->exists && !$renewing && $reservation->subscription_type_id
         && isset($subscriptionTypes[$reservation->subscription_type_id]) ? $subscriptionTypes[$reservation->subscription_type_id] : null;
+    // "Book For": a saved reservation in a package opens on Package
+    $bookFor = old('book_for', $reservation?->package_id ? 'package' : 'member');
 @endphp
 
 @if ($renewing)
@@ -66,13 +68,21 @@
         @endif
     </dl>
 @else
+{{-- "Book for" decides the next field (user 2026-10-22): Member → the Member field + "New member" | Package → the package
+     list, its member shown as text under it (custom.js reservationLockMember(); the server takes the package's member) --}}
 <div class="form-section">Member</div>
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
-    @include('layoutmodule::partials.field', ['name' => 'package_id', 'label' => 'Package', 'type' => 'select', 'searchable' => true,
-        'options' => ['' => '- No package -'] + $packageOptions, 'value' => $reservation?->package_id ?: null,
-        'hint' => 'With a package, the member is the package member.'])
+    @include('layoutmodule::partials.field', ['name' => 'book_for', 'label' => 'Book For', 'type' => 'select', 'required' => true,
+        'options' => ['member' => 'Member', 'package' => 'Package'], 'value' => $bookFor])
 </div>
-<div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-1">
+<div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-1" data-show-if="book_for=package">
+    {{-- as wide as the Member field (user 2026-10-22) --}}
+    @include('layoutmodule::partials.field', ['name' => 'package_id', 'label' => 'Package', 'type' => 'select', 'required' => true, 'searchable' => true,
+        'width' => 'long', 'options' => ['' => '- Select -'] + $packageOptions, 'value' => $reservation?->package_id ?: null,
+        'hint' => 'Search by package or member name.'])
+    <div class="package-member" data-package-member hidden>Member: <b data-package-member-name></b></div>
+</div>
+<div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-1" data-show-if="book_for=member">
     {{-- server search + quick add (membermodule::partials.member-select) --}}
     @include('membermodule::partials.member-select', ['member' => $reservation?->member, 'required' => true, 'companies' => $companies])
 </div>

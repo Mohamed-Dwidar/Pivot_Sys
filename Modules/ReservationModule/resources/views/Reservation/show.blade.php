@@ -32,9 +32,9 @@
     @if ($reservation->isPeriod() && $reservation->isCounted() && !$reservation->renewedBy)
         <a href="{{ route($area . '.reservations.create', ['renew' => $reservation->id]) }}" data-modal class="btn btn-secondary"><i data-lucide="refresh-cw"></i> Renew</a>
     @endif
-    {{-- Pay: Add Cash In for this reservation (still owed, paid on its own: not inside a package / not counted) --}}
+    {{-- Pay: opens the Add Cash In fields of this view (Cash In block; still owed, paid on its own: not inside a package / not counted) --}}
     @if ($reservation->canTakePayments() && $reservation->remaining > 0)
-        <a href="{{ route($area . '.payments.create', ['payable' => 'reservation', 'payable_id' => $reservation->id]) }}" data-modal class="btn btn-primary"><i data-lucide="wallet"></i> Pay</a>
+        <button type="button" data-reveal="#cash-in-form" class="btn btn-primary"><i data-lucide="wallet"></i> Pay</button>
     @endif
     <a href="{{ route($area . '.reservations.edit', $reservation->id) }}" data-modal class="btn btn-secondary"><i data-lucide="pencil"></i> Edit</a>
     @include('reservationmodule::Reservation.partials.delete-form')
@@ -90,8 +90,8 @@
         </dl>
     @endif
 
-    {{-- the Cash In block without its Due / Paid / Remaining (shown above) --}}
-    @include('paymentmodule::Payment.partials.payable-payments', ['payable' => $reservation, 'kind' => 'reservation', 'summary' => false])
+    {{-- the Cash In block without its Due / Paid / Remaining (shown above), + the Add Cash In fields (Pay / "+ Cash In") --}}
+    @include('paymentmodule::Payment.partials.payable-payments', ['payable' => $reservation, 'kind' => 'reservation', 'summary' => false, 'methods' => $methods])
 
     <div class="form-section">&nbsp;</div>
 

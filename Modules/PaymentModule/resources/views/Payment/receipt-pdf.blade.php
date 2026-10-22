@@ -37,6 +37,10 @@
 
     <table class="receipt-table">
         <tr><th>Received from</th><td>{{ $payment->member?->name ?? '-' }} @if ($payment->member?->phone)<span class="receipt-muted">· {{ $payment->member->phone }}</span>@endif</td></tr>
+        {{-- the reservation / package number: its own row, "For" without it (like the Cash In view, 2026-10-21) --}}
+        @if ($payment->payable)
+            <tr><th>{{ ucfirst($payment->payable_kind) }} No.</th><td>#{{ $payment->payable_id }}</td></tr>
+        @endif
         <tr><th>For</th><td>{{ $payment->payable ? $payableName : ($payment->incomeCategory?->name ?? 'Other income') }}</td></tr>
         <tr><th>Payment method</th><td>{{ $payment->paymentMethod?->name ?? ($payment->type === 'withholding' ? 'Withholding' : '-') }}</td></tr>
         @if ($payment->reference)

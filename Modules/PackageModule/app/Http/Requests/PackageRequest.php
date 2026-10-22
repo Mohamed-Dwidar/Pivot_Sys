@@ -17,7 +17,6 @@ class PackageRequest extends FormRequest
             'discount_percentage' => 'nullable|numeric|min:0|max:100',
             // the package net (more than the price is lowered to the price)
             'after_discount' => 'nullable|numeric|min:0|max:99999999',
-            'is_active' => 'boolean',
             'notes' => 'nullable|string|max:255',
         ];
     }

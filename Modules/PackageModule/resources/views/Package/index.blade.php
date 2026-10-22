@@ -14,17 +14,12 @@
         Packages list (docs/reservations-list-plan.md, packages list 2026-10-13), the reservations list style:
         tabs Current (default, value '': its period includes today or later) | Past | All; one row of filters, all visible:
         search (package, member name or phone) | date (one field: All synced, Current = "From <today>", Past = "Until <yesterday>";
-        picked days = the period overlaps them, the All tab) | status | payment | Clear.
+        picked days = the period overlaps them, the All tab) | payment | Clear (no active / inactive since 2026-10-21).
     --}}
     <form id="packages-filters" class="filter-bar">
         @include('layoutmodule::partials.filter-tabs', ['tabs' => \Modules\PackageModule\app\Models\Package::TABS, 'default' => 'current', 'dates' => \Modules\PackageModule\app\Models\Package::tabDates()])
         <input type="search" name="search" class="{{ config('layoutmodule.form.input') }}" placeholder="Package, member name or phone" autocomplete="off">
         @include('layoutmodule::partials.date-range-filter')
-        <select name="is_active" class="{{ config('layoutmodule.form.select') }}" aria-label="Status">
-            <option value="">All Statuses</option>
-            <option value="1">Active</option>
-            <option value="0">Inactive</option>
-        </select>
         {{-- a package is always paid on its own: no "In package" --}}
         @include('paymentmodule::Payment.partials.status-filter', ['statuses' => \Illuminate\Support\Arr::except(\Modules\PackageModule\app\Models\Package::PAYMENT_STATUSES, 'elsewhere')])
         @include('layoutmodule::partials.datatable-clear')
@@ -42,7 +37,7 @@
                     <th data-data="paid_amount" data-name="paid_amount" data-class="whitespace-nowrap">Paid</th>
                     <th data-data="remaining_html" data-name="remaining" data-class="whitespace-nowrap">Remaining</th>
                     <th data-data="by">Created By</th>
-                    <th data-data="status" data-name="is_active">Status</th>
+                    <th data-data="status">Status</th>
                     <th data-data="actions"></th>
                 </tr>
             </thead>

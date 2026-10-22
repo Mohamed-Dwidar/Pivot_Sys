@@ -111,14 +111,28 @@ class PaymentService
         ])->all();
     }
 
-    // "#12 Space › Unit · 21-10-2026" / "#5 Package name · 01-10-2026 → 31-12-2026"
-    public function payableName(?Model $payable): string
+    // For = Package of the Add Cash In form (no member chosen first): the account's packages, owed first then newest;
+    // "#5 Package · period · Member — Remaining x" (the member is searchable too)
+    public function packageOptions($accountId): array
     {
+        return Package::where('account_id', $accountId)->with('member')
+            ->orderByRaw('remaining > 0 DESC')->orderByDesc('id')->get()
+            ->map(fn ($package) => [
+                'id' => $package->id,
+                'name' => $this->payableName($package) . ' · ' . ($package->member?->name ?? '-') . ' — Remaining ' . number_format($package->remaining, 2),
+            ])->all();
+    }
+
+    // "#12 Space › Unit · 21-10-2026" / "#5 Package name · 01-10-2026 → 31-12-2026"; $withNumber false: without "#12 "
+    // (the Cash In view / edit / refund / delete popups show the number as its own field, 2026-10-21)
+    public function payableName(?Model $payable, bool $withNumber = true): string
+    {
+        $number = $withNumber && $payable ? '#' . $payable->getKey() . ' ' : '';
         if ($payable instanceof Reservation) {
-            return '#' . $payable->id . ' ' . ($payable->space?->name ?? '-') . ' › ' . ($payable->unit?->name ?? '-') . ' · ' . $payable->period;
+            return $number . ($payable->space?->name ?? '-') . ' › ' . ($payable->unit?->name ?? '-') . ' · ' . $payable->period;
         }
         if ($payable instanceof Package) {
-            return '#' . $payable->id . ' ' . $payable->name . ' · ' . $payable->period;
+            return $number . $payable->name . ' · ' . $payable->period;
         }
 
         return '-';
@@ -171,6 +185,11 @@ class PaymentService
         $paidAt = Carbon::parse($data['paid_at'] ?? today())->startOfDay();
 
         return DB::transaction(function () use ($accountId, $data, $creator, $type, $payable, $amount, $paidAt) {
+            // a reservation: never more than what it still owes (cash in or withholding); a package may be paid
+            // beyond its due (the rest = the member's credit, user 2026-10-21)
+            if ($payable instanceof Reservation) {
+                $this->assertNotMoreThanOwed($payable, $amount);
+            }
             $payment = new Payment([
                 'account_id' => $accountId,
                 'payment_no' => $this->nextNumber($accountId),
@@ -405,6 +424,24 @@ class PaymentService
         if (!$this->isOwner($user)) {
             abort(403, 'Only the account owner can change, delete or refund payments.');
         }
+    }
+
+    /**
+     * A NEW cash in / withholding of a reservation (2026-10-21; packages not checked: paid beyond the due = credit): not more than it still owes (due - paid, fresh from
+     * its payments, the row locked so two cash ins at once can't both pass). Only create(): saved payments (edits) and the
+     * imported data (to_run inserts directly) are not checked. Inside DB::transaction().
+     */
+    private function assertNotMoreThanOwed(Payable $payable, float $amount): void
+    {
+        $payable->newQuery()->whereKey($payable->getKey())->lockForUpdate()->first();
+        $owed = round($payable->payableAmount() - Payment::paidTotal($payable->payments()), 2);
+        if ($amount <= $owed) {
+            return;
+        }
+        $what = $payable instanceof Package ? 'package' : 'reservation';
+        throw ValidationException::withMessages(['amount' => $owed > 0
+            ? 'The amount can\'t be more than what this ' . $what . ' still owes: ' . number_format($owed, 2) . '.'
+            : 'Nothing is owed on this ' . $what . ' (fully paid).']);
     }
 
     // the amount (> 0, 2 decimals)

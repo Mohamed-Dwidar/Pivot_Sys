@@ -1,4 +1,5 @@
-{{-- The summary row: the day's count of each hourly / full day section, renewals needing action, the day's remaining (Due),
+{{-- The summary row: the day's count of each hourly / full day section, renewals needing action, the new subscriptions starting
+     on the day (New, only when > 0: scrolls to Starts today), the day's remaining (Due),
      the day's cancelled reservations (popup list) --}}
 @php($firstPeriod = $sections->firstWhere('mode', 'period'))
 @if ($sections->isNotEmpty())
@@ -8,6 +9,9 @@
         @endforeach
         @if ($firstPeriod)
             <a href="#{{ $firstPeriod['anchor'] }}" class="today-summary__item"><span>Renewals</span> <b class="{{ $renewals ? 'text-danger' : '' }}">{{ $renewals }}</b></a>
+        @endif
+        @if ($starts > 0)
+            <a href="#{{ $startsAnchor }}" class="today-summary__item"><span>New</span> <b>{{ $starts }}</b></a>
         @endif
         <span class="today-summary__item"><span>Due</span> <b class="{{ $due > 0 ? 'text-danger' : '' }}">{{ number_format($due, 2) }}</b></span>
         {{-- the day's cancelled reservations (ScheduleService::cancelledQuery()): opens their list --}}

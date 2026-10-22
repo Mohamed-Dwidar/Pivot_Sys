@@ -1,6 +1,7 @@
 {{--
     A period section ($section, ScheduleService::periodSection()): "+ <type>"; under the title the Renews today and Not renewed
-    periods counted per space (the top summary's style, user 2026-10-18); then the renewals by the renewal date (the day after the last day): Renews today | Not renewed | Next N days
+    periods counted per space (the top summary's style, user 2026-10-18); then Starts today (the new subscriptions starting on the
+    day, 2026-10-19) and the renewals by the renewal date (the day after the last day): Renews today | Not renewed | Next N days
     (empty groups hidden). A renewed period shows its renewal (renewal_of) instead of Renew.
 --}}
 @php($type = $section['type'])
@@ -15,6 +16,7 @@
     </div>
 
     @php($groups = [
+        ['title' => $isToday ? 'Starts today' : 'Starts this day', 'rows' => $section['startsToday'], 'kind' => 'new', 'id' => $section['startsAnchor']],
         ['title' => $isToday ? 'Renews today' : 'Renews this day', 'rows' => $section['renewsToday'], 'kind' => 'today'],
         ['title' => 'Not renewed', 'rows' => $section['notRenewed'], 'kind' => 'overdue'],
         ['title' => 'Next ' . $section['renewalDays'] . ' days', 'rows' => $section['next'], 'kind' => 'next'],
@@ -22,7 +24,7 @@
 
     {{-- Renews today / Not renewed: how many per space (the top summary's style; spaces in their order, only the ones with
          periods; a row per group, hidden when the group is empty) --}}
-    @foreach (array_slice($groups, 0, 2) as $group)
+    @foreach (array_slice($groups, 1, 2) as $group)
         @continue($group['rows']->isEmpty())
         @php($bySpace = $group['rows']->groupBy('space_id')->sortBy(fn ($rows) => [(int) $rows->first()->space?->sort_order, (string) $rows->first()->space?->name]))
         <div class="today-summary today-summary--section">
@@ -39,7 +41,7 @@
             <table class="data-table today-renewals">
                 @foreach ($groups as $group)
                     @continue($group['rows']->isEmpty())
-                    <tbody>
+                    <tbody @isset($group['id']) id="{{ $group['id'] }}" @endisset>
                         <tr class="today-renewals__group"><td colspan="5">{{ $group['title'] }} ({{ $group['rows']->count() }})</td></tr>
                         @foreach ($group['rows'] as $reservation)
                             @include('reservationmodule::Schedule.partials.renewal-row', ['kind' => $group['kind']])

@@ -27,12 +27,7 @@
             'url' => route('account.reservations.index'),
             'active' => request()->routeIs('account.reservations.*'),
         ],
-        [
-            'title' => 'Packages',
-            'icon' => 'package',
-            'url' => route('account.packages.index'),
-            'active' => request()->routeIs('account.packages.*'),
-        ],
+        // Payments before Packages (user 2026-10-22)
         [
             'title' => 'Payments',
             'icon' => 'wallet',
@@ -41,16 +36,23 @@
             'active' => request()->routeIs('account.payments.*', 'account.expenses.*'),
         ],
         [
-            'title' => 'My Shift',
-            'icon' => 'lock',
-            'url' => route('account.shift.index'),
-            'active' => request()->routeIs('account.shift.*'),
+            'title' => 'Packages',
+            'icon' => 'package',
+            'url' => route('account.packages.index'),
+            'active' => request()->routeIs('account.packages.*'),
         ],
         [
             'title' => 'Members',
             'icon' => 'users',
             'url' => route('account.members.index'),
             'active' => request()->routeIs('account.members.*') && !request()->routeIs('account.members.create'),
+        ],
+        // My Shift after Members (user 2026-10-22)
+        [
+            'title' => 'My Shift',
+            'icon' => 'lock',
+            'url' => route('account.shift.index'),
+            'active' => request()->routeIs('account.shift.*'),
         ],
 
         ['divider' => 'Management'],

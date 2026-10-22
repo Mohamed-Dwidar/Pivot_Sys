@@ -27,21 +27,27 @@
     <input type="hidden" name="member_id" value="{{ $payment->member_id ?: '' }}">
     @include('paymentmodule::Payment.partials.payable-details', ['payable' => $payable, 'kind' => $payableKind])
 @else
-<div class="form-section">Cash In For</div>
+{{-- "For" decides the next fields (user 2026-10-21): Reservation → Member, then the member's reservation | Package → the
+     package (its member comes with it: PaymentRequest) | Other Income → the income category (no member) --}}
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
     @include('layoutmodule::partials.field', ['name' => 'payable', 'label' => 'For', 'type' => 'select', 'required' => true,
         'options' => ['reservation' => 'Reservation', 'package' => 'Package', '' => 'Other Income'], 'value' => $kind])
 </div>
-<div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-1">
+<div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-1" data-show-if="payable=reservation">
     {{-- server search + quick add (membermodule::partials.member-select) --}}
     @include('membermodule::partials.member-select', ['member' => $payment->member_id ? $payment->member : null, 'companies' => $companies,
-        'hint' => 'Search by name or mobile. Required for a reservation / package, optional for other income.'])
+        'required' => true, 'hint' => 'Search by name or mobile.'])
 </div>
-<div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-1" data-show-if="payable=reservation package">
-    @include('layoutmodule::partials.field', ['name' => 'payable_id', 'label' => 'Reservation / Package', 'type' => 'select', 'required' => true, 'searchable' => true, 'width' => 'xlong',
+<div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-1" data-show-if="payable=reservation">
+    @include('layoutmodule::partials.field', ['name' => 'payable_id', 'label' => 'Reservation', 'type' => 'select', 'required' => true, 'searchable' => true, 'width' => 'xlong',
         'options' => ['' => '- Select -'] + $payableOptions, 'value' => $payment->payable_id ?: null,
         'attrs' => 'data-options-url="' . route($area . '.payments.options.payables') . '" data-parent="member_id" data-also="payable" data-none="Nothing to pay for this member"' . (empty($payableOptions) ? ' disabled' : ''),
-        'hint' => 'The member\'s reservations (not inside a package: they are paid through the package) or packages, the ones still owed first.'])
+        'hint' => 'The member\'s reservations (not inside a package: they are paid through the package), the ones still owed first.'])
+</div>
+<div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-1" data-show-if="payable=package">
+    @include('layoutmodule::partials.field', ['name' => 'package_id', 'label' => 'Package', 'type' => 'select', 'required' => true, 'searchable' => true, 'width' => 'xlong',
+        'options' => ['' => '- Select -'] + $packageOptions,
+        'hint' => 'Search by package or member name; the ones still owed first.'])
 </div>
 <div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-3" data-show-if="payable=">
     @include('layoutmodule::partials.field', ['name' => 'income_category_id', 'label' => 'Income Category', 'type' => 'select', 'required' => true, 'searchable' => true,
@@ -60,8 +66,10 @@
     @else
         <input type="hidden" name="type" value="payment">
     @endif
+    {{-- one reservation: not more than it still owes (PaymentService checks it again, also for the chosen one); a package: any amount (credit) --}}
     @include('layoutmodule::partials.field', ['name' => 'amount', 'label' => 'Amount', 'type' => 'number', 'required' => true, 'value' => $payment->amount,
-        'attrs' => 'min="0.01" step="0.01" max="99999999"'])
+        'attrs' => 'min="0.01" step="0.01" max="' . (($payable ?? null) && $payableKind === 'reservation' ? max(0.01, (float) $payable->remaining) : 99999999) . '"',
+        'hint' => ($payable ?? null) ? ($payableKind === 'reservation' ? 'Not more than the remaining ' . number_format(max(0, (float) $payable->remaining), 2) . '.' : ((float) $payable->remaining > 0 ? 'Remaining ' . number_format((float) $payable->remaining, 2) . ' — more becomes the member\'s credit.' : 'Nothing owed — the amount is added to the member\'s credit.')) : 'A reservation: not more than its remaining. A package: more becomes credit.'])
     @include('layoutmodule::partials.field', ['name' => 'paid_at', 'label' => 'Date', 'type' => 'date', 'required' => true,
         'value' => $payment->paid_at?->format('Y-m-d')])
 </div>

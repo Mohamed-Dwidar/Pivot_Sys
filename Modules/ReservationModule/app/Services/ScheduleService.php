@@ -22,9 +22,13 @@ use Modules\UnitModule\app\Models\Unit;
  *   (grouped by space when the type has more than one space); an item ended before "from" = the Earlier column, one starting
  *   after "to" = the Later column; the rest in the grid (15 minute slots, clipped at the edges), in lanes when they overlap
  * - full_day: by their DATE (start_at day = D: the form gives a full day reservation the business date at night)
- * - period (no running counts per space, user 2026-10-15; the view shows the Renews today / Not renewed totals): renewals by the RENEWAL DATE (the day after the last day, user 2026-10-15):
- *   Renews today (= D) | Not renewed (before D, no counted renewal, not left) | Next N days (D+1 … D+N); a renewed one shows
- *   its renewal's end
+ * - period (no running counts per space, user 2026-10-15; the view shows the Renews today / Not renewed totals): Starts today
+ *   (new subscriptions starting on D: no renewal_of, not left; 2026-10-19) | renewals by the RENEWAL DATE (the day after the last
+ *   day, user 2026-10-15): Renews today (= D) | Not renewed | Next N days (D+1 … D+N). Payment is due at the START of a period
+ *   (2026-10-19): renewed = its renewal exists AND is paid (remaining <= 0); a renewal still owing = "Renewal created · Due" + Pay
+ *   (Renews today / Next). Not renewed = (a) ended before D, no renewal, not left: Renew / Mark left; (b) the chain's CURRENT
+ *   period (started on / before D, no renewal or one starting after D) still owing: "due since <its start>" + Pay — the new
+ *   subscribers' unpaid first periods too; a chain is shown once (its old period hidden by (b); Starts today keeps its own)
  * Only counted reservations (not cancelled like ones).
  */
 class ScheduleService
@@ -67,6 +71,8 @@ class ScheduleService
             default => $this->hourlySection($type, $context),
         });
         $this->hydrate($sections, $context);
+        // the period groups need the renewals (renewedBy) and the members, loaded by hydrate()
+        $sections = $sections->map(fn ($section) => $section['mode'] === 'period' ? $this->periodGroups($section, $context) : $section);
 
         return [
             'date' => $date,
@@ -78,7 +84,10 @@ class ScheduleService
             'windowStart' => $context['windowStart'],
             'sections' => $sections,
             // the summary row: hourly / full day counts, renewals that need action, the remaining of the day
-            'renewals' => $sections->where('mode', 'period')->sum(fn ($section) => ($section['needAction'])()),
+            'renewals' => $sections->where('mode', 'period')->sum('needAction'),
+            // the new subscriptions starting on the day (the summary "New", hidden when 0) + the first section that has some
+            'starts' => $sections->where('mode', 'period')->sum(fn ($section) => $section['startsToday']->count()),
+            'startsAnchor' => $sections->where('mode', 'period')->first(fn ($section) => $section['startsToday']->isNotEmpty())['startsAnchor'] ?? null,
             'hasPeriod' => $sections->contains('mode', 'period'),
             'due' => round($sections->whereIn('mode', ['hourly', 'full_day'])->sum('due'), 2),
             // the day's cancelled reservations (the summary "Cancelled", opens their list)
@@ -168,7 +177,7 @@ class ScheduleService
             $lists = match ($section['mode']) {
                 'hourly' => [$section['list']],
                 'full_day' => [$section['rows']],
-                default => [$section['renewsToday'], $section['notRenewed'], $section['next']],
+                default => [$section['periods']],
             };
             foreach ($lists as $list) {
                 foreach ($list as $reservation) {
@@ -331,8 +340,12 @@ class ScheduleService
         $last = $date->copy()->addDays($context['renewalDays'])->toDateString();
         $renewalDate = Reservation::RENEWAL_DATE_SQL;
 
+        $dayEnd = $date->copy()->addDay();
+
         // ONE query (the type is a period type: renewalPeriods()' rules without its type lookup): renewing on D … D+N, or before
         // D and not renewed — then split by the renewal date
+        // + the new subscriptions starting on D (Starts today: counted, no renewal_of, not left; 2026-10-19)
+        // + the periods still owing (below)
         // + the cancelled like ones starting on D (the summary "Cancelled")
         $all = $this->reservations($type, $context['accountId'], false)
             ->where(fn ($query) => $query
@@ -340,30 +353,92 @@ class ScheduleService
                     ->where('reservations.member_id', '>', 0)->whereNotNull('reservations.end_at')->whereNull('reservations.left_at')
                     ->where(fn ($query) => $query->whereRaw("$renewalDate BETWEEN ? AND ?", [$day, $last])
                         ->orWhere(fn ($query) => $query->whereRaw("$renewalDate < ?", [$day])->notRenewed())))
+                ->orWhere(fn ($query) => $query->counted()->whereNull('reservations.renewal_of')->whereNull('reservations.left_at')
+                    ->where('start_at', '>=', $date)->where('start_at', '<', $dayEnd))
+                // + the periods started on / before D still owing (Not renewed (b), payment due at the start; 2026-10-19): the chain's
+                // current one is picked by periodGroups() (no renewal, or one starting after D)
+                ->orWhere(fn ($query) => $query->counted()->where('reservations.member_id', '>', 0)->whereNotNull('reservations.end_at')
+                    ->whereNull('reservations.left_at')->where('reservations.package_id', 0)->where('reservations.remaining', '>', 0)
+                    ->where('start_at', '<', $dayEnd))
                 ->orWhere(fn ($query) => $query->whereIn('reservation_status_id', ReservationStatus::notCountedIds() ?: [0])
-                    ->where('start_at', '>=', $date)->where('start_at', '<', $date->copy()->addDay())))
+                    ->where('start_at', '>=', $date)->where('start_at', '<', $dayEnd)))
             ->get();
         $cancelled = $all->filter(fn ($reservation) => $this->notCounted($reservation))->count();
         $periods = $all->reject(fn ($reservation) => $this->notCounted($reservation))->values()
             ->each(fn ($reservation) => $reservation->renews_on = $reservation->renewalDate()->toDateString());
-        $renewsToday = $periods->where('renews_on', $day)->sortBy(fn ($reservation) => [(int) $reservation->member_id, $reservation->id])->values();
-        // the fewest days since the renewal date first (user 2026-10-15)
-        $notRenewed = $periods->filter(fn ($reservation) => $reservation->renews_on < $day)
-            ->sortBy(fn ($reservation) => [$reservation->renews_on, $reservation->id])->reverse()->values();
-        $next = $periods->filter(fn ($reservation) => $reservation->renews_on > $day)
-            ->sortBy(fn ($reservation) => [$reservation->renews_on, $reservation->id])->values();
 
         return [
             'mode' => 'period',
             'type' => $type,
             'cancelled' => $cancelled,
             'anchor' => 'today-renewals-' . $type->id,
+            // the Starts today group (the summary "New" scrolls to it)
+            'startsAnchor' => 'today-starts-' . $type->id,
+            // the counted rows; split into the groups by periodGroups() after hydrate() (renewedBy)
+            'periods' => $periods,
+            'renewalDays' => $context['renewalDays'],
+        ];
+    }
+
+    /**
+     * The period section's groups (after hydrate(): renewedBy = the counted renewal, its remaining): Starts today | Renews today |
+     * Not renewed | Next N days + needAction (the summary "Renewals"). Payment is due at the start of a period (2026-10-19).
+     */
+    private function periodGroups(array $section, array $context): array
+    {
+        $date = $context['date'];
+        $day = $date->toDateString();
+        $dayEnd = $date->copy()->addDay();
+        $last = $date->copy()->addDays($context['renewalDays'])->toDateString();
+        $periods = $section['periods'];
+        $owes = fn ($reservation) => $reservation && $reservation->canTakePayments() && $reservation->remaining > 0;
+
+        // a new subscription starting on D: space order, unit order, member name
+        $startsToday = $periods->filter(fn ($reservation) => $reservation->renewal_of === null && $reservation->left_at === null
+            && $reservation->start_at && $reservation->start_at->gte($date) && $reservation->start_at->lt($dayEnd))
+            ->sortBy(fn ($reservation) => [(int) $reservation->space?->sort_order, (int) $reservation->unit?->sort_order,
+                mb_strtolower((string) $reservation->member?->name), $reservation->id])->values();
+        $isNewToday = fn ($reservation) => $startsToday->contains('id', $reservation->id);
+        $isPeriodRow = fn ($reservation) => $reservation->member_id > 0 && $reservation->end_at && $reservation->left_at === null;
+
+        // (a) ended before D, no renewal at all, not left: Renew / Mark left (+ Due / Pay when it still owes itself)
+        $ended = $periods->filter(fn ($reservation) => $isPeriodRow($reservation) && $reservation->renews_on < $day
+            && !$reservation->renewedBy && $reservation->start_at?->lt($date))
+            ->each(function ($reservation) {
+                $reservation->overdue_kind = 'renew';
+                $reservation->due_since = $reservation->renews_on;
+            });
+        // (b) the chain's current period (started on / before D; no renewal, or one starting after D) still owing — not a new one of
+        // today (Starts today shows its Due), not one of (a)
+        $unpaid = $periods->filter(fn ($reservation) => $isPeriodRow($reservation) && $owes($reservation)
+            && $reservation->start_at?->lt($dayEnd) && !$isNewToday($reservation) && !$ended->contains('id', $reservation->id)
+            && (!$reservation->renewedBy || $reservation->renewedBy->start_at?->gte($dayEnd)));
+
+        // Renews today / Next N days: renewing on D … D+N, not shown as unpaid (the debt first; it comes back once paid)
+        $window = $periods->filter(fn ($reservation) => $isPeriodRow($reservation) && $reservation->renews_on >= $day
+            && $reservation->renews_on <= $last && !$unpaid->contains('id', $reservation->id));
+        $renewsToday = $window->where('renews_on', $day)->sortBy(fn ($reservation) => [(int) $reservation->member_id, $reservation->id])->values();
+        $next = $window->filter(fn ($reservation) => $reservation->renews_on > $day)
+            ->sortBy(fn ($reservation) => [$reservation->renews_on, $reservation->id])->values();
+
+        // a renewal whose old period is in Renews today / Next shows there ("Renewal created · Due"), not twice
+        $windowIds = $window->pluck('id')->all();
+        $unpaid = $unpaid->reject(fn ($reservation) => $reservation->renewal_of && in_array((int) $reservation->renewal_of, $windowIds, true))
+            ->each(function ($reservation) {
+                $reservation->overdue_kind = 'pay';
+                $reservation->due_since = $reservation->start_at->toDateString();
+            });
+        // the fewest days since it was due first (user 2026-10-15)
+        $notRenewed = $ended->concat($unpaid)->sortBy(fn ($reservation) => [$reservation->due_since, $reservation->id])->reverse()->values();
+
+        return array_merge($section, [
+            'startsToday' => $startsToday,
             'renewsToday' => $renewsToday,
             'notRenewed' => $notRenewed,
             'next' => $next,
-            'renewalDays' => $context['renewalDays'],
-            // the summary "Renewals": renews today, not renewed yet + not renewed (renewedBy: hydrate())
-            'needAction' => fn () => $renewsToday->filter(fn ($reservation) => !$reservation->renewedBy)->count() + $notRenewed->count(),
-        ];
+            // the summary "Renewals": renews today without a paid renewal + not renewed (a + b)
+            'needAction' => $renewsToday->reject(fn ($reservation) => $reservation->renewedBy && !$owes($reservation->renewedBy))->count()
+                + $notRenewed->count(),
+        ]);
     }
 }

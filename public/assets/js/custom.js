@@ -100,11 +100,40 @@ window.addEventListener("load", function () {
 
 // The popup (#app-modal): <a href="..." data-modal> loads the page by ajax (it renders with layoutmodule::modal).
 // Links inside the popup with data-modal replace its content (view -> edit).
+// The popup keeps a back history (2026-10-21): a page opened from INSIDE the popup (a[data-modal] in it: the reservation
+// view → Edit / Cash In / a cash in → its Edit ...) remembers the page it came from; a Cancel button
+// ([data-tw-dismiss="modal"] in the content, not the × of the header) goes back to it instead of closing.
+// nav: "push" (opened from the popup) | "back" (Cancel) | "saved" (json.modal after a save: the history is cut back to that
+// page when it is in it) | none (opened from the page: a new history). The × / backdrop close it as before.
 var appModal = {
+    stack: [],
+    current: null,
     el: function () {
         return document.getElementById("app-modal");
     },
-    open: function (url) {
+    isOpen: function () {
+        var modal = this.el();
+        return !!(modal && modal.classList.contains("show"));
+    },
+    remember: function (url, nav) {
+        url = new URL(url, window.location.href).href;
+        if (nav === "push" && this.current && this.current !== url) {
+            this.stack.push(this.current);
+        } else if (nav === "saved") {
+            var index = this.stack.indexOf(url);
+            if (index !== -1) this.stack = this.stack.slice(0, index);
+        } else if (nav !== "back") {
+            this.stack = [];
+        }
+        this.current = url;
+    },
+    back: function () {
+        if (!this.stack.length) return false;
+        this.open(this.stack.pop(), "back");
+        return true;
+    },
+    open: function (url, nav) {
+        var self = this;
         var modal = this.el();
         var body = modal.querySelector(".app-modal__body");
         return fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest", Accept: "text/html" } })
@@ -121,6 +150,7 @@ var appModal = {
                 // viewers (gallery) of the previous content were moved to <body> by the template
                 document.querySelectorAll("body > .gallery-modal:not(.show)").forEach(function (old) { old.remove(); });
                 body.innerHTML = html;
+                self.remember(url, nav);
                 var content = body.firstElementChild;
                 var size = content && content.dataset.modalSize ? content.dataset.modalSize : "md";
                 modal.querySelector(".app-modal__dialog").dataset.size = size;
@@ -157,8 +187,18 @@ document.addEventListener("click", function (e) {
         return;
     }
     e.preventDefault();
-    appModal.open(link.href);
+    // from inside the open popup: its Cancel comes back here
+    appModal.open(link.href, link.closest("#app-modal") && appModal.isOpen() ? "push" : null);
 });
+
+// Cancel inside the popup content (not the × of the header): back to the previous popup page when there is one
+document.addEventListener("click", function (e) {
+    var cancel = e.target.closest && e.target.closest('#app-modal [data-tw-dismiss="modal"]:not(.app-modal__close)');
+    if (!cancel || !appModal.stack.length) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    appModal.back();
+}, true);
 
 // Ajax forms (data-ajax). The server answers JSON:
 //   { message, row: {...} }  -> update the row of the list (null = remove it, e.g. deleted)
@@ -302,16 +342,22 @@ function ajaxSubmit(form) {
                 done = true;
             }
 
-            if (!done && json.redirect) {
+            // a form opened from another popup page (the back history): saved → back to that page (loaded again), not a
+            // redirect / close; a delete keeps its own answer (the page it came from may be the deleted record)
+            var backAfter = inModal && !json.modal && appModal.stack.length > 0 && data.get("_method") !== "DELETE";
+
+            if (!done && json.redirect && !backAfter) {
                 toastAfterRedirect(json.message);
                 window.location.href = json.redirect;
                 return;
             }
             toast(json.message);
             if (inModal && json.modal) {
-                appModal.open(json.modal);
+                appModal.open(json.modal, "saved");
             } else if (result.reminder) {
                 appModal.open(result.reminder);
+            } else if (backAfter) {
+                appModal.back();
             } else if (inModal) {
                 appModal.close();
             }
@@ -660,6 +706,12 @@ function reservationLockMember(form) {
     var option = packageEl.selectedOptions[0];
     var memberId = option && option.dataset.memberId;
     var searchable = memberEl.tomselect;
+    // "Book For" = Package: the package's member as text under the list (2026-10-22)
+    var memberText = form.querySelector("[data-package-member]");
+    if (memberText) {
+        memberText.hidden = !memberId;
+        memberText.querySelector("[data-package-member-name]").textContent = memberId ? (option.dataset.memberText || "#" + memberId) : "";
+    }
     if (memberId) {
         if (searchable) {
             // the Member field searches the server: the package's member is added as its option first (data-member-text)
@@ -1163,6 +1215,86 @@ document.addEventListener("keydown", function (e) {
     memberQuickSave(box, box.querySelector("[data-quick-save]"));
 });
 
+// A hidden box opened in place (the reservation view's Add Cash In: "Pay" / "+ Cash In" → [data-reveal="#cash-in-form"]):
+// shown, scrolled to, its first field focused; [data-reveal-close] inside hides it again
+document.addEventListener("click", function (e) {
+    var opener = e.target.closest && e.target.closest("[data-reveal]");
+    var closer = !opener && e.target.closest && e.target.closest("[data-reveal-close]");
+    if (closer) {
+        var open = closer.closest("form, [data-reveal-box]");
+        if (open) open.hidden = true;
+        return;
+    }
+    if (!opener) return;
+    var box = (opener.closest("#app-modal") || document).querySelector(opener.dataset.reveal);
+    if (!box) return;
+    e.preventDefault();
+    box.hidden = false;
+    box.scrollIntoView({ behavior: "smooth", block: "center" });
+    var field = box.querySelector("input:not([type=hidden]), select, textarea");
+    if (field) field.focus({ preventScroll: true });
+});
+
+// the reservations list "Renewal" filter: its dates are renewal dates (this month when none) — choosing it moves to the All
+// tab (no Today / Upcoming rule; the date field emptied); capture phase: before datatables.js reloads the list once
+document.addEventListener("change", function (e) {
+    var form = e.target.form;
+    if (!form || e.target.name !== "renewal" || !e.target.value) return;
+    var all = dateRangeTabs(form).find(function (tab) { return tab.dataset.tab === "all"; });
+    var tabInput = form.querySelector('input[name="tab"]');
+    if (!all || !tabInput || tabInput.value === all.dataset.value || form.querySelector('[name="date_from"]')?.value) return;
+    tabInput.value = all.dataset.value;
+    dateRangeTabs(form).forEach(function (tab) { tab.classList.toggle("active", tab === all); });
+    var box = form.querySelector("[data-date-range]");
+    if (box && box._picker) dateRangeShowTab(box, all);
+}, true);
+
+// ------------------------------------------------------------------
+// Chained list filters (the reservations list: type -> space -> unit, 2026-10-22)
+//  - select[data-filter-parents="a b"]: only its options whose data-match ("a:1 b:5" tokens) has every chosen parent value;
+//    a value no longer offered goes back to "" (All)
+//  - [data-filter-requires="a"]: hidden until a has a value
+// Runs in the capture phase, before datatables.js reads the filters (one reload per change), after a Clear and on page load.
+// ------------------------------------------------------------------
+function filterChain(form) {
+    form.querySelectorAll("select[data-filter-parents]").forEach(function (select) {
+        if (!select._allOptions) select._allOptions = Array.prototype.slice.call(select.options);
+        var parents = select.dataset.filterParents.split(" ").map(function (name) {
+            var parent = form.querySelector('[name="' + name + '"]');
+            return parent && parent.value ? name + ":" + parent.value : null;
+        }).filter(Boolean);
+        var value = select.value;
+        select.replaceChildren.apply(select, select._allOptions.filter(function (option) {
+            if (!option.value) return true;
+            var match = (option.dataset.match || "").split(" ");
+            return parents.every(function (token) { return match.indexOf(token) >= 0; });
+        }));
+        select.value = Array.prototype.some.call(select.options, function (option) { return option.value === value; }) ? value : "";
+        var requires = select.dataset.filterRequires && form.querySelector('[name="' + select.dataset.filterRequires + '"]');
+        if (requires) {
+            select.hidden = !requires.value;
+            if (!requires.value) select.value = "";
+        }
+    });
+}
+
+document.addEventListener("change", function (e) {
+    var form = e.target.form;
+    if (form && e.target.name && form.querySelector('select[data-filter-parents~="' + e.target.name + '"]')) filterChain(form);
+}, true);
+
+document.addEventListener("reset", function (e) {
+    var form = e.target;
+    if (form.querySelector && form.querySelector("select[data-filter-parents]")) setTimeout(function () { filterChain(form); });
+}, true);
+
+// after datatables.js set the [data-initial] values (e.g. ?subscription_type_id= from the Schedule page)
+window.addEventListener("load", function () {
+    document.querySelectorAll("form").forEach(function (form) {
+        if (form.querySelector("select[data-filter-parents]")) filterChain(form);
+    });
+});
+
 function initForms(root) {
     initSearchable(root);
     (root.tagName === "FORM" ? [root] : root.querySelectorAll("form")).forEach(function (form) {
@@ -1199,6 +1331,14 @@ document.addEventListener("change", function (e) {
 
     if (form.matches("[data-reservation-form]")) {
         if (name === "package_id") reservationLockMember(form);
+        // "Book For" = Member: no package (the Member field is free again)
+        if (name === "book_for" && e.target.value === "member") {
+            var packageEl = formField(form, "package_id");
+            if (packageEl && packageEl.value) {
+                packageEl.tomselect ? packageEl.tomselect.clear(true) : (packageEl.value = "");
+                reservationLockMember(form);
+            }
+        }
         if (name === "unit_id") reservationCapacity(form);
         if (name === "subscription_type_id") reservationTypeOptions(form);
         if (name === "start_at") reservationEndAfterStart(form);
@@ -1213,9 +1353,30 @@ document.addEventListener("change", function (e) {
     }
 });
 
+// Add Package (2026-10-22): the chosen member fills the name with the server's suggestion "<member> - <m-Y>[ - N]",
+// unless the name was typed by hand ([data-name-suggest] gets data-touched); newest answer only
+function packageNameSuggest(form) {
+    var input = form.querySelector("[data-name-suggest]");
+    var member = formField(form, "member_id");
+    if (!input || input.dataset.touched || !member || !member.value) return;
+    var token = (input._suggest = (input._suggest || 0) + 1);
+    fetch(input.dataset.nameSuggest + "?member_id=" + encodeURIComponent(member.value), { headers: { "X-Requested-With": "XMLHttpRequest", Accept: "application/json" } })
+        .then(function (response) { return response.ok ? response.json() : null; })
+        .then(function (json) {
+            if (json && json.name && token === input._suggest && !input.dataset.touched) input.value = json.name;
+        })
+        .catch(function () {});
+}
+
+document.addEventListener("change", function (e) {
+    if (e.target.name === "member_id" && e.target.form && e.target.form.querySelector("[data-name-suggest]")) packageNameSuggest(e.target.form);
+});
+
 document.addEventListener("input", function (e) {
     var form = e.target.form;
     if (!form) return;
+    // a package name typed by hand: the member no longer changes it
+    if (e.target.matches("[data-name-suggest]")) e.target.dataset.touched = e.target.value ? "1" : "";
     if (form.matches("[data-reservation-form]")) {
         var sources = { amount: "amount", discount_percentage: "percentage", discount_value: "value", net_amount: "net" };
         if (sources[e.target.name]) reservationCalculate(form, sources[e.target.name]);

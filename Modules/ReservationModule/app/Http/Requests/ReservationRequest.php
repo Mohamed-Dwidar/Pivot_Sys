@@ -14,6 +14,14 @@ use Modules\UnitModule\app\Models\Unit;
 
 class ReservationRequest extends FormRequest
 {
+    // "Book For" = Member: the package list is hidden, a package left in it is not saved
+    protected function prepareForValidation(): void
+    {
+        if ($this->input('book_for') === 'member') {
+            $this->merge(['package_id' => null]);
+        }
+    }
+
     public function rules(): array
     {
         // the account itself, or the account of the logged in employee
@@ -31,7 +39,9 @@ class ReservationRequest extends FormRequest
                 ->where('subscription_type_id', (int) $this->input('subscription_type_id'))],
             'plan_id' => ['required', 'integer', $ownedBy('plans')->where('is_active', true),
                 Rule::exists('plan_unit', 'plan_id')->where('unit_id', (int) $this->input('unit_id'))],
-            'package_id' => ['nullable', 'integer', $ownedBy('packages')],
+            // "Book For" (the add / edit form, 2026-10-22): Package → a package is required; Member → no package (prepareForValidation())
+            'book_for' => ['exclude'],
+            'package_id' => [Rule::requiredIf($this->input('book_for') === 'package'), 'nullable', 'integer', $ownedBy('packages')],
             // not needed with a package (the package's member is used)
             'member_id' => ['required_without:package_id', 'nullable', 'integer', Rule::exists('members', 'id')->where('account_id', $accountId)],
 
@@ -120,6 +130,7 @@ class ReservationRequest extends FormRequest
             'unit_id.exists' => 'The selected unit is inactive, not in this space or not for this subscription type.',
             'plan_id.exists' => 'The selected plan is inactive or not available for this unit.',
             'member_id.required_without' => 'Select a member or a package.',
+            'package_id.required' => 'Choose the package.',
             'discount_value.lte' => 'The discount can not be more than the amount.',
             'net_amount.lte' => 'The net amount can not be more than the amount.',
         ];

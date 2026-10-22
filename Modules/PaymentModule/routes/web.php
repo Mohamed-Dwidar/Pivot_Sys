@@ -14,6 +14,7 @@ use Modules\PaymentModule\app\Http\Controllers\Account\PaymentMethodAccountModul
 use Modules\PaymentModule\app\Http\Controllers\Account\ShiftClosingAccountModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Account\WithholdingCertificateAccountModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Employee\ExpenseEmployeeModuleController;
+use Modules\PaymentModule\app\Http\Controllers\Employee\ExtraEmployeeModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Employee\PaymentEmployeeModuleController;
 use Modules\PaymentModule\app\Http\Controllers\Employee\ShiftClosingEmployeeModuleController;
 use Modules\PaymentModule\app\Http\Middleware\WithholdingEnabled;
@@ -155,7 +156,7 @@ Route::prefix('employee/shift')->name('employee.shift.')->middleware(['auth', 'u
 });
 
 /**
- *  Package extras / adjustments: only the account manages them (from the package view)
+ *  Package extras / adjustments: the account manages them (from the package view); employees add extras (sales) only
  */
 Route::prefix('account/extras')->name('account.extras.')->middleware(['auth', 'user.active:' . Account::class])->group(function () {
     Route::get('create', [ExtraAccountModuleController::class, 'create'])->name('create');
@@ -163,4 +164,8 @@ Route::prefix('account/extras')->name('account.extras.')->middleware(['auth', 'u
     Route::get('{id}/edit', [ExtraAccountModuleController::class, 'edit'])->name('edit');
     Route::put('{id}', [ExtraAccountModuleController::class, 'update'])->name('update');
     Route::delete('{id}', [ExtraAccountModuleController::class, 'destroy'])->name('destroy');
+});
+Route::prefix('employee/extras')->name('employee.extras.')->middleware(['auth', 'user.active:' . Employee::class])->group(function () {
+    Route::get('create', [ExtraEmployeeModuleController::class, 'create'])->name('create');
+    Route::post('/', [ExtraEmployeeModuleController::class, 'store'])->name('store');
 });

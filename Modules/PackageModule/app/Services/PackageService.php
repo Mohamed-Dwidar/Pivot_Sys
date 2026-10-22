@@ -24,13 +24,13 @@ class PackageService
         return $this->packageRepository->forAccount($accountId)->filter($filters);
     }
 
-    // the active packages (+ $currentId even if inactive) for the reservation form: [id => ['name', 'member_id']]
+    // the account's packages for the reservation form (no active / inactive since 2026-10-21): [id => ['name', 'member_id']]
     public function options($accountId, $currentId = null): array
     {
         // not forAccount(): its reservations count (a subquery per package) is not needed here and made the form take ~3 s
         return Package::with('member')->where('account_id', $accountId)
-            ->where(fn ($query) => $query->where('is_active', true)->orWhere('id', (int) $currentId))
-            ->orderBy('name')->get()
+            // newest first (the reservation form, user 2026-10-22)
+            ->orderByDesc('id')->get()
             ->mapWithKeys(fn ($package) => [$package->id => [
                 'name' => $package->name . ' - ' . ($package->member?->name ?? '?'),
                 'member_id' => $package->member_id,
@@ -92,6 +92,28 @@ class PackageService
     }
 
     // $creator: the logged in user who adds the package
+    /**
+     * Add Package: the name suggested for a member (2026-10-22): "<member name> - <m-Y>" (this month), or when the account
+     * already has a package with that name "<member name> - <m-Y> - N" (the first free N from 1). Null: not one of its members.
+     */
+    public function suggestName($accountId, $memberId): ?string
+    {
+        $member = \Modules\MemberModule\app\Models\Member::where('account_id', $accountId)->find((int) $memberId);
+        if (!$member) {
+            return null;
+        }
+        $base = trim($member->name) . ' - ' . now()->format('m-Y');
+        $taken = Package::where('account_id', $accountId)
+            ->where(fn ($query) => $query->where('name', $base)->orWhere('name', 'like', addcslashes($base, '%_\\') . ' - %'))
+            ->pluck('name')->map(fn ($name) => mb_strtolower($name))->all();
+        if (!in_array(mb_strtolower($base), $taken, true)) {
+            return $base;
+        }
+        for ($number = 1; in_array(mb_strtolower($base . ' - ' . $number), $taken, true); $number++);
+
+        return $base . ' - ' . $number;
+    }
+
     public function create($accountId, array $data, Model $creator)
     {
         $package = $this->packageRepository->makeModel()->newInstance(['account_id' => $accountId]);
@@ -108,14 +130,6 @@ class PackageService
         $package = $this->findOne($accountId, $id);
         $package->fill($this->packageData($package, $data));
         $package->recalculate();
-        return $package;
-    }
-
-    // the active switch of the list
-    public function setActive($accountId, $id, bool $isActive)
-    {
-        $package = $this->findOne($accountId, $id);
-        $package->update(['is_active' => $isActive]);
         return $package;
     }
 
@@ -154,7 +168,6 @@ class PackageService
             'name' => $data['name'],
             'member_id' => $data['member_id'],
             'discount_percentage' => $discount,
-            'is_active' => !empty($data['is_active']),
             'notes' => $data['notes'] ?? null,
         ];
     }

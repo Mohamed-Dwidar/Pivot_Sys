@@ -14,7 +14,7 @@
         @csrf
         @method('DELETE')
 
-        @include('paymentmodule::Payment.partials.payment-summary', ['payableName' => null])
+        @include('paymentmodule::Payment.partials.payment-summary')
         @include('paymentmodule::Payment.partials.closed-shift-note')
 
         <div class="mt-6">

@@ -46,10 +46,17 @@
     <dl class="detail-list">
         <div><dt>Member</dt><dd>{{ $payment->member?->name ?? '-' }}</dd></div>
         <div><dt>Member Phone</dt><dd>{{ $payment->member?->phone ?? '-' }}</dd></div>
+        {{-- the reservation / package number: its own field (opens it), not inside "For" --}}
+        @if ($payment->payable)
+            <div><dt>{{ ucfirst($payment->payable_kind) }} No.</dt><dd><a href="{{ route($area . '.' . $payment->payable_kind . 's.show', $payment->payable_id) }}" data-modal class="font-medium">#{{ $payment->payable_id }}</a></dd></div>
+        @endif
         <div class="wide"><dt>For</dt><dd>
+            {{-- once: a reservation = (unit color) Space › Unit (opens it) · its period; a package = its name (opens it) · its period --}}
             @if ($payment->payable)
-                {{ $payableName }}
-                &middot; @include('paymentmodule::Payment.partials.row-source')
+                <div class="flex flex-wrap items-center gap-2">
+                    @include('paymentmodule::Payment.partials.row-source', ['inline' => true])
+                    <span>&middot; {{ $payment->payable->period }}</span>
+                </div>
             @else
                 @include('paymentmodule::Payment.partials.row-source')
             @endif

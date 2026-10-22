@@ -1,12 +1,19 @@
 {{--
     Extra / adjustment fields of a package. $extra (new on create), $package, $categories.
     extra = a sale (income category, revenue); adjustment = a balance move (no category, can be negative).
-    The amount = quantity × unit price (the server calculates it).
+    The amount = quantity × unit price (the server calculates it). An adjustment (2026-10-21): Date, Item, Amount, Notes
+    (no quantity / unit price: quantity 1, ExtraRequest copies adjustment_amount into unit_price).
 --}}
+@php($employee = request()->routeIs('employee.*'))
 <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
-    @include('layoutmodule::partials.field', ['name' => 'type', 'label' => 'Type', 'type' => 'select', 'required' => true,
-        'options' => \Modules\PaymentModule\app\Models\Extra::TYPES, 'value' => $extra->type,
-        'hint' => 'Extra = a sale (revenue). Adjustment = a balance move (carry-over), not revenue.'])
+    {{-- employees: an extra (a sale) only, no adjustment (ExtraRequest) --}}
+    @if ($employee)
+        <input type="hidden" name="type" value="extra">
+    @else
+        @include('layoutmodule::partials.field', ['name' => 'type', 'label' => 'Type', 'type' => 'select', 'required' => true,
+            'options' => \Modules\PaymentModule\app\Models\Extra::TYPES, 'value' => $extra->type,
+            'hint' => 'Extra = a sale (revenue). Adjustment = a balance move (carry-over), not revenue.'])
+    @endif
     <div data-show-if="type=extra">
         @include('layoutmodule::partials.field', ['name' => 'income_category_id', 'label' => 'Income Category', 'type' => 'select', 'required' => true, 'searchable' => true,
             'options' => ['' => '- Select -'] + $categories, 'value' => $extra->income_category_id ?: null])
@@ -16,10 +23,25 @@
 <div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-3">
     @include('layoutmodule::partials.field', ['name' => 'item', 'label' => 'Item', 'required' => true, 'value' => $extra->item, 'attrs' => 'maxlength="255"',
         'hint' => 'e.g. Copies, Buffet, Carry-over from last month.'])
-    @include('layoutmodule::partials.field', ['name' => 'quantity', 'label' => 'Quantity', 'type' => 'number', 'required' => true, 'value' => $extra->quantity,
-        'attrs' => 'min="0.01" step="0.01" max="99999"'])
-    @include('layoutmodule::partials.field', ['name' => 'unit_price', 'label' => 'Unit Price', 'type' => 'number', 'required' => true, 'value' => $extra->unit_price,
-        'attrs' => 'step="0.01" min="-99999999" max="99999999"', 'hint' => 'Negative for a return / a credit.'])
+    {{-- an extra: quantity (1 by default) × unit price --}}
+    <div data-show-if="type=extra">
+        @include('layoutmodule::partials.field', ['name' => 'quantity', 'label' => 'Quantity', 'type' => 'number', 'required' => true, 'value' => $extra->quantity ?: 1,
+            'attrs' => 'min="0.01" step="0.01" max="99999"'])
+    </div>
+    <div data-show-if="type=extra">
+        @include('layoutmodule::partials.field', ['name' => 'unit_price', 'label' => 'Unit Price', 'type' => 'number', 'required' => true,
+            'value' => $extra->type === 'extra' ? $extra->unit_price : null,
+            'attrs' => $employee ? 'step="0.01" min="0.01" max="99999999"' : 'step="0.01" min="-99999999" max="99999999"',
+            'hint' => $employee ? null : 'Negative for a return / a credit.'])
+    </div>
+    {{-- an adjustment: the amount only (quantity 1) --}}
+    @unless ($employee)
+        <div data-show-if="type=adjustment">
+            @include('layoutmodule::partials.field', ['name' => 'adjustment_amount', 'label' => 'Amount', 'type' => 'number', 'required' => true,
+                'value' => $extra->type === 'adjustment' ? $extra->amount : null, 'attrs' => 'step="0.01" min="-99999999" max="99999999"',
+                'hint' => 'Negative to lower what the package owes.'])
+        </div>
+    @endunless
 </div>
 <div class="mt-5">
     @include('layoutmodule::partials.field', ['name' => 'notes', 'label' => 'Notes', 'type' => 'textarea', 'value' => $extra->notes])

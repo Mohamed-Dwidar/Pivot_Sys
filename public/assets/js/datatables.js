@@ -17,6 +17,8 @@
  *   - [data-filter-tab][data-name][data-value] buttons -> set the hidden input with that name (status tabs)
  *   - [data-clear-button] (type=reset)  -> clears everything, disabled when nothing is applied, [data-count] badge
  *   - [data-initial="value"] on a filter -> its value when the list opens (e.g. from the URL), Clear still empties it
+ *   - [data-filter-tab][data-initial-tab] -> that tab chosen when the list opens (Clear goes back to the default tab)
+ *   - <th data-visible-if="field"> -> the column is shown only while that filter has a value (e.g. the reservations Renewal column)
  *
  * Each row has id="row-{id}" (DT_RowId from the server). window.dataTables is used by the ajax forms (custom.js)
  * to update / remove one row without reloading the page.
@@ -118,6 +120,12 @@
         // a filter chosen when the list opens (not "selected" in the HTML: the form reset of Clear would bring it back)
         if (form) {
             form.querySelectorAll('[data-initial]').forEach(function (el) { el.value = el.dataset.initial; });
+            form.querySelectorAll('[data-filter-tab][data-initial-tab]').forEach(function (tab) {
+                form.querySelector('input[type=hidden][name="' + tab.dataset.name + '"]').value = tab.dataset.value;
+                form.querySelectorAll('[data-filter-tab][data-name="' + tab.dataset.name + '"]').forEach(function (other) {
+                    other.classList.toggle('active', other === tab);
+                });
+            });
         }
 
         var columns = Array.prototype.map.call(tableEl.querySelectorAll('thead th'), function (th) {
@@ -127,8 +135,20 @@
                 orderable: th.dataset.orderable !== 'false' && !!th.dataset.name,
                 searchable: false,
                 className: th.dataset.class || '',
+                visible: !th.dataset.visibleIf || !!(form && form.querySelector('[name="' + th.dataset.visibleIf + '"]') && form.querySelector('[name="' + th.dataset.visibleIf + '"]').value),
             };
         });
+        // th[data-visible-if]: shown while its filter has a value (no redraw: the next draw follows the change); read once here,
+        // DataTables takes a hidden column's th out of the page
+        var visibleIf = Array.prototype.map.call(tableEl.querySelectorAll('thead th'), function (th) { return th.dataset.visibleIf || ''; });
+        function columnsVisibility() {
+            if (!form) return;
+            visibleIf.forEach(function (name, index) {
+                if (!name) return;
+                var field = form.querySelector('[name="' + name + '"]');
+                table.column(index).visible(!!(field && field.value), false);
+            });
+        }
 
         // the filters to send (all named fields except the search box)
         function filterValues() {
@@ -237,6 +257,7 @@
         // selects / other inputs
         form.addEventListener('change', function (e) {
             if (e.target !== searchInput) {
+                columnsVisibility();
                 table.draw();
             }
             updateClearButton();
@@ -261,6 +282,7 @@
                 form.querySelectorAll('input[type=hidden]').forEach(function (input) { input.value = ''; });
                 form.querySelectorAll('[data-filter-tab]').forEach(function (tab) { tab.classList.toggle('active', tab.dataset.value === ''); });
                 clearTimeout(timer);
+                columnsVisibility();
                 table.search('').draw();
                 updateClearButton();
             });

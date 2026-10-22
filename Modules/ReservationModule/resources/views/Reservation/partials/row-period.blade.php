@@ -27,6 +27,10 @@
     <div>{{ $start->format($day . ' | ' . $time) }} →</div>
     <div class="text-slate-500">{{ $end?->format($day . ' | ' . $time) ?? '-' }}</div>
 @endif
+{{-- the list Today / Upcoming tabs, a period row (Reservation::listBadge()): New / Renewal / Renewal due --}}
+@if (!empty($badge))
+    <div><span class="badge {{ $badge[1] }}">{{ $badge[0] }}</span></div>
+@endif
 {{-- (kept for later: the Subscriptions page selects "renewed") --}}
 @if (array_key_exists('renewed', $reservation->getAttributes()))
     <div class="text-xs">

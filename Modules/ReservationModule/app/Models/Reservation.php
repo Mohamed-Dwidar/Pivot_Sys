@@ -308,33 +308,147 @@ class Reservation extends Model implements Payable
     }
 
     /**
-     * The rows of a list tab (an unknown tab = all). Today / Upcoming leave the contract periods out (one row per month)
-     * unless the type filter ($filters['subscription_type_id']) is chosen: then that type's rows show on any tab.
+     * The rows of a list tab (an unknown tab = all), by the subscription type's booking mode (user 2026-10-23, like the old system):
+     * - hourly / full day: Today = running on the business date (overlap + its night), Upcoming = starting after it;
+     * - period (booking_mode = period): Today = starting on the business date (New / Renewal) OR renewing on it and not
+     *   renewed-and-paid (Renewal due, the Schedule page rule) — not the days in between; Upcoming = starting after it OR
+     *   renewing in the next renewal_days (Settings › General) and not renewed-and-paid.
+     * + 'days' (not a tab button): days picked in the list date field (filters date_from / date_to) = the Today rule for those days.
      */
-    // + 'days' (not a tab button): days picked in the list date field (filters date_from / date_to) = the Today rule for those days
     public function scopeTab($query, ?string $tab, array $filters = [])
     {
-        if (in_array($tab, ['today', 'upcoming', 'days'], true) && empty($filters['subscription_type_id'])) {
-            $query->notContracts();
-        }
-
         // the business date (Settings › General): its night (hourly reservations after midnight, before the cutoff) is on
         // Today, not on Upcoming; the full day ones go by their date
         [$today, $cutoff] = self::businessToday();
         $tomorrow = $today->copy()->addDay();
+        $periodIds = SubscriptionType::idsOf('period') ?: [0];
+        // hourly / full day rows (not period)
+        $notPeriod = fn ($query) => $query->whereNotIn('reservations.subscription_type_id', $periodIds);
+        // period rows starting in [from, to) or renewing in it
+        $periodIn = fn ($query, Carbon $from, Carbon $to) => $query->whereIn('reservations.subscription_type_id', $periodIds)
+            ->where(fn ($query) => $query->where(fn ($query) => $query->where('reservations.start_at', '>=', $from)->where('reservations.start_at', '<', $to))
+                ->orWhere(fn ($query) => $query->renewalDueBetween($from, $to)));
 
         return match ($tab) {
-            'today' => $query->where(fn ($query) => $query->runningBetween($today, $tomorrow)
-                ->when($cutoff, fn ($query) => $query->orWhere(fn ($query) => $query->nightOf($today, $cutoff)))),
-            'days' => $query->runningBetween(...self::pickedDays($filters)),
-            'upcoming' => $query->where('start_at', '>=', $tomorrow)
-                ->when($cutoff, fn ($query) => $query->whereNot(fn ($query) => $query->nightOf($today, $cutoff))),
+            'today' => $query->where(fn ($query) => $query
+                ->where(fn ($query) => $notPeriod($query)->where(fn ($query) => $query->runningBetween($today, $tomorrow)
+                    ->when($cutoff, fn ($query) => $query->orWhere(fn ($query) => $query->nightOf($today, $cutoff)))))
+                ->orWhere(fn ($query) => $periodIn($query, $today, $tomorrow))),
+            'days' => $query->where(fn ($query) => $query
+                ->where(fn ($query) => $notPeriod($query)->runningBetween(...self::pickedDays($filters)))
+                ->orWhere(fn ($query) => $periodIn($query, ...self::pickedDays($filters)))),
+            'upcoming' => $query->where(fn ($query) => $query
+                ->where(fn ($query) => $notPeriod($query)->where('reservations.start_at', '>=', $tomorrow)
+                    ->when($cutoff, fn ($query) => $query->whereNot(fn ($query) => $query->nightOf($today, $cutoff))))
+                ->orWhere(fn ($query) => $periodIn($query, $tomorrow, $tomorrow->copy()->addDays(self::renewalDaysOf())))
+                // a period starting after the renewals window is still upcoming
+                ->orWhere(fn ($query) => $query->whereIn('reservations.subscription_type_id', $periodIds)->where('reservations.start_at', '>=', $tomorrow))),
             default => $query,
         };
     }
 
+    // the renewals window of the logged in account (Settings › General, 7 days by default)
+    public static function renewalDaysOf(): int
+    {
+        return Account::current()?->renewalDays() ?? 7;
+    }
+
+    /**
+     * Period rows whose renewal date (RENEWAL_DATE_SQL: the day after the last day) is in [from, to) and that are not
+     * renewed-and-paid (the Schedule page: a counted renewal that owes nothing, or is paid through its package); counted, with
+     * a member and an end, not marked left (scopeRenewalPeriods).
+     */
+    public function scopeRenewalDueBetween($query, Carbon $from, Carbon $to)
+    {
+        return $query->renewalPeriods()->renewalDateBetween($from, $to)->whereRaw('NOT ' . self::paidRenewalSql());
+    }
+
+    /**
+     * The renewal date (RENEWAL_DATE_SQL) in [from, to), as ranges on start_at / end_at (no DATE(), the indexes can be used):
+     * the last day in [from − 1, to − 1) = GREATEST(end, start) in it.
+     */
+    public function scopeRenewalDateBetween($query, Carbon $from, Carbon $to)
+    {
+        $lo = $from->copy()->subDay();
+        $hi = $to->copy()->subDay();
+        return $query->where('reservations.start_at', '<', $hi)->where('reservations.end_at', '<', $hi)
+            ->where(fn ($query) => $query->where('reservations.end_at', '>=', $lo)->orWhere('reservations.start_at', '>=', $lo));
+    }
+
+    /**
+     * SQL: the period ($alias) is renewed AND paid — a counted, not deleted renewal (renewal_of) that owes nothing
+     * (remaining ≤ 0) or is paid through its package (the Schedule page rule, payment due at the start of a period).
+     */
+    public static function paidRenewalSql(string $alias = 'reservations', string $renewal = 'paid_renewal'): string
+    {
+        $notCounted = implode(',', array_map('intval', ReservationStatus::notCountedIds()) ?: [0]);
+        return "EXISTS (SELECT 1 FROM reservations {$renewal} WHERE {$renewal}.renewal_of = {$alias}.id AND {$renewal}.deleted_at IS NULL"
+            . " AND {$renewal}.reservation_status_id NOT IN ({$notCounted}) AND ({$renewal}.package_id > 0 OR {$renewal}.remaining <= 0))";
+    }
+
+    // the list "Renewal" filter (2026-10-23): not_renewed | renewed | left
+    const RENEWAL_FILTERS = [
+        'not_renewed' => 'Not renewed',
+        'renewed' => 'Renewed',
+        'left' => 'Left',
+    ];
+
+    /**
+     * The list "Renewal" filter: period rows (counted, member, end) whose renewal date is in [from, to), by what happened:
+     * - left: marked left (left_at);
+     * - renewed: not left, renewed AND paid (paidRenewalSql());
+     * - not_renewed: not left, no renewal or one still owing; one row per chain — a period is left out when its own renewal
+     *   is also not renewed with a renewal date in the range (the debt moved on to it: the Schedule "current period" rule).
+     */
+    public function scopeRenewalStatus($query, string $status, Carbon $from, Carbon $to)
+    {
+        $query->whereIn('reservations.subscription_type_id', SubscriptionType::idsOf('period') ?: [0])
+            ->counted()->where('reservations.member_id', '>', 0)->whereNotNull('reservations.end_at')
+            ->renewalDateBetween($from, $to);
+
+        if ($status === 'left') {
+            return $query->whereNotNull('reservations.left_at');
+        }
+        $query->whereNull('reservations.left_at');
+        if ($status === 'renewed') {
+            return $query->whereRaw(self::paidRenewalSql());
+        }
+
+        $notCounted = implode(',', array_map('intval', ReservationStatus::notCountedIds()) ?: [0]);
+        $nextRenewal = 'DATE_ADD(DATE(GREATEST(next_period.end_at, next_period.start_at)), INTERVAL 1 DAY)';
+        return $query->whereRaw('NOT ' . self::paidRenewalSql())
+            ->whereRaw("NOT EXISTS (SELECT 1 FROM reservations next_period WHERE next_period.renewal_of = reservations.id"
+                . " AND next_period.deleted_at IS NULL AND next_period.reservation_status_id NOT IN ({$notCounted})"
+                . " AND next_period.left_at IS NULL AND next_period.member_id > 0 AND next_period.end_at IS NOT NULL"
+                . " AND {$nextRenewal} >= ? AND {$nextRenewal} < ? AND NOT " . self::paidRenewalSql('next_period', 'next_paid') . ')',
+                [$from->toDateString(), $to->toDateString()]);
+    }
+
+    /**
+     * The list badge of a period row on Today / Upcoming / picked days (null otherwise): "New" / "Renewal" on its start,
+     * "Renewal due" on its renewal date (Upcoming: + the date). $from / $to = the tab's days.
+     */
+    public function listBadge(?string $tab, array $filters = []): ?array
+    {
+        if (!in_array($tab, ['today', 'upcoming', 'days'], true) || !$this->isPeriod() || !$this->start_at) {
+            return null;
+        }
+        [$today] = self::businessToday();
+        [$from, $to] = match ($tab) {
+            'today' => [$today, $today->copy()->addDay()],
+            'days' => self::pickedDays($filters),
+            'upcoming' => [$today->copy()->addDay(), null],
+        };
+        if ($this->start_at->gte($from) && (!$to || $this->start_at->lt($to))) {
+            return $this->renewal_of ? ['Renewal', 'badge-status-primary'] : ['New', 'badge-status-success'];
+        }
+        $date = $this->renewalDate();
+        return ['Renewal due' . ($tab === 'upcoming' && $date ? ' ' . $date->format(self::DATE_FORMAT) : ''), 'badge-status-warning'];
+    }
+
     // the default order of a tab (until a column is clicked): today = starting today first (by start time), then the
-    // ones already running (long ones); upcoming = nearest first; all = newest first
+    // ones already running (long ones) / renewing; upcoming = nearest first (a period renewing: by its renewal date);
+    // all = newest first
     // the days picked in the list date field: [first day 00:00, the day after the last 00:00)
     public static function pickedDays(array $filters): array
     {
@@ -348,8 +462,13 @@ class Reservation extends Model implements Payable
         if (in_array($tab, ['today', 'days'], true)) {
             $query->orderByRaw('start_at >= ? DESC', [$tab === 'days' ? self::pickedDays($filters)[0] : self::businessToday()[0]]);
         }
+        // upcoming: a period shown for its renewal goes by its renewal date
+        if ($tab === 'upcoming') {
+            return $query->orderByRaw('CASE WHEN start_at >= ? THEN start_at ELSE ' . self::RENEWAL_DATE_SQL . ' END', [self::businessToday()[0]->copy()->addDay()])
+                ->orderBy('id');
+        }
 
-        return in_array($tab, ['today', 'upcoming', 'days'], true)
+        return in_array($tab, ['today', 'days'], true)
             ? $query->orderBy('start_at')->orderBy('id')
             : $query->orderByDesc('start_at')->orderByDesc('id');
     }
@@ -514,7 +633,7 @@ class Reservation extends Model implements Payable
             $query->whereHas('member', fn ($query) => $query->where('name', 'like', $search)->orWhere('phone', 'like', str_replace(' ', '', $search)));
         }
 
-        foreach (['reservation_status_id', 'space_id', 'package_id', 'member_id', 'subscription_type_id'] as $field) {
+        foreach (['reservation_status_id', 'space_id', 'unit_id', 'package_id', 'member_id', 'subscription_type_id'] as $field) {
             if (!empty($filters[$field])) {
                 $query->where($field, $filters[$field]);
             }

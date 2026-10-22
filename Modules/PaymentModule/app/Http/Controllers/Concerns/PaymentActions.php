@@ -272,6 +272,8 @@ trait PaymentActions
             // opened for one reservation / package (its view, a list row menu): shown as details, not chosen (hidden inputs)
             'payable' => $payable,
             'payableOptions' => collect($payableOptions)->pluck('name', 'id')->all(),
+            // For = Package: every package of the account (name · period · member — Remaining x), owed first
+            'packageOptions' => $payable ? [] : collect($this->paymentService->packageOptions($accountId))->pluck('name', 'id')->all(),
             // the Member field searches the server (member-select); its quick add offers the account's companies
             'companies' => $this->companyService->options($accountId),
             'methods' => $this->methodService->options($accountId),
@@ -303,7 +305,7 @@ trait PaymentActions
     public function show($id)
     {
         $payment = $this->findForViewer($id);
-        $payableName = $this->paymentService->payableName($payment->payable);
+        $payableName = $this->paymentService->payableName($payment->payable, false);
         return view('paymentmodule::Payment.show', compact('payment', 'payableName'));
     }
 
@@ -311,7 +313,7 @@ trait PaymentActions
     public function receipt($id)
     {
         $payment = $this->findForViewer($id);
-        $payableName = $this->paymentService->payableName($payment->payable);
+        $payableName = $this->paymentService->payableName($payment->payable, false);
         $account = $payment->account;
 
         // the Cairo font of config/pdf.php when its files are there, else mpdf's DejaVu Sans (Arabic too)
@@ -338,7 +340,7 @@ trait PaymentActions
         $payment = $this->findForViewer($id);
         return view('paymentmodule::Payment.refund', [
             'payment' => $payment,
-            'payableName' => $this->paymentService->payableName($payment->payable),
+            'payableName' => $this->paymentService->payableName($payment->payable, false),
             'refundable' => $this->paymentService->refundable($payment),
             'closedShift' => $this->paymentService->closedShiftOf($payment),
             'methods' => $this->methodService->options($this->accountId()),

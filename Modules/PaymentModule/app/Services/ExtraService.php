@@ -96,7 +96,8 @@ class ExtraService
             throw ValidationException::withMessages(['income_category_id' => 'Choose the income category of this extra.']);
         }
 
-        $quantity = round((float) ($data['quantity'] ?? 1), 2);
+        // an adjustment = one amount (quantity 1)
+        $quantity = $type === 'adjustment' ? 1.0 : round((float) ($data['quantity'] ?? 1), 2);
         $unitPrice = round((float) ($data['unit_price'] ?? 0), 2);
         $amount = round($quantity * $unitPrice, 2);
         if ($quantity <= 0) {

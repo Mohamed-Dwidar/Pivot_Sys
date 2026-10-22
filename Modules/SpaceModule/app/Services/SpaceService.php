@@ -44,8 +44,10 @@ class SpaceService
     public function filterOptions($accountId, bool $activeOnly = false): array
     {
         return $this->spaceRepository->forAccount($accountId)->when($activeOnly, fn ($query) => $query->where('is_active', true))
-            ->orderByDesc('is_active')->ordered()->get()
-            ->mapWithKeys(fn ($item) => [$item->id => ['name' => $item->name, 'active' => (bool) $item->is_active]])->all();
+            ->with('subscriptionTypes:id')->orderByDesc('is_active')->ordered()->get()
+            // types: the reservations list chains type -> space -> unit (2026-10-22)
+            ->mapWithKeys(fn ($item) => [$item->id => ['name' => $item->name, 'active' => (bool) $item->is_active,
+                'types' => $item->subscriptionTypes->pluck('id')->all()]])->all();
     }
 
     /**

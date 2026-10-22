@@ -215,10 +215,6 @@ class Package extends Model implements Payable
             $query->where('member_id', $filters['member_id']);
         }
 
-        if (isset($filters['is_active']) && $filters['is_active'] !== '') {
-            $query->where('is_active', (bool) $filters['is_active']);
-        }
-
         // unpaid / partial / paid / credit / nothing_due
         if (!empty($filters['payment_status'])) {
             $query->paymentStatus($filters['payment_status']);

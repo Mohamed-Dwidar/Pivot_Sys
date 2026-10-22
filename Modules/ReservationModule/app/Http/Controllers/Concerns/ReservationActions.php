@@ -7,12 +7,14 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Auth;
 use Modules\CompanyModule\app\Services\CompanyService;
 use Modules\PackageModule\app\Services\PackageService;
+use Modules\PaymentModule\app\Services\PaymentMethodService;
 use Modules\ReservationModule\app\Http\Requests\ReservationRequest;
 use Modules\ReservationModule\app\Models\Reservation;
 use Modules\ReservationModule\app\Services\ReservationService;
 use Modules\ReservationModule\app\Services\ReservationStatusService;
 use Modules\SpaceModule\app\Services\SpaceService;
 use Modules\SpaceModule\app\Services\SubscriptionTypeService;
+use Modules\UnitModule\app\Services\UnitService;
 use Yajra\DataTables\Facades\DataTables;
 
 /**
@@ -88,12 +90,18 @@ trait ReservationActions
     {
         $accountId = $this->accountId();
         $activeOnly = $this->area() === 'employee'; // employees: only the active statuses / spaces
+        // ?member_id= (the Members list count): that member's reservations, the All tab
+        $member = request()->filled('member_id')
+            ? \Modules\MemberModule\app\Models\Member::where('account_id', $accountId)->find((int) request('member_id')) : null;
         return view('reservationmodule::Reservation.index', [
+            'member' => $member,
             'statuses' => $this->statusService->filterOptions($accountId, $activeOnly),
             'spaces' => $this->spaceService->filterOptions($accountId, $activeOnly),
+            // the Unit filter: the chosen space's units (and type's), custom.js select[data-filter-parents]
+            'units' => app(UnitService::class)->filterOptions($accountId, $activeOnly),
             // the type filter (Day Use / Meeting / Subscriptions ...): a contract type shows its rows on every tab
             'types' => $this->subscriptionTypeService->options($accountId),
-            'counts' => $this->tabCounts([]),
+            'counts' => $this->tabCounts(['member_id' => $member?->id]),
         ]);
     }
 
@@ -114,36 +122,90 @@ trait ReservationActions
     private function tabCounts(array $filters): array
     {
         $filters = ['search' => trim((string) ($filters['search'] ?? ''))]
-            + Arr::only($filters, ['reservation_status_id', 'space_id', 'subscription_type_id', 'payment_status']);
+            + Arr::only($filters, ['member_id', 'reservation_status_id', 'space_id', 'unit_id', 'subscription_type_id', 'payment_status']);
 
         return ['reservations-today' => $this->reservationService->listQuery($this->accountId(), $filters)->counted()->tab('today', $filters)->count()];
     }
 
-    // DataTables server side: tab + search (member) + status / space / type / payment / dates filters
+    // DataTables server side: tab + search (member) + member (?member_id=) / status / space / type / payment / dates filters
     public function data(Request $request)
     {
         return $this->table(['search' => $request->input('search.value')] + $request->all())->toJson();
     }
 
     // the list columns, for data() and for one row after a change (row())
+    /**
+     * The "Renewal" filter (2026-10-23): [status, from, to) when chosen (Reservation::RENEWAL_FILTERS), null = All. The dates
+     * are the RENEWAL dates: the picked days of the date field (the Today tab = the business date), else this month (of the
+     * business date); the tabs' own rules are not used (custom.js moves to the All tab when it is chosen).
+     */
+    private function renewalFilter(array $filters): ?array
+    {
+        $status = (string) ($filters['renewal'] ?? '');
+        if (!isset(Reservation::RENEWAL_FILTERS[$status])) {
+            return null;
+        }
+        if (!empty($filters['date_from']) && strtotime($filters['date_from'])) {
+            return [$status, ...Reservation::pickedDays($filters)];
+        }
+        // the Today tab (also the business date picked alone): that day only
+        if ($this->tab($filters) === 'today') {
+            $today = Reservation::businessToday()[0]->copy();
+            return [$status, $today, $today->copy()->addDay()];
+        }
+        $from = Reservation::businessToday()[0]->copy()->startOfMonth();
+        return [$status, $from, $from->copy()->addMonth()];
+    }
+
+    // the line under the filters with the "Renewal" filter: the dates, the count and what is owed (json html → [data-html])
+    private function renewalSummary(array $filters, array $renewal): string
+    {
+        [$status, $from, $to] = $renewal;
+        $notCounted = implode(',', array_map('intval', \Modules\ReservationModule\app\Models\ReservationStatus::notCountedIds()) ?: [0]);
+        $renewalOf = 'FROM reservations next_period WHERE next_period.renewal_of = reservations.id AND next_period.deleted_at IS NULL'
+            . ' AND next_period.reservation_status_id NOT IN (' . $notCounted . ')';
+        // one query: the count, its own debt, the debt of the renewals created (not paid), the periods with no renewal yet + their amount
+        $totals = $this->reservationService->listQuery($this->accountId(), $this->listFilters($filters))
+            ->renewalStatus($status, $from, $to)->toBase()
+            ->selectRaw('COUNT(*) AS periods')
+            ->selectRaw('COALESCE(SUM(CASE WHEN reservations.package_id = 0 AND reservations.remaining > 0 THEN reservations.remaining ELSE 0 END), 0) AS own_due')
+            ->selectRaw('COALESCE(SUM((SELECT COALESCE(SUM(next_period.remaining), 0) ' . $renewalOf . ' AND next_period.package_id = 0 AND next_period.remaining > 0)), 0) AS renewal_due')
+            ->selectRaw('COALESCE(SUM(CASE WHEN NOT EXISTS (SELECT 1 ' . $renewalOf . ') THEN 1 ELSE 0 END), 0) AS not_created')
+            ->selectRaw('COALESCE(SUM(CASE WHEN NOT EXISTS (SELECT 1 ' . $renewalOf . ') THEN reservations.net_amount ELSE 0 END), 0) AS not_created_amount')
+            ->first();
+
+        return view('reservationmodule::Reservation.partials.renewal-summary', [
+            'status' => $status, 'from' => $from, 'to' => $to->copy()->subDay(), 'totals' => $totals,
+        ])->render();
+    }
+
+    // the list filters given to Reservation::scopeFilter() (not the tab / dates / renewal)
+    private function listFilters(array $filters): array
+    {
+        return ['search' => trim((string) ($filters['search'] ?? ''))]
+            + Arr::only($filters, ['member_id', 'reservation_status_id', 'space_id', 'unit_id', 'subscription_type_id', 'payment_status']);
+    }
+
     private function table(array $filters, $id = null)
     {
         $tab = $this->tab($filters);
+        $renewal = $this->renewalFilter($filters);
         // the not counted ones (cancelled, pending ...) always after the counted ones
         // + who added it (the "By" column)
         $query = $this->reservationService->listQuery($this->accountId())->with('creatable.userable', 'renewedBy')->countedFirst();
         if ($id) {
             $query->whereKey($id);
         } elseif (!request()->filled('order')) {
-            // the tab's order until a column is clicked (the list has data-order='[]')
-            $query->tabOrder($tab, Arr::only($filters, ['date_from', 'date_to']));
+            // the tab's order until a column is clicked (the list has data-order='[]'); the Renewal filter: by renewal date
+            $renewal ? $query->orderByRaw(Reservation::RENEWAL_DATE_SQL)->orderBy('reservations.id')
+                : $query->tabOrder($tab, Arr::only($filters, ['date_from', 'date_to']));
         }
 
         $table = DataTables::eloquent($query)
             // inside filter() so "of N total" counts all the reservations
-            ->filter(fn ($query) => $query->filter(['search' => trim((string) ($filters['search'] ?? ''))]
-                + Arr::only($filters, ['reservation_status_id', 'space_id', 'subscription_type_id', 'payment_status']))
-                ->tab($tab, Arr::only($filters, ['subscription_type_id', 'date_from', 'date_to'])))
+            // the Renewal filter replaces the tab (its dates = renewal dates)
+            ->filter(fn ($query) => $renewal ? $query->filter($this->listFilters($filters))->renewalStatus(...$renewal)
+                : $query->filter($this->listFilters($filters))->tab($tab, Arr::only($filters, ['subscription_type_id', 'date_from', 'date_to'])))
             ->setRowId(fn ($reservation) => 'row-' . $reservation->id)
             // not counted (cancelled, pending ...): muted (custom.css)
             ->setRowClass(fn ($reservation) => $reservation->isCounted() ? '' : 'row-muted')
@@ -153,7 +215,11 @@ trait ReservationActions
             ->addColumn('place', fn ($reservation) => view('reservationmodule::Reservation.partials.row-place', ['reservation' => $reservation, 'stacked' => true])->render())
             ->addColumn('plan', fn ($reservation) => e($reservation->plan?->name ?? '-'))
             // by the subscription type: full day = one date, auto renew / contract = From + Ends, else date | time → (date |) time
-            ->addColumn('period', fn ($reservation) => view('reservationmodule::Reservation.partials.row-period', compact('reservation'))->render())
+            // + on Today / Upcoming / picked days a period row's badge: New / Renewal (its start) or Renewal due (its renewal date)
+            ->addColumn('period', fn ($reservation) => view('reservationmodule::Reservation.partials.row-period', ['reservation' => $reservation,
+                'badge' => $reservation->listBadge($tab, Arr::only($filters, ['date_from', 'date_to']))])->render())
+            // the Renewal filter: renewal date + what happened + Renew / Pay / Mark left (the Schedule page texts); empty otherwise
+            ->addColumn('renewal_html', fn ($reservation) => $renewal ? view('reservationmodule::Reservation.partials.row-renewal', compact('reservation'))->render() : '')
             // the reservation status + the payment status (two badges)
             ->addColumn('status', fn ($reservation) => view('reservationmodule::Reservation.partials.row-status', compact('reservation'))->render())
             ->editColumn('net_amount', fn ($reservation) => '<span class="font-bold text-success">' . number_format($reservation->net_amount, 2) . '</span>')
@@ -162,11 +228,13 @@ trait ReservationActions
             ->addColumn('remaining_html', fn ($reservation) => view('reservationmodule::Reservation.partials.row-remaining', compact('reservation'))->render())
             ->addColumn('by', fn ($reservation) => e($reservation->creatable?->userable?->displayName() ?? '-'))
             ->addColumn('actions', fn ($reservation) => view('reservationmodule::Reservation.partials.row-actions', compact('reservation'))->render())
-            ->rawColumns(['member_html', 'place', 'period', 'status', 'net_amount', 'remaining_html', 'actions'])
-            ->only(['DT_RowId', 'DT_RowClass', 'member_html', 'place', 'plan', 'period', 'status', 'net_amount', 'paid_amount', 'remaining_html', 'by', 'actions']);
+            ->rawColumns(['member_html', 'place', 'period', 'renewal_html', 'status', 'net_amount', 'remaining_html', 'actions'])
+            ->only(['DT_RowId', 'DT_RowClass', 'member_html', 'place', 'plan', 'period', 'renewal_html', 'status', 'net_amount', 'paid_amount', 'remaining_html', 'by', 'actions']);
 
         // the Today tab count (datatables.js → [data-counter]); not for one row
-        return $id ? $table : $table->with('counts', $this->tabCounts($filters));
+        // + the Renewal filter's line (empty without it)
+        return $id ? $table : $table->with('counts', $this->tabCounts($filters))
+            ->with('html', ['reservations-renewal' => $renewal ? $this->renewalSummary($filters, $renewal) : '']);
     }
 
     // the updated row with the list filters (list[...]), null when it does not match them any more
@@ -222,7 +290,9 @@ trait ReservationActions
         $reservation = $this->reservationService->findOne($this->accountId(), $id);
         // the status menu (the header of the view)
         $statuses = $this->statusService->menuOptions($this->accountId(), $reservation->reservation_status_id);
-        return view('reservationmodule::Reservation.show', compact('reservation', 'statuses'));
+        // the Add Cash In fields of the view (Pay / "+ Cash In"): the active payment methods
+        $methods = $reservation->canTakePayments() ? app(PaymentMethodService::class)->options($this->accountId()) : [];
+        return view('reservationmodule::Reservation.show', compact('reservation', 'statuses', 'methods'));
     }
 
     // the status menu of the view (ajax): the new status badge + the list row

@@ -13,13 +13,14 @@ $packageRoutes = function ($controller) {
     Route::get('/', [$controller, 'index'])->name('index');
     Route::get('data', [$controller, 'data'])->name('data');
     Route::get('create', [$controller, 'create'])->name('create');
+    // Add Package: "<member> - <m-Y>[ - N]" for the chosen member
+    Route::get('suggest-name', [$controller, 'suggestName'])->name('suggest-name');
     Route::post('/', [$controller, 'store'])->name('store');
     Route::get('{id}', [$controller, 'show'])->name('show');
     // the customer package statement (PDF)
     Route::get('{id}/statement', [$controller, 'statement'])->name('statement');
     Route::get('{id}/edit', [$controller, 'edit'])->name('edit');
     Route::put('{id}', [$controller, 'update'])->name('update');
-    Route::patch('{id}/active', [$controller, 'toggleActive'])->name('active');
     Route::delete('{id}', [$controller, 'destroy'])->name('destroy');
 };
 

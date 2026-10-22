@@ -36,6 +36,7 @@
                     <th data-data="phone" data-name="phone" data-class="whitespace-nowrap">Phone</th>
                     <th data-data="company">Company</th>
                     <th data-data="job">Job</th>
+                    <th data-data="reservations_html" data-name="reservations_count">Reservations</th>
                     <th data-data="created_at" data-name="created_at" data-class="whitespace-nowrap">Added</th>
                     <th data-data="actions"></th>
                 </tr>

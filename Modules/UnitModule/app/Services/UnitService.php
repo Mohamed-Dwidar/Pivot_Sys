@@ -24,6 +24,20 @@ class UnitService
         $this->unitRepository = $unitRepository;
     }
 
+    /**
+     * The reservations list Unit filter (2026-10-22): [id => ['name', 'active', 'space_id', 'subscription_type_id']], by space
+     * then unit order (custom.js shows the chosen space's units only), active first like the other filters.
+     */
+    public function filterOptions($accountId, bool $activeOnly = false): array
+    {
+        return Unit::where('units.account_id', $accountId)->when($activeOnly, fn ($query) => $query->where('units.is_active', true))
+            ->join('spaces', 'spaces.id', '=', 'units.space_id')->whereNull('spaces.deleted_at')
+            ->orderByDesc('units.is_active')->orderBy('spaces.sort_order')->orderBy('units.sort_order')->orderBy('units.name_en')
+            ->get(['units.*'])
+            ->mapWithKeys(fn ($unit) => [$unit->id => ['name' => $unit->name, 'active' => (bool) $unit->is_active,
+                'space_id' => $unit->space_id, 'subscription_type_id' => $unit->subscription_type_id]])->all();
+    }
+
     // units of the space list query (paged / ordered by DataTables)
     public function listQuery(Space $space)
     {

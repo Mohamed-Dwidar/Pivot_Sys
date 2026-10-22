@@ -1,11 +1,16 @@
 {{-- Package create / edit fields. $package is null on create. $companies = the quick add member's companies --}}
 <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
-    @include('layoutmodule::partials.field', ['name' => 'name', 'label' => 'Name', 'required' => true, 'value' => $package?->name, 'attrs' => 'autofocus'])
+    {{-- Add Package: suggested from the chosen member ("<member> - <m-Y>[ - N]", custom.js packageNameSuggest) until typed by hand --}}
+    @include('layoutmodule::partials.field', ['name' => 'name', 'label' => 'Name', 'required' => true, 'value' => $package?->name,
+        'attrs' => 'autofocus' . ($package ? '' : ' data-name-suggest="' . route((request()->routeIs('employee.*') ? 'employee' : 'account') . '.packages.suggest-name') . '"'),
+        'hint' => $package ? null : 'Filled from the member: "Member - month" (+ " - 1", " - 2" … when it is taken).'])
     {{-- server search + quick add (membermodule::partials.member-select) --}}
     @include('membermodule::partials.member-select', ['member' => $package?->member, 'required' => true, 'width' => 'xlong', 'wrapperClass' => 'md:col-span-2',
         'hint' => 'Search by name or mobile. The reservations of this package are for this member.', 'companies' => $companies])
 </div>
 
+{{-- Price / discount / net: edit only (a new package has no reservations yet, user 2026-10-21) --}}
+@if ($package)
 <div class="form-section mt-8">Price</div>
 {{-- the price = the net amounts of the package reservations (calculated, not typed);
      the discount % and the net calculate each other, discount_type = the one typed last (saved as a %) --}}
@@ -18,8 +23,9 @@
     @include('layoutmodule::partials.field', ['name' => 'after_discount', 'label' => 'Net', 'type' => 'number',
         'value' => $package?->after_discount ?? 0, 'attrs' => 'min="0" step="0.01" max="99999999" data-calc="result"', 'hint' => 'The price - the discount. Change it to calculate the discount %.'])
 </div>
+@endif
 
 <div class="grid grid-cols-1 gap-5 mt-5 md:grid-cols-2">
+    {{-- no Active / Inactive (user 2026-10-21): every package can be chosen --}}
     @include('layoutmodule::partials.field', ['name' => 'notes', 'label' => 'Notes', 'value' => $package?->notes])
-    @include('layoutmodule::partials.checkbox', ['name' => 'is_active', 'label' => 'Active', 'checked' => $package?->is_active ?? true, 'hint' => 'Inactive packages can not be chosen for new reservations.'])
 </div>
